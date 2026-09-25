@@ -1,0 +1,5 @@
+.ddw-state.json
+.ddw-paused/
+.ddw-sessions/
+.ddw-journal.jsonl
+.ddw/**/__pycache__/

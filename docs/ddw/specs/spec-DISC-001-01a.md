@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01a.md |
 | Tier | FEATURE |
 | Date | 2026-09-26 |
-| Spec loops | 1 |
-| Loops since last human decision | 1 |
+| Spec loops | 2 |
+| Loops since last human decision | 0 |
 
 ## Summary
 First code in the repository. Block 1 lays the pnpm monorepo declared in `AGENTS.md` (Next.js 16
@@ -67,14 +67,14 @@ on Block 4 (sessions); Block 7 depends on Blocks 3–6 (API endpoints). Executio
 ## Block 1 — Monorepo foundation
 
 **Files**
-- `package.json` (new) — workspace root, `packageManager: pnpm@9`, `engines.node: >=24`, scripts `lint`, `typecheck`, `test`, `e2e`, `db:migrate`.
+- `package.json` (new) — workspace root, `packageManager: pnpm@11`, `engines.node: >=24`, scripts `lint`, `typecheck`, `test`, `e2e`, `db:migrate`.
 - `pnpm-workspace.yaml` (new) — `apps/*`, `packages/*`.
 - `.nvmrc` (new) — `24`.
 - `tsconfig.base.json` (new) — `strict: true`, `noUncheckedIndexedAccess: true`.
 - `eslint.config.mjs` (new) — typescript-eslint strict, `no-explicit-any` as error, import boundary rule forbidding `identity/domain` → `infrastructure` imports.
 - `.prettierrc` (new) — formatting config.
 - `vitest.config.ts` (new) — `projects: ['apps/api', 'packages/shared', 'apps/web']`.
-- `docker-compose.yml` (new) — PostgreSQL 16 and Mailpit for local development.
+- `docker-compose.yml` (new) — PostgreSQL 16 (host port 5434, to avoid clashing with other local PostgreSQL containers) and Mailpit for local development.
 - `.env.example` (new) — `DATABASE_URL`, `JWT_SECRET`, `WEB_ORIGIN`, `API_ORIGIN`, `WEB_BASE_URL`, `EMAIL_PROVIDER` (`console|mailpit|resend`), `RESEND_API_KEY`, `BREACH_CHECKER` (`hibp|fake`), `TRUST_PROXY`.
 - `.gitignore` (modified) — add `node_modules/`, `.next/`, `dist/`, `.env*` (except `.env.example`), `coverage/`, `playwright-report/`, `test-results/`.
 - `.github/workflows/ci.yml` (new) — jobs: install (`--frozen-lockfile`), lint, typecheck, unit/integration tests with a PostgreSQL service, Playwright e2e.
@@ -540,3 +540,6 @@ screen renders in `/es` and `/en`.
 - No test calls HIBP, Resend or any real external service.
 - A database dump contains no plaintext password or token.
 - `requireSession`, `requireVerifiedEmail` and `AccessPolicy` are documented in `apps/api/src/shared/` for the next modules.
+
+## Decision log
+- 2026-09-26: Package manager pinned to pnpm 11 (user decision, corrective loop from CODE); local PostgreSQL exposed on host port 5434.

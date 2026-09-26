@@ -4,14 +4,20 @@
 |--------|-------|
 | Ticket | DISC-001 |
 | Date | 2026-09-25 |
-| Status | Formalizing |
+| Status | Closed |
 
 ## Vision
 A progressive web app to manage personal finances in one place: daily expenses, savings,
 investments, and expenses shared across accounts.
 
 ## Problem / Opportunity
-_To be defined._
+Managing money in Argentina means juggling two currencies with several "dollar" rates, credit
+cards paid in installments, and expenses shared with partners, roommates and friends. Existing
+tools cover one slice each: generic budgeting apps ignore ARS/USD and "cuotas", Splitwise-style
+apps ignore personal finances, and brokers keep investments in a separate silo. Users end up
+with spreadsheets, or with personal reports inflated by money they only lent. The opportunity is
+one app that models Argentine money as it is — frozen exchange rates, installments by statement,
+share-based group accounting — and works at the moment of paying, even without signal.
 
 ## Target Users
 Three usage contexts, all supported by the same product:
@@ -33,7 +39,9 @@ Three usage contexts, all supported by the same product:
 - Dashboard & reports — net worth (ARS/USD), spending by month and category
 - Group expense splitting — split expenses, track balances and settle debts. A household is a
   permanent group; split rules: equal or proportional (e.g. to income), periodic settlement
-- PWA — installable, mobile-first experience
+- Credit cards — statement cycles, installments by statement month, linked ARS/USD accounts,
+  optional automatic debit
+- PWA — installable, mobile-first experience, bilingual (Spanish/English), light and dark themes
 
 ## Constraints and Considerations
 - **Scale:** public product, initial reach of at most ~10 users, with future growth in mind.
@@ -51,8 +59,8 @@ Three usage contexts, all supported by the same product:
   - If the provider is down, the last stored rate is used and its age is shown.
 - **Investments:**
   - Balanz (user's broker) has no public API for client holdings.
-  - MVP: manual entry + import of the broker's holdings report file. Export format (Excel/CSV/PDF)
-    pending confirmation — determines import feasibility.
+  - MVP: manual entry + import of Balanz's holdings CSV (Balanz exports CSV and PDF; PDF not
+    imported). An anonymized sample CSV is required before PLAN.
   - Storing broker credentials / scraping is explicitly rejected (security, ToS, fragility).
   - Future (out of scope): official broker API integrations (e.g. IOL public API).
 - **Offline:** offline entry — movements can be recorded without connectivity and are synced
@@ -60,6 +68,9 @@ Three usage contexts, all supported by the same product:
   movements, and cached FX rates on device. Full offline browsing is out of scope.
 - **Security:** real users' financial data — authentication, per-user data isolation and
   per-context authorization are mandatory regardless of the small scale.
+- **Time zone and language:** per-user time zone (dates, months and schedules) and a bilingual
+  interface (Spanish/English).
+- **Open before PLAN:** project stack (no `AGENTS.md` yet) and an anonymized Balanz CSV sample.
 
 ## Decisions Made
 - 2026-09-25: Delivered as a PWA — stated by the user as a starting requirement.
@@ -89,6 +100,11 @@ Three usage contexts, all supported by the same product:
   another) with the implied rate stored; it is neither an expense nor an income.
 - 2026-09-25: Recurring payments are configurable per payment: automatic (fixed amounts, direct
   debit) or confirm-on-reminder (variable amounts).
+- 2026-09-25: Per-user time zone, mandatory (user decision); applied to PRDs 01, 03, 06, 07, 08.
+- 2026-09-25: Bilingual interface, Spanish and English (user decision); applied to PRDs 01, 02,
+  08.
+- 2026-09-25: Dashboard visual direction taken from two user-provided references (PRD 09).
+- 2026-09-25: Discovery closed with 10 validated PRDs.
 
 ## Identified PRDs
 
@@ -102,5 +118,5 @@ Three usage contexts, all supported by the same product:
 | 6 | Savings Goals & Budgets | prd-DISC-001-06.md | validated | 2, 3 |
 | 7 | Investments | prd-DISC-001-07.md | validated | 1, 3 |
 | 8 | Recurring Payments & Reminders | prd-DISC-001-08.md | validated | 3 |
-| 9 | Dashboard & Reports | prd-DISC-001-09.md | validated | 3, 6, 7 |
+| 9 | Dashboard & Reports | prd-DISC-001-09.md | validated | 1–8, 10 |
 | 10 | Credit Cards: Statements & Installments | prd-DISC-001-10.md | validated | 2, 3 |

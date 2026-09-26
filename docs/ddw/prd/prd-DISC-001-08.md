@@ -5,7 +5,7 @@
 | Ticket | DISC-001 |
 | Tracker | none |
 | Date | 2026-09-25 |
-| PRD loops | 2 |
+| PRD loops | 3 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -67,6 +67,8 @@ them before each due date.
 - FR-22: The system must let a user read, edit and delete only their own recurring payments and
   occurrences.
 - FR-23: The system must allow a user to resume a paused recurring payment.
+- FR-24: The system must write reminders and notifications in the user's interface language
+  (PRD 01, FR-26).
 
 ## Non-Functional Requirements
 - NFR-01: Amounts must be stored as 64-bit integers in minor units, with 0 floating-point columns
@@ -141,6 +143,8 @@ them before each due date.
 - AC-27 (FR-21): WHEN an automatic occurrence is due on 2026-10-05 for a user whose time zone is
   `Europe/Madrid`, THE system SHALL record it between 06:00 and 06:15 of 2026-10-05 Madrid time,
   regardless of the server's time zone.
+- AC-31 (FR-24): WHEN a reminder for "Luz" due tomorrow is sent to a user whose interface
+  language is Spanish, THE system SHALL send the text "Luz vence mañana".
 - AC-30 (FR-21): WHEN a user changes their time zone, THE system SHALL compute the due dates and
   reminder times of occurrences not yet processed in the new time zone.
 - AC-28 (FR-22): IF a user requests to read, edit or delete a recurring payment owned by another
@@ -187,3 +191,4 @@ them before each due date.
   incomes or group expenses), 3 reminder days by default (0–30), no amounts or account names in
   push text, archived account leaves automatic occurrence pending with a notice, overdue pending
   occurrences.
+- 2026-09-25: User decision: the interface is bilingual, Spanish and English.

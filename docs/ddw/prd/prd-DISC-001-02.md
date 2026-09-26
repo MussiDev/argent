@@ -5,7 +5,7 @@
 | Ticket | DISC-001 |
 | Tracker | none |
 | Date | 2026-09-25 |
-| PRD loops | 4 |
+| PRD loops | 5 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -55,6 +55,8 @@ there is nothing to record movements against and nothing to report on.
   (case-insensitive).
 - FR-21: The system must let a user read, edit, archive and delete only the accounts and
   categories they own.
+- FR-22: The system must create the default categories in the user's interface language (PRD 01,
+  FR-26) at the moment the user is created, using the Spanish names of Appendix A for Spanish.
 
 ## Non-Functional Requirements
 - NFR-01: Amounts (opening balance, balances, totals) must be stored as 64-bit integers in minor
@@ -124,6 +126,9 @@ there is nothing to record movements against and nothing to report on.
   owned by another user, THEN THE system SHALL answer 404 Not Found and leave it unchanged.
 - AC-26 (FR-21): WHEN a user opens the account list or a category picker, THE system SHALL show
   only accounts and categories owned by that user.
+- AC-27 (FR-22): WHEN a user whose interface language is Spanish is created, THE system SHALL
+  create the default categories with their Spanish names (for example "Comida" and
+  "Supermercado").
 
 ## Out of Scope
 - Statement cycles, closing and due dates, and installment purchases on credit cards (PRD 10).
@@ -176,9 +181,16 @@ Expense:
 - Taxes & fees
 - Other expenses
 
+Spanish names (FR-22): Comida — Supermercado, Restaurantes, Delivery · Transporte — Nafta,
+Transporte público, Apps de viaje, Estacionamiento · Hogar — Alquiler, Servicios, Mantenimiento ·
+Salud — Prepaga, Farmacia, Médico · Entretenimiento — Salidas, Streaming, Hobbies · Compras —
+Ropa, Electrónica, Regalos · Educación · Impuestos y comisiones · Otros gastos · Sueldo · Freelance
+· Rendimientos de inversiones · Regalos recibidos · Otros ingresos.
+
 Income:
 - Salary
 - Freelance
 - Investment returns
 - Gifts received
 - Other income
+- 2026-09-25: User decision: the interface is bilingual, Spanish and English.

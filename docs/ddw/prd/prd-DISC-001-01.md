@@ -5,7 +5,7 @@
 | Ticket | DISC-001 |
 | Tracker | none |
 | Date | 2026-09-25 |
-| PRD loops | 5 |
+| PRD loops | 6 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -63,6 +63,9 @@ is public with open registration, with an initial reach of about 10 users and ro
   database (for example `America/Argentina/Buenos_Aires`).
 - FR-25: The system must set the time zone of a new account to the time zone reported by the
   user's device, or to `America/Argentina/Buenos_Aires` when the device reports none.
+- FR-26: The system must allow a user to set their interface language: Spanish or English.
+- FR-27: The system must set the language of a new account to the device's language when it is
+  Spanish or English, and to Spanish otherwise.
 
 ## Non-Functional Requirements
 - NFR-01: Passwords must be hashed with Argon2id (OWASP-recommended parameters: m ≥ 19 MiB,
@@ -87,6 +90,9 @@ is public with open registration, with an initial reach of about 10 users and ro
 - NFR-09: A session created on one instance of the authentication service must be accepted by
   any other instance in 100% of requests, verified in a test with 2 instances behind a load
   balancer (concept decision: design for scalability — no session state in process memory).
+- NFR-10: 100% of interface texts must exist in Spanish and English, and amounts and dates must
+  be formatted with the conventions of the selected language (Spanish: `es-AR`, for example
+  1.557,30 and 25/09/2026; English: `en-US`, for example 1,557.30 and 09/25/2026).
 
 ## Acceptance Criteria
 - AC-01 (FR-01): WHEN a visitor submits a valid email and a valid password on the registration
@@ -183,6 +189,12 @@ is public with open registration, with an initial reach of about 10 users and ro
   system SHALL set the account's time zone to `America/Cordoba`.
 - AC-42 (FR-25): IF the device reports no time zone when an account is created, THEN THE system
   SHALL set the account's time zone to `America/Argentina/Buenos_Aires`.
+- AC-43 (FR-26): WHEN a user switches the interface language to English, THE system SHALL show
+  every screen in English and format amounts as 1,557.30.
+- AC-44 (FR-27): WHEN an account is created from a device whose language is English, THE system
+  SHALL set the interface language to English.
+- AC-45 (FR-27): IF the device's language is neither Spanish nor English when an account is
+  created, THEN THE system SHALL set the interface language to Spanish.
 
 ## Out of Scope
 - Passkeys / WebAuthn (candidate for a future PRD).
@@ -226,3 +238,4 @@ is public with open registration, with an initial reach of about 10 users and ro
 - 2026-09-25: User approved this version with acceptance criteria in EARS format.
 - 2026-09-25: User decision: per-user time zone, mandatory. Dates and scheduled times are
   computed in the user's time zone (PRD 01, FR-24).
+- 2026-09-25: User decision: the interface is bilingual, Spanish and English.

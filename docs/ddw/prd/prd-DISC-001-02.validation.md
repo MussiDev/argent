@@ -2,7 +2,7 @@
 /ddw-validate-prd docs/ddw/prd/prd-DISC-001-02.md — PASSED
 ────────────────────────────────────────────────────────────────
   ✅ F-PRD-08: all mandatory sections present
-  ✅ F-PRD-05: 21 FR, 5 NFR, 26 AC — unique, gapless
+  ✅ F-PRD-05: 22 FR, 5 NFR, 27 AC — unique, gapless
   ✅ F-PRD-01: every FR is validated by at least one AC
   ✅ F-PRD-03: every NFR carries a quantitative value
   ✅ F-PRD-06: no ambiguous verbs in requirements
@@ -11,7 +11,7 @@
       W-PRD-01 (FR with no rationale) and W-PRD-03 (passive voice) are
       MANUAL: judge them and say so explicitly in your report.
       A rule the script names and never prints is one nobody judges.
-  ✅ F-PRD-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 4 in total for this document
+  ✅ F-PRD-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 5 in total for this document
 ────────────────────────────────────────────────────────────────
 Total: 7 passed, 0 failed, 0 warnings
 Result: PASSED

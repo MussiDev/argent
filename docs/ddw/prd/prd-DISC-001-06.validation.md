@@ -1,5 +1,5 @@
 ```
-/ddw-validate-prd prd-DISC-001-06.md — PASSED
+/ddw-validate-prd docs/ddw/prd/prd-DISC-001-06.md — PASSED
 ────────────────────────────────────────────────────────────────
   ✅ F-PRD-08: all mandatory sections present
   ✅ F-PRD-05: 24 FR, 5 NFR, 34 AC — unique, gapless

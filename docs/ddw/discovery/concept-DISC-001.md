@@ -96,7 +96,7 @@ Three usage contexts, all supported by the same product:
 | 2 | Accounts & Categories | prd-DISC-001-02.md | validated | 1 |
 | 3 | Movements & Exchange Rates | prd-DISC-001-03.md | validated | 2 |
 | 4 | Offline Entry & Sync | prd-DISC-001-04.md | validated | 3 |
-| 5 | Groups & Expense Splitting | prd-DISC-001-05.md | identified | 1, 3 |
+| 5 | Groups & Expense Splitting | prd-DISC-001-05.md | validated | 1, 3 |
 | 6 | Savings Goals & Budgets | prd-DISC-001-06.md | identified | 2, 3 |
 | 7 | Investments | prd-DISC-001-07.md | identified | 1, 3 |
 | 8 | Recurring Payments & Reminders | prd-DISC-001-08.md | identified | 3 |

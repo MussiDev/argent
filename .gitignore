@@ -3,3 +3,13 @@
 .ddw-sessions/
 .ddw-journal.jsonl
 .ddw/**/__pycache__/
+node_modules/
+.next/
+dist/
+coverage/
+playwright-report/
+test-results/
+.env*
+!.env.example
+next-env.d.ts
+*.tsbuildinfo

@@ -1,0 +1,134 @@
+import { pino, type DestinationStream, type Logger } from 'pino';
+
+export type { Logger };
+
+const SECRET_KEYS = ['password', 'newPassword', 'token', 'cookies', 'authorization'];
+
+/**
+ * pino redaction wildcards match exactly one level, so every secret key is listed at the top level
+ * and up to two levels deep (e.g. `body.password`, `req.body.password`).
+ */
+export const REDACT_PATHS = [
+  ...SECRET_KEYS,
+  ...SECRET_KEYS.map((key) => `*.${key}`),
+  ...SECRET_KEYS.map((key) => `*.*.${key}`),
+  'headers.cookie',
+  'headers["set-cookie"]',
+  '*.headers.cookie',
+  '*.headers["set-cookie"]',
+];
+
+/** PostgreSQL error fields that identify the failure without carrying row values. */
+const SAFE_PG_FIELDS = ['code', 'severity', 'constraint', 'table', 'column', 'schema', 'routine'];
+
+const MAX_CAUSE_DEPTH = 5;
+
+type SerializedError = Record<string, unknown>;
+
+interface QueryError extends Error {
+  query: string;
+  params: unknown;
+}
+
+/** Drizzle's DrizzleQueryError: its message embeds the bound params (emails, token hashes...). */
+function isQueryError(error: Error): error is QueryError {
+  return 'query' in error && typeof error.query === 'string' && 'params' in error;
+}
+
+interface PgError extends Error {
+  code: string;
+}
+
+function isPgError(error: Error): error is PgError {
+  return 'code' in error && typeof error.code === 'string' && 'severity' in error;
+}
+
+/** SQLSTATE class 22 (data exception) messages echo the offending input value. */
+function isPgDataException(error: PgError): boolean {
+  return error.code.startsWith('22');
+}
+
+/** Replaces the header line(s) of a stack (which repeat the message) with a safe message. */
+function stackWithMessage(error: Error, safeMessage: string): string | undefined {
+  if (!error.stack) return undefined;
+  const firstFrame = error.stack.search(/\n\s+at /);
+  const frames = firstFrame === -1 ? '' : error.stack.slice(firstFrame);
+  return `${error.name}: ${safeMessage}${frames}`;
+}
+
+function serializeKnownError(value: Error, depth: number): SerializedError {
+  let serialized: SerializedError;
+  if (isQueryError(value)) {
+    const message = 'Failed query';
+    serialized = {
+      type: value.constructor.name,
+      message,
+      query: value.query,
+      stack: stackWithMessage(value, message),
+    };
+  } else if (isPgError(value)) {
+    const message = isPgDataException(value) ? `pg data exception ${value.code}` : value.message;
+    serialized = {
+      type: value.constructor.name,
+      message,
+      stack: message === value.message ? value.stack : stackWithMessage(value, message),
+    };
+    for (const field of SAFE_PG_FIELDS) {
+      const fieldValue: unknown = Reflect.get(value, field);
+      if (fieldValue !== undefined) serialized[field] = fieldValue;
+    }
+  } else {
+    serialized = { type: value.constructor.name, message: value.message, stack: value.stack };
+    if ('code' in value && typeof value.code === 'string') serialized.code = value.code;
+  }
+
+  if (value.cause !== undefined) {
+    serialized.cause =
+      depth < MAX_CAUSE_DEPTH ? serializeError(value.cause, depth + 1) : '[cause depth exceeded]';
+  }
+  return serialized;
+}
+
+function safeTypeName(value: object): string {
+  try {
+    return value.constructor.name;
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Error serializer used for every `err` field. Unlike pino's default, it never copies query
+ * params, pg `detail`/`hint`/`where`, data-exception messages, non-Error thrown values or arbitrary
+ * enumerable properties, and it serializes the `cause` chain with the same rules instead of
+ * concatenating cause messages. It never throws: logging must not turn one failure into two.
+ */
+export function serializeError(value: unknown, depth = 0): unknown {
+  if (!(value instanceof Error)) {
+    // Thrown non-Errors can be anything (a row, a request body); only their kind is logged.
+    const label = depth === 0 ? 'non-error thrown' : 'non-error cause';
+    const message = `[${label}: ${typeof value}]`;
+    return depth === 0 ? { type: typeof value, message } : message;
+  }
+  try {
+    return serializeKnownError(value, depth);
+  } catch {
+    return { type: safeTypeName(value), message: '[unserializable error]' };
+  }
+}
+
+export interface LoggerOptions {
+  level?: string;
+  destination?: DestinationStream;
+}
+
+export function createLogger(options: LoggerOptions = {}): Logger {
+  return pino(
+    {
+      level: options.level ?? 'info',
+      redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
+      serializers: { err: (error: unknown) => serializeError(error) },
+    },
+    options.destination,
+  );
+}

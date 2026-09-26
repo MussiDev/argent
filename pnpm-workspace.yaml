@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Only packages listed with `true` may run install scripts. The others ship prebuilt binaries
+# through optional dependencies, so their install scripts are not needed.
+allowBuilds:
+  esbuild: true
+  '@parcel/watcher': false
+  '@swc/core': false

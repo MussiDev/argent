@@ -5,7 +5,7 @@
 | Ticket | DISC-001 |
 | Tracker | none |
 | Date | 2026-09-25 |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -60,7 +60,8 @@ so that converted totals and group balances do not change when the dollar moves.
   filtered by a parent category.
 - FR-18: The system must allow a user to add up to 10 tags to an expense or income.
 - FR-19: The system must suggest the user's existing tags while they type a tag.
-- FR-20: The system must reject a movement with a date later than the current day (future
+- FR-20: The system must reject a movement with a date later than the current day in the user's
+  time zone (PRD 01, FR-24) (future
   payments belong to PRD 08).
 - FR-21: The system must let a user read, edit and delete only their own movements (movements
   shared through groups are governed by PRD 05).
@@ -171,7 +172,8 @@ so that converted totals and group balances do not change when the dollar moves.
 
 ## Dependencies
 - dolarapi.com (`/v1/dolares`), the external rate provider — FR-10, FR-11.
-- PRD 01 (Identity & Access) — user default rate type (FR-07) and access control (FR-21).
+- PRD 01 (Identity & Access) — user default rate type (FR-07), user time zone (FR-20) and access
+  control (FR-21).
 - PRD 02 (Accounts & Categories) — accounts, currencies and categories (FR-01 to FR-04, FR-12,
   FR-17).
 - PRD 05 (Groups & Expense Splitting) — movements shared through groups (FR-21).
@@ -185,3 +187,5 @@ so that converted totals and group balances do not change when the dollar moves.
 - 2026-09-25: User approved: sell price of the default rate type, 60-minute refresh with a
   2-hour staleness warning, no future dates, free editing without audit trail, up to 10 tags,
   rates with 4 decimals as scaled integers.
+- 2026-09-25: User decision: per-user time zone, mandatory. Dates and scheduled times are
+  computed in the user's time zone (PRD 01, FR-24).

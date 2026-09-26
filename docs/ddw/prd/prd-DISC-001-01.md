@@ -5,7 +5,7 @@
 | Ticket | DISC-001 |
 | Tracker | none |
 | Date | 2026-09-25 |
-| PRD loops | 4 |
+| PRD loops | 5 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -59,6 +59,10 @@ is public with open registration, with an initial reach of about 10 users and ro
 - FR-13: The system must reject any request for financial data that carries no valid session.
 - FR-23: The system must reject any read, update or delete of financial data that the requesting
   user does not own and that is not shared with them through a group.
+- FR-24: The system must allow a user to set their time zone, chosen from the IANA time zone
+  database (for example `America/Argentina/Buenos_Aires`).
+- FR-25: The system must set the time zone of a new account to the time zone reported by the
+  user's device, or to `America/Argentina/Buenos_Aires` when the device reports none.
 
 ## Non-Functional Requirements
 - NFR-01: Passwords must be hashed with Argon2id (OWASP-recommended parameters: m ≥ 19 MiB,
@@ -171,6 +175,14 @@ is public with open registration, with an initial reach of about 10 users and ro
   leave the data unchanged.
 - AC-34 (FR-23): WHEN an authenticated user requests data shared with them through a group they
   belong to, THE system SHALL return that data.
+- AC-39 (FR-24): WHEN a user saves the time zone `Europe/Madrid`, THE system SHALL persist it and
+  show it in the preferences screen.
+- AC-40 (FR-24): IF a user submits a time zone that is not in the IANA time zone database, THEN
+  THE system SHALL reject it and keep the previous one.
+- AC-41 (FR-25): WHEN an account is created from a device that reports `America/Cordoba`, THE
+  system SHALL set the account's time zone to `America/Cordoba`.
+- AC-42 (FR-25): IF the device reports no time zone when an account is created, THEN THE system
+  SHALL set the account's time zone to `America/Argentina/Buenos_Aires`.
 
 ## Out of Scope
 - Passkeys / WebAuthn (candidate for a future PRD).
@@ -201,6 +213,7 @@ is public with open registration, with an initial reach of about 10 users and ro
 - Transactional email provider (to be chosen in PLAN) — FR-02, FR-05.
 - Have I Been Pwned Pwned Passwords API (k-anonymity range endpoint) — NFR-02.
 - Exchange rate types catalog, defined in PRD 03 (Movements & Exchange Rates) — FR-10.
+- IANA time zone database — FR-24, FR-25.
 - Group sharing rules, defined in PRD 05 (Groups & Expense Splitting) — FR-23, FR-12.
 
 ## Decision Log
@@ -211,3 +224,5 @@ is public with open registration, with an initial reach of about 10 users and ro
   rewritten, access control extended to update/delete and the shared-data positive case.
   Acceptance criteria kept in EARS format (DDW rule F-PRD-09) pending the user's choice of format.
 - 2026-09-25: User approved this version with acceptance criteria in EARS format.
+- 2026-09-25: User decision: per-user time zone, mandatory. Dates and scheduled times are
+  computed in the user's time zone (PRD 01, FR-24).

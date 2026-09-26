@@ -5,7 +5,7 @@
 | Ticket | DISC-001 |
 | Tracker | none |
 | Date | 2026-09-25 |
-| PRD loops | 2 |
+| PRD loops | 3 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -55,8 +55,8 @@ export their holdings as CSV and PDF.
 - FR-15: The system must reject the whole import, applying no change, when the file is not a
   valid Balanz holdings CSV.
 - FR-16: The system must not keep the uploaded file after the import is applied or cancelled.
-- FR-17: The system must store once a day the total value of each portfolio per currency, for
-  historical charts (PRD 09).
+- FR-17: The system must store once a day, at the end of the day in the user's time zone (PRD 01,
+  FR-24), the total value of each portfolio per currency, for historical charts (PRD 09).
 - FR-18: The system must show, for every holding whose latest price is older than 7 days, the
   date of that price.
 - FR-19: The system must let a user read, edit and delete only their own portfolios and holdings.
@@ -117,7 +117,7 @@ export their holdings as CSV and PDF.
   reject it with the reason and leave the portfolio unchanged.
 - AC-21 (FR-16): WHEN an import is applied or cancelled, THE system SHALL delete the uploaded
   file.
-- AC-22 (FR-17): WHEN a day ends, THE system SHALL store the total value of each portfolio per
+- AC-22 (FR-17): WHEN a day ends in the user's time zone, THE system SHALL store the total value of each portfolio per
   currency for that day.
 - AC-23 (FR-18): WHILE the latest price of a holding is older than 7 days, THE system SHALL show
   the date of that price next to the holding.
@@ -159,7 +159,7 @@ export their holdings as CSV and PDF.
 - Balanz holdings CSV export (format to be confirmed with an anonymized sample file) — FR-12,
   FR-15.
 - CoinGecko API, Demo plan (free, 100 calls/min, 10,000 calls/month) — FR-07, NFR-03.
-- PRD 01 (Identity & Access) — ownership and access control (FR-19).
+- PRD 01 (Identity & Access) — ownership and access control (FR-19), user time zone (FR-17).
 - PRD 03 (Movements & Exchange Rates) — rates used when totals are shown converted (PRD 09).
 - PRD 09 (Dashboard & Reports) — consumer of daily portfolio values (FR-17).
 
@@ -172,3 +172,5 @@ export their holdings as CSV and PDF.
   manual costs, positions only (no operations), uploaded file deleted, daily portfolio value
   snapshot, price date shown after 7 days, crypto valued in USD. Pending before PLAN: anonymized
   Balanz CSV sample.
+- 2026-09-25: User decision: per-user time zone, mandatory. Dates and scheduled times are
+  computed in the user's time zone (PRD 01, FR-24).

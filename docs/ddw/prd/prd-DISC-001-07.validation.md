@@ -1,5 +1,5 @@
 ```
-/ddw-validate-prd docs/ddw/prd/prd-DISC-001-07.md — PASSED
+/ddw-validate-prd prd-DISC-001-07.md — PASSED
 ────────────────────────────────────────────────────────────────
   ✅ F-PRD-08: all mandatory sections present
   ✅ F-PRD-05: 21 FR, 6 NFR, 27 AC — unique, gapless
@@ -11,7 +11,7 @@
       W-PRD-01 (FR with no rationale) and W-PRD-03 (passive voice) are
       MANUAL: judge them and say so explicitly in your report.
       A rule the script names and never prints is one nobody judges.
-  ✅ F-PRD-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 2 in total for this document
+  ✅ F-PRD-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 3 in total for this document
 ────────────────────────────────────────────────────────────────
 Total: 7 passed, 0 failed, 0 warnings
 Result: PASSED

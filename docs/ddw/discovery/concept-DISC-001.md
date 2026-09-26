@@ -87,6 +87,8 @@ Three usage contexts, all supported by the same product:
 - 2026-09-25: Categories are predefined and editable per user, with one level of subcategories.
 - 2026-09-25: Buying/selling USD is a cross-currency transfer (ARS out of one account, USD into
   another) with the implied rate stored; it is neither an expense nor an income.
+- 2026-09-25: Recurring payments are configurable per payment: automatic (fixed amounts, direct
+  debit) or confirm-on-reminder (variable amounts).
 
 ## Identified PRDs
 
@@ -99,6 +101,6 @@ Three usage contexts, all supported by the same product:
 | 5 | Groups & Expense Splitting | prd-DISC-001-05.md | validated | 1, 3 |
 | 6 | Savings Goals & Budgets | prd-DISC-001-06.md | validated | 2, 3 |
 | 7 | Investments | prd-DISC-001-07.md | validated | 1, 3 |
-| 8 | Recurring Payments & Reminders | prd-DISC-001-08.md | identified | 3 |
+| 8 | Recurring Payments & Reminders | prd-DISC-001-08.md | validated | 3 |
 | 9 | Dashboard & Reports | prd-DISC-001-09.md | identified | 3, 6, 7 |
 | 10 | Credit Cards: Statements & Installments | prd-DISC-001-10.md | identified | 2, 3 |

@@ -5,7 +5,7 @@
 | Ticket | DISC-001 |
 | Tracker | none |
 | Date | 2026-09-25 |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -50,7 +50,8 @@ aside mentally.
 - FR-13: The system must include the subcategories of every parent category selected in a
   budget.
 - FR-14: The system must compute the spending of a budget in a month as the sum of the user's
-  personal expenses and group expense shares (PRD 05) in its categories during that month.
+  personal expenses and group expense shares (PRD 05) in its categories during that month, with
+  month boundaries in the user's time zone (PRD 01, FR-24).
 - FR-15: The system must convert to the budget currency every expense or share in the other
   currency, using the rate frozen on that movement (PRD 03).
 - FR-16: The system must count a group expense share toward a budget when the name of the group
@@ -176,7 +177,7 @@ aside mentally.
 - **Alert spam** → each threshold alerts once per month (FR-21, AC-30).
 
 ## Dependencies
-- PRD 01 (Identity & Access) — ownership and access control (FR-24).
+- PRD 01 (Identity & Access) — ownership and access control (FR-24), user time zone (FR-14).
 - PRD 02 (Accounts & Categories) — accounts linked to goals and categories selected in budgets
   (FR-02, FR-03, FR-12, FR-13).
 - PRD 03 (Movements & Exchange Rates) — personal expenses and frozen rates (FR-14, FR-15).
@@ -193,3 +194,5 @@ aside mentally.
 - 2026-09-25: User approved, including group shares counted in budgets by case-insensitive
   category name match, monthly amount counting the current month, no withdrawal beyond
   progress, edits effective from the current month, up to 5 thresholds (1–200%).
+- 2026-09-25: User decision: per-user time zone, mandatory. Dates and scheduled times are
+  computed in the user's time zone (PRD 01, FR-24).

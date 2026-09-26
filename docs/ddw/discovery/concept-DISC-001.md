@@ -85,6 +85,8 @@ Three usage contexts, all supported by the same product:
   purchases spread over future statements. Split into its own PRD 10 so PRD 02 only declares the
   credit card account type.
 - 2026-09-25: Categories are predefined and editable per user, with one level of subcategories.
+- 2026-09-25: Buying/selling USD is a cross-currency transfer (ARS out of one account, USD into
+  another) with the implied rate stored; it is neither an expense nor an income.
 
 ## Identified PRDs
 
@@ -92,7 +94,7 @@ Three usage contexts, all supported by the same product:
 |---|-------|------|--------|------------|
 | 1 | Identity & Access | prd-DISC-001-01.md | validated | — |
 | 2 | Accounts & Categories | prd-DISC-001-02.md | validated | 1 |
-| 3 | Movements & Exchange Rates | prd-DISC-001-03.md | identified | 2 |
+| 3 | Movements & Exchange Rates | prd-DISC-001-03.md | validated | 2 |
 | 4 | Offline Entry & Sync | prd-DISC-001-04.md | identified | 3 |
 | 5 | Groups & Expense Splitting | prd-DISC-001-05.md | identified | 1, 3 |
 | 6 | Savings Goals & Budgets | prd-DISC-001-06.md | identified | 2, 3 |

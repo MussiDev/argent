@@ -65,10 +65,79 @@ describe('DrizzleSessionRepository', () => {
     const old = await sessions.create({ userId, familyId, refreshTokenHash: 'a', lastUsedAt: T0 });
     const next = await sessions.create({ userId, familyId, refreshTokenHash: 'b', lastUsedAt: T1 });
 
-    await sessions.markReplaced(old.id, next.id, T1);
+    expect(await sessions.markReplaced(old.id, next.id, T1)).toBe(true);
 
     expect(await sessions.findById(old.id)).toMatchObject({ revokedAt: T1, replacedBy: next.id });
     expect(await sessions.findById(next.id)).toMatchObject({ revokedAt: null });
+  });
+
+  it('claims a rotation only once: replacing an already revoked session changes nothing (R-15)', async () => {
+    const familyId = randomUUID();
+    const old = await sessions.create({ userId, familyId, refreshTokenHash: 'r1', lastUsedAt: T0 });
+    const first = await sessions.create({
+      userId,
+      familyId,
+      refreshTokenHash: 'r2',
+      lastUsedAt: T1,
+    });
+    const second = await sessions.create({
+      userId,
+      familyId,
+      refreshTokenHash: 'r3',
+      lastUsedAt: T1,
+    });
+
+    expect(await sessions.markReplaced(old.id, first.id, T1)).toBe(true);
+    expect(await sessions.markReplaced(old.id, second.id, T2)).toBe(false);
+
+    expect(await sessions.findById(old.id)).toMatchObject({ revokedAt: T1, replacedBy: first.id });
+  });
+
+  it('of two overlapping rotation transactions, the one that waited for the row lock loses its claim (R-15)', async () => {
+    const familyId = randomUUID();
+    const old = await sessions.create({ userId, familyId, refreshTokenHash: 'x1', lastUsedAt: T0 });
+    let claimed!: () => void;
+    const firstClaimed = new Promise<void>((resolve) => (claimed = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+
+    const first = connection.db.transaction(async (tx) => {
+      const repository = new DrizzleSessionRepository(tx);
+      const successor = await repository.create({
+        userId,
+        familyId,
+        refreshTokenHash: 'x2',
+        lastUsedAt: T1,
+      });
+      const won = await repository.markReplaced(old.id, successor.id, T1);
+      claimed();
+      // Holds the row lock until the second transaction is blocked on it.
+      await gate;
+      return won;
+    });
+    await firstClaimed;
+    const second = connection.db.transaction(async (tx) => {
+      const repository = new DrizzleSessionRepository(tx);
+      const successor = await repository.create({
+        userId,
+        familyId,
+        refreshTokenHash: 'x3',
+        lastUsedAt: T1,
+      });
+      return repository.markReplaced(old.id, successor.id, T2);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    release();
+
+    expect(await first).toBe(true);
+    expect(await second).toBe(false);
+    expect(await sessions.findById(old.id)).toMatchObject({ revokedAt: T1 });
+  });
+
+  it('starts a new family, named after the session, when no family is given', async () => {
+    const created = await sessions.create({ userId, refreshTokenHash: 'n1', lastUsedAt: T0 });
+
+    expect(created.familyId).toBe(created.id);
   });
 
   it('keeps the first revocation time when revoking twice', async () => {

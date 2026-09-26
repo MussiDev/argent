@@ -66,3 +66,10 @@ export class Unauthenticated extends AppError {
     super('UNAUTHENTICATED');
   }
 }
+
+/** Wrong password or unknown email: one error for both, so accounts cannot be enumerated (R-02). */
+export class InvalidCredentials extends AppError {
+  constructor() {
+    super('INVALID_CREDENTIALS');
+  }
+}

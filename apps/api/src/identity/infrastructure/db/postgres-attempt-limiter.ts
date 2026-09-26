@@ -40,21 +40,31 @@ export class PostgresAttemptLimiter implements AttemptLimiter, AttemptPurger {
 
   /** A single upsert, so concurrent attempts from several instances never lose an increment. */
   async record(policy: AttemptPolicy, key: string): Promise<AttemptResult> {
+    const start = windowStart(this.clock.now(), policy.windowSeconds);
     const [row] = await this.db
       .insert(authAttempts)
-      .values({
-        kind: policy.kind,
-        key,
-        windowStart: windowStart(this.clock.now(), policy.windowSeconds),
-        count: 1,
-      })
+      .values({ kind: policy.kind, key, windowStart: start, count: 1 })
       .onConflictDoUpdate({
         target: [authAttempts.kind, authAttempts.key, authAttempts.windowStart],
         set: { count: sql`${authAttempts.count} + 1` },
       })
       .returning({ count: authAttempts.count });
     if (!row) throw new Error('Upsert into auth_attempts returned no row');
-    return { count: row.count, allowed: row.count <= policy.limit };
+    return { count: row.count, allowed: row.count <= policy.limit, windowStart: start };
+  }
+
+  /** Decrements the given window's row only: a late refund never touches a newer window. */
+  async release(policy: AttemptPolicy, key: string, start: Date): Promise<void> {
+    await this.db
+      .update(authAttempts)
+      .set({ count: sql`greatest(${authAttempts.count} - 1, 0)` })
+      .where(
+        and(
+          eq(authAttempts.kind, policy.kind),
+          eq(authAttempts.key, key),
+          eq(authAttempts.windowStart, start),
+        ),
+      );
   }
 
   /** Deletes windows that started before `cutoff` (the worker purges rows older than 24 h). */

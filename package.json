@@ -11,6 +11,7 @@
     "format": "prettier --write .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
     "test": "vitest run",
+    "test:perf": "pnpm --filter @argent/api test:perf",
     "e2e": "playwright test --pass-with-no-tests",
     "db:migrate": "pnpm --filter @argent/api db:migrate"
   },

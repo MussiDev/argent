@@ -1,6 +1,7 @@
 import { newAccountDefaults, type Language } from '../domain/account-defaults';
 import { Email } from '../domain/email';
 import { DuplicateEmail, RateLimited } from '../domain/errors';
+import { UNKNOWN_IP } from './client-ip';
 import { assertPasswordAcceptable } from './password-policy';
 import type { AttemptLimiter, AttemptPolicy } from './ports/attempt-limiter';
 import type { BreachedPasswordChecker } from './ports/breached-password-checker';
@@ -15,9 +16,6 @@ export const REGISTER_IP_POLICY: AttemptPolicy = {
   limit: 5,
   windowSeconds: 60 * 60,
 };
-
-/** Rate-limit key when the client address is unknown; such requests share one bucket. */
-export const UNKNOWN_IP = 'unknown';
 
 export interface RegisterUserDependencies {
   attemptLimiter: AttemptLimiter;

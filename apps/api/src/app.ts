@@ -4,7 +4,7 @@ import cors from 'cors';
 import express, { type Express, type RequestHandler, type Router } from 'express';
 import helmet from 'helmet';
 import {
-  createIdentityRouters,
+  createIdentityModule,
   type BreachedPasswordChecker,
   type Clock,
   type IdentityDb,
@@ -21,13 +21,22 @@ export interface IdentityModuleOptions {
   db: IdentityDb;
   clock?: Clock;
   /**
-   * Session middleware for authenticated identity routes. Defaults to one that rejects every
-   * request with 401 until Block 4 provides the real `requireSession` (fail closed).
+   * Test seam: replaces the real `requireSession` (JWT + live session row) on the identity
+   * module's authenticated routes.
    */
   requireSession?: RequestHandler;
   /** Test seam: replaces the breach checker selected by `BREACH_CHECKER`. */
   breachedPasswordChecker?: BreachedPasswordChecker;
 }
+
+/** What the app hands to other modules' router factories. */
+export interface AppModules {
+  /** The identity module's real session middleware; sets `req.auth` or answers 401. */
+  requireSession: RequestHandler;
+}
+
+/** Builds a module's router once the modules it depends on exist. */
+export type RouterFactory = (modules: AppModules) => Router;
 
 export interface AppDependencies {
   env: Env;
@@ -36,11 +45,12 @@ export interface AppDependencies {
   identity?: IdentityModuleOptions;
   /** Module routers, mounted after the cross-cutting middleware and before the error handler. */
   routers?: Router[];
+  /**
+   * Routers that need other modules (e.g. `requireSession`); built after the identity module and
+   * mounted after `routers`. Requires `identity`.
+   */
+  routerFactories?: RouterFactory[];
 }
-
-const rejectWithoutSession: RequestHandler = (_req, _res, next) => {
-  next(new HttpError(401, 'UNAUTHENTICATED'));
-};
 
 function requestContext(logger: Logger): RequestHandler {
   return (req, res, next) => {
@@ -79,7 +89,16 @@ function httpsGuard(env: Env): RequestHandler {
   };
 }
 
-export function createApp({ env, logger, identity, routers = [] }: AppDependencies): Express {
+export function createApp({
+  env,
+  logger,
+  identity,
+  routers = [],
+  routerFactories = [],
+}: AppDependencies): Express {
+  if (routerFactories.length > 0 && !identity) {
+    throw new Error('Router factories need the identity module (it provides requireSession)');
+  }
   const app = express();
 
   app.disable('x-powered-by');
@@ -96,17 +115,22 @@ export function createApp({ env, logger, identity, routers = [] }: AppDependenci
   app.use(cookieParser());
 
   if (identity) {
-    const identityRouters = createIdentityRouters({
+    const identityModule = createIdentityModule({
       db: identity.db,
       env,
       logger,
       ...(identity.clock ? { clock: identity.clock } : {}),
-      requireSession: identity.requireSession ?? rejectWithoutSession,
+      requireSession: identity.requireSession,
       breachedPasswordChecker: identity.breachedPasswordChecker,
     });
-    for (const router of identityRouters) app.use(router);
+    for (const router of identityModule.routers) app.use(router);
+    for (const router of routers) app.use(router);
+    for (const factory of routerFactories) {
+      app.use(factory({ requireSession: identityModule.requireSession }));
+    }
+  } else {
+    for (const router of routers) app.use(router);
   }
-  for (const router of routers) app.use(router);
 
   app.use((_req, _res, next) => {
     next(new HttpError(404, 'NOT_FOUND'));

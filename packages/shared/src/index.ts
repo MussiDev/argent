@@ -4,3 +4,5 @@ export * from './auth/credentials';
 export * from './auth/register';
 export * from './auth/verify-email';
 export * from './auth/resend-verification';
+export * from './auth/sign-in';
+export * from './auth/session';

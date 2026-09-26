@@ -4,4 +4,8 @@
  */
 export interface AuthContext {
   userId: string;
+  /** The session the access token belongs to (for audit logs and sign-out of this device). */
+  sessionId: string;
+  /** Whether the user verified their email; financial routes require it (Block 6). */
+  emailVerified: boolean;
 }

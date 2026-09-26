@@ -12,6 +12,7 @@ import type {
 } from '../../src/identity/application/ports/user-repository';
 import { REGISTER_IP_POLICY, RegisterUser } from '../../src/identity/application/register-user';
 import type { OneTimeTokenRepository } from '../../src/identity/application/ports/one-time-token-repository';
+import type { SessionRepository } from '../../src/identity/application/ports/session-repository';
 import { DuplicateEmail } from '../../src/identity/domain/errors';
 import { InMemoryEmailSender } from '../fakes/in-memory-email-sender';
 
@@ -26,10 +27,15 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
 
   const attemptLimiter: AttemptLimiter = {
     isLimitReached: () => Promise.reject(new Error('register must record, not peek')),
+    release: () => Promise.reject(new Error('register never refunds an attempt')),
     record: (policy: AttemptPolicy, key: string) => {
       calls.push(`record:${policy.kind}:${key}`);
       recorded += 1;
-      return Promise.resolve({ count: recorded, allowed: recorded <= (options.limit ?? 5) });
+      return Promise.resolve({
+        count: recorded,
+        allowed: recorded <= (options.limit ?? 5),
+        windowStart: new Date(0),
+      });
     },
   };
   const passwordHasher: PasswordHasher = {
@@ -69,7 +75,13 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
     updatePasswordHash: () => Promise.resolve(),
   };
   const unitOfWork: UnitOfWork = {
-    run: (work) => work({ users, emailSender, oneTimeTokens: {} as OneTimeTokenRepository }),
+    run: (work) =>
+      work({
+        users,
+        emailSender,
+        oneTimeTokens: {} as OneTimeTokenRepository,
+        sessions: {} as SessionRepository,
+      }),
   };
   const registerUser = new RegisterUser({
     attemptLimiter,

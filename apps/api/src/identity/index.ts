@@ -1,8 +1,14 @@
 import type { RequestHandler, Router } from 'express';
 import type { Env } from '../shared/config/env';
+import { createRequireSession } from '../shared/http/require-session';
 import type { Logger } from '../shared/logging/logger';
+import { GetCurrentSession } from './application/get-current-session';
+import { RefreshSession } from './application/refresh-session';
 import { RegisterUser } from './application/register-user';
 import { ResendVerification } from './application/resend-verification';
+import { SignIn } from './application/sign-in';
+import { SignOut } from './application/sign-out';
+import { SignOutAll } from './application/sign-out-all';
 import { VerifyEmail } from './application/verify-email';
 import type { AttemptLimiter } from './application/ports/attempt-limiter';
 import type { AttemptPurger } from './application/ports/attempt-purger';
@@ -25,6 +31,8 @@ import type { EmailTransport } from './infrastructure/email/email-transport';
 import { EmailWorker } from './infrastructure/email/email-worker';
 import { OutboxEmailSender } from './infrastructure/email/outbox-email-sender';
 import { createRegistrationRoutes } from './infrastructure/http/registration-routes';
+import { ACCESS_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
+import { createSessionRoutes } from './infrastructure/http/session-routes';
 import {
   Argon2idPasswordHasher,
   DUMMY_PASSWORD_HASH,
@@ -32,12 +40,14 @@ import {
 import { CryptoTokenGenerator } from './infrastructure/security/crypto-token-generator';
 import { FakeBreachedPasswordChecker } from './infrastructure/security/fake-breached-password-checker';
 import { HibpBreachedPasswordChecker } from './infrastructure/security/hibp-breached-password-checker';
+import { JoseAccessTokenIssuer } from './infrastructure/security/jose-access-token-issuer';
 import { systemClock } from './infrastructure/system-clock';
 
 export * from './domain/account-defaults';
 export * from './domain/email';
 export * from './domain/errors';
 export * from './domain/password-rules';
+export * from './application/ports/access-token-issuer';
 export * from './application/ports/attempt-limiter';
 export * from './application/ports/attempt-purger';
 export * from './application/ports/breached-password-checker';
@@ -51,6 +61,7 @@ export * from './application/ports/unit-of-work';
 export * from './application/ports/user-repository';
 export type { IdentityDb } from './infrastructure/db/schema';
 export { systemClock } from './infrastructure/system-clock';
+export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
 export { createEmailTransport } from './infrastructure/email/email-transport';
 export type { EmailTransport } from './infrastructure/email/email-transport';
 export type { EmailWorker } from './infrastructure/email/email-worker';
@@ -103,24 +114,61 @@ export function createIdentityInfrastructure({
   };
 }
 
-export interface IdentityRoutesDependencies extends IdentityInfrastructureDependencies {
+export interface IdentityModuleDependencies extends Omit<
+  IdentityInfrastructureDependencies,
+  'env'
+> {
+  env: Pick<Env, 'BREACH_CHECKER' | 'JWT_SECRET'>;
   /**
-   * Session middleware for the authenticated identity routes; it must set `req.auth`. Block 4
-   * supplies the real `requireSession`; until then the app passes one that always answers 401.
+   * Test seam: replaces the real `requireSession` on the identity module's authenticated routes.
+   * It must set `req.auth`.
    */
-  requireSession: RequestHandler;
+  requireSession?: RequestHandler | undefined;
   /** Test seam: replaces the breach checker selected by `BREACH_CHECKER`. */
   breachedPasswordChecker?: BreachedPasswordChecker | undefined;
 }
 
-/** The identity module's HTTP routers, wired to their use cases and adapters. */
-export function createIdentityRouters({
-  requireSession,
+export interface IdentityModule {
+  /** The identity module's HTTP routers, wired to their use cases and adapters. */
+  routers: Router[];
+  /**
+   * The real session middleware (JWT + live session row + existing user), for every module's
+   * authenticated routes. Sets `req.auth`; answers 401 `UNAUTHENTICATED` otherwise.
+   */
+  requireSession: RequestHandler;
+}
+
+/** Composition root of the identity module: its routers and the shared `requireSession`. */
+export function createIdentityModule({
+  requireSession: requireSessionOverride,
   breachedPasswordChecker,
+  env,
   ...dependencies
-}: IdentityRoutesDependencies): Router[] {
-  const identity = createIdentityInfrastructure(dependencies);
-  return [
+}: IdentityModuleDependencies): IdentityModule {
+  const identity = createIdentityInfrastructure({ ...dependencies, env });
+  const accessTokens = new JoseAccessTokenIssuer({ secret: env.JWT_SECRET, clock: identity.clock });
+  const getCurrentSession = new GetCurrentSession({
+    accessTokens,
+    sessions: identity.sessions,
+    users: identity.users,
+    clock: identity.clock,
+  });
+  const requireSession = createRequireSession({
+    cookieName: ACCESS_TOKEN_COOKIE,
+    authenticate: async (accessToken) => {
+      const current = await getCurrentSession.execute(accessToken);
+      return current
+        ? {
+            userId: current.user.id,
+            sessionId: current.sessionId,
+            emailVerified: current.user.emailVerifiedAt !== null,
+          }
+        : null;
+    },
+  });
+  const routeSession = requireSessionOverride ?? requireSession;
+
+  const routers = [
     createRegistrationRoutes({
       registerUser: new RegisterUser({
         attemptLimiter: identity.attemptLimiter,
@@ -141,10 +189,47 @@ export function createIdentityRouters({
         users: identity.users,
         emailSender: identity.emailSender,
       }),
-      requireSession,
+      requireSession: routeSession,
+      logger: dependencies.logger,
+    }),
+    createSessionRoutes({
+      signIn: new SignIn({
+        attemptLimiter: identity.attemptLimiter,
+        users: identity.users,
+        passwordHasher: identity.passwordHasher,
+        dummyPasswordHash: DUMMY_PASSWORD_HASH,
+        sessions: identity.sessions,
+        tokenGenerator: identity.tokenGenerator,
+        accessTokens,
+        clock: identity.clock,
+        reportRefundFailure: (error) => {
+          // `err` goes through the logger's safe serializer (no query params or row values).
+          dependencies.logger.warn(
+            { err: error },
+            'sign-in limit refund failed; the reserved units stay counted',
+          );
+        },
+      }),
+      refreshSession: new RefreshSession({
+        sessions: identity.sessions,
+        tokenGenerator: identity.tokenGenerator,
+        accessTokens,
+        unitOfWork: identity.unitOfWork,
+        clock: identity.clock,
+      }),
+      signOut: new SignOut({
+        sessions: identity.sessions,
+        tokenGenerator: identity.tokenGenerator,
+        accessTokens,
+        clock: identity.clock,
+      }),
+      signOutAll: new SignOutAll({ sessions: identity.sessions, clock: identity.clock }),
+      getCurrentSession,
+      requireSession: routeSession,
       logger: dependencies.logger,
     }),
   ];
+  return { routers, requireSession };
 }
 
 export interface EmailWorkerFactoryDependencies {

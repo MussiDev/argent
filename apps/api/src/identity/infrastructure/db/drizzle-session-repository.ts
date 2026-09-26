@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type {
   NewSession,
   Session,
@@ -10,10 +10,11 @@ import { sessions, type IdentityDb } from './schema';
 export class DrizzleSessionRepository implements SessionRepository {
   constructor(private readonly db: IdentityDb) {}
 
-  async create(session: NewSession): Promise<Session> {
+  async create({ familyId, ...session }: NewSession): Promise<Session> {
+    const id = randomUUID();
     const [created] = await this.db
       .insert(sessions)
-      .values({ id: randomUUID(), ...session })
+      .values({ id, familyId: familyId ?? id, ...session })
       .returning();
     if (!created) throw new Error('Insert into sessions returned no row');
     return created;
@@ -33,12 +34,17 @@ export class DrizzleSessionRepository implements SessionRepository {
     return session ?? null;
   }
 
-  async markReplaced(id: string, replacedBy: string, at: Date): Promise<void> {
-    await this.db
+  /**
+   * `revoked_at is null` is re-evaluated after waiting for a concurrent writer's row lock, so under
+   * READ COMMITTED only the first of two concurrent claims matches the row.
+   */
+  async markReplaced(id: string, replacedBy: string, at: Date): Promise<boolean> {
+    const claimed = await this.db
       .update(sessions)
-      // coalesce keeps the first revocation time if the session was already revoked.
-      .set({ revokedAt: sql`coalesce(${sessions.revokedAt}, ${at})`, replacedBy })
-      .where(eq(sessions.id, id));
+      .set({ revokedAt: at, replacedBy })
+      .where(and(eq(sessions.id, id), isNull(sessions.revokedAt)))
+      .returning({ id: sessions.id });
+    return claimed.length === 1;
   }
 
   async revoke(id: string, at: Date): Promise<void> {

@@ -45,6 +45,7 @@ describe('PostgresAttemptLimiter', () => {
     expect(await limiter().record(SIGN_IN_IP, 'ana@example.com')).toEqual({
       count: 1,
       allowed: true,
+      windowStart: new Date('2026-09-26T12:00:00.000Z'),
     });
 
     // 12:14:59 is still inside the 12:00 window of 15 minutes.
@@ -57,6 +58,7 @@ describe('PostgresAttemptLimiter', () => {
     expect(await limiter().record(SIGN_IN_ACCOUNT, 'ana@example.com')).toEqual({
       count: 1,
       allowed: true,
+      windowStart: new Date('2026-09-26T12:15:00.000Z'),
     });
   });
 
@@ -87,6 +89,53 @@ describe('PostgresAttemptLimiter', () => {
       'select window_start from auth_attempts',
     );
     expect(rows.rows).toEqual([{ window_start: new Date('2026-09-26T12:00:00.000Z') }]);
+  });
+
+  it('releases one unit of the window the reservation was recorded in, never below zero', async () => {
+    clock.current = new Date('2026-09-26T15:00:00.000Z');
+    const [first] = await recordTimes(SIGN_IN_ACCOUNT, 'dana@example.com', 3);
+    const windowStart = first?.windowStart ?? new Date(0);
+    expect(windowStart).toEqual(new Date('2026-09-26T15:00:00.000Z'));
+
+    await limiter().release(SIGN_IN_ACCOUNT, 'dana@example.com', windowStart);
+    const counts = async () =>
+      (
+        await connection.pool.query<{ count: number }>(
+          "select count from auth_attempts where key = 'dana@example.com'",
+        )
+      ).rows;
+    expect(await counts()).toEqual([{ count: 2 }]);
+
+    for (let i = 0; i < 3; i += 1) {
+      await limiter().release(SIGN_IN_ACCOUNT, 'dana@example.com', windowStart);
+    }
+    expect(await counts()).toEqual([{ count: 0 }]);
+
+    // Other keys and a key without a window are untouched; nothing is created.
+    await limiter().release(SIGN_IN_ACCOUNT, 'nobody@example.com', windowStart);
+    const rows = await connection.pool.query('select key from auth_attempts');
+    expect(rows.rows).toEqual([{ key: 'dana@example.com' }]);
+  });
+
+  it('a refund that runs after the window boundary decrements the old window, not the new one (B-2)', async () => {
+    // Someone else's attempts already fill part of the 12:15 window.
+    clock.current = new Date('2026-09-26T12:15:00.000Z');
+    await recordTimes(SIGN_IN_ACCOUNT, 'erin@example.com', 3);
+
+    clock.current = new Date('2026-09-26T12:14:59.999Z');
+    const reservation = await limiter().record(SIGN_IN_ACCOUNT, 'erin@example.com');
+    expect(reservation.windowStart).toEqual(new Date('2026-09-26T12:00:00.000Z'));
+
+    clock.current = new Date('2026-09-26T12:15:00.001Z');
+    await limiter().release(SIGN_IN_ACCOUNT, 'erin@example.com', reservation.windowStart);
+
+    const rows = await connection.pool.query<{ window_start: Date; count: number }>(
+      "select window_start, count from auth_attempts where key = 'erin@example.com' order by window_start",
+    );
+    expect(rows.rows).toEqual([
+      { window_start: new Date('2026-09-26T12:00:00.000Z'), count: 0 },
+      { window_start: new Date('2026-09-26T12:15:00.000Z'), count: 3 },
+    ]);
   });
 
   it('purges windows older than a cutoff', async () => {

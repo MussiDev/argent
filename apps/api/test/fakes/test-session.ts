@@ -13,6 +13,7 @@ export const testRequireSession: RequestHandler = (req, _res, next) => {
     next(new HttpError(401, 'UNAUTHENTICATED'));
     return;
   }
-  req.auth = { userId };
+  // The double names only the user; the session is fictitious and the email counts as unverified.
+  req.auth = { userId, sessionId: 'test-session', emailVerified: false };
   next();
 };

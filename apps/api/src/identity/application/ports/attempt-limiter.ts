@@ -20,6 +20,8 @@ export interface AttemptResult {
   count: number;
   /** False once `count` exceeds the policy's limit. */
   allowed: boolean;
+  /** The window this attempt was recorded in; pass it to `release` to refund exactly this one. */
+  windowStart: Date;
 }
 
 /**
@@ -31,4 +33,10 @@ export interface AttemptLimiter {
   isLimitReached(policy: AttemptPolicy, key: string): Promise<boolean>;
   /** Records one attempt in the current window. */
   record(policy: AttemptPolicy, key: string): Promise<AttemptResult>;
+  /**
+   * Gives back one attempt of the window `windowStart` (never below zero). Lets a caller reserve a
+   * unit with `record` before expensive work and refund exactly that unit when the attempt must
+   * not count, even if the current window has changed since.
+   */
+  release(policy: AttemptPolicy, key: string, windowStart: Date): Promise<void>;
 }

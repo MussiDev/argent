@@ -1,4 +1,8 @@
 import {
+  refreshResponseSchema,
+  sessionResponseSchema,
+  signInRequestSchema,
+  signInResponseSchema,
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MAX_UTF16_LENGTH,
   registerRequestSchema,
@@ -89,5 +93,27 @@ describe('shared auth schemas', () => {
     });
     expect(resendVerificationRequestSchema.parse({ anything: 1 })).toEqual({});
     expect(registerResponseSchema.safeParse({ status: 'created' }).success).toBe(false);
+  });
+
+  it('describes sign-in and session bodies; sign-in accepts any 1-128 character password', () => {
+    const accepts = (password: string) =>
+      signInRequestSchema.safeParse({ email: 'ana@example.com', password }).success;
+    expect(accepts('x')).toBe(true);
+    expect(accepts('x'.repeat(128))).toBe(true);
+    expect(accepts('')).toBe(false);
+    expect(accepts('x'.repeat(129))).toBe(false);
+    expect(
+      signInRequestSchema.parse({ email: ' ana@example.com ', password: 'p', extra: true }),
+    ).toEqual({ email: 'ana@example.com', password: 'p' });
+
+    const user = { id: 'u1', email: 'ana@example.com', emailVerified: false, language: 'en' };
+    expect(signInResponseSchema.parse({ user: { ...user, passwordHash: 'x' } })).toEqual({ user });
+    expect(signInResponseSchema.safeParse({ user: { ...user, language: 'pt' } }).success).toBe(
+      false,
+    );
+    expect(sessionResponseSchema.parse({ user: { ...user, timeZone: 'America/Cordoba' } })).toEqual(
+      { user: { ...user, timeZone: 'America/Cordoba' } },
+    );
+    expect(refreshResponseSchema.parse({ status: 'refreshed' })).toEqual({ status: 'refreshed' });
   });
 });

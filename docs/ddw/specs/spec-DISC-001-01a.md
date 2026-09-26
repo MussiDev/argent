@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01a.md |
 | Tier | FEATURE |
 | Date | 2026-09-26 |
-| Spec loops | 5 |
-| Loops since last human decision | 2 |
+| Spec loops | 6 |
+| Loops since last human decision | 0 |
 
 ## Summary
 First code in the repository. Block 1 lays the pnpm monorepo declared in `AGENTS.md` (Next.js 16
@@ -415,11 +415,21 @@ All tests above pass; `GET /auth/session` returns the signed-in user and 401 aft
 - `apps/api/src/identity/application/request-password-reset.ts` (new)
 - `apps/api/src/identity/application/confirm-password-reset.ts` (new)
 - `apps/api/src/identity/infrastructure/http/password-reset-routes.ts` (new)
-- `apps/api/src/app.ts` (modified) — mount reset routes.
+- `apps/api/src/identity/index.ts` (modified) — wires the reset use cases and mounts the reset router (the identity module is the composition root; `app.ts` already mounts every identity router).
+- `apps/api/src/identity/infrastructure/db/schema.ts` (modified) — `users.credentials_version`, `users.password_changed_at`, `sessions.credentials_version`.
+- `apps/api/drizzle/0002_credentials_version.sql` (new, generated), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0002_snapshot.json` (new, generated).
+- `apps/api/drizzle/rollback/0002_credentials_version.down.sql` (new) — drops the three columns and the migration row.
+- `apps/api/src/identity/application/ports/user-repository.ts`, `apps/api/src/identity/application/ports/session-repository.ts`, `apps/api/src/identity/infrastructure/db/drizzle-user-repository.ts`, `apps/api/src/identity/infrastructure/db/drizzle-session-repository.ts` (modified) — read and write the credentials version.
+- `apps/api/src/identity/application/sign-in.ts`, `apps/api/src/identity/application/refresh-session.ts`, `apps/api/src/identity/application/get-current-session.ts` (modified) — sessions carry the version they were created with; a session whose version differs from the user's is rejected.
+- `apps/api/src/identity/infrastructure/email/email-worker.ts` (modified) — drops `password_reset` rows created before `users.password_changed_at`.
+- `apps/api/test/identity/password-reset.test.ts`, `apps/api/test/identity/password-reset-use-cases.test.ts`, `apps/api/test/identity/credentials-version.test.ts` (new), `apps/api/test/timing.test.ts` (modified).
 
 **Logic**
 - Request: record the attempt first for the IP and for the normalized email (atomic, reject when over the limit) → if the user exists with a verified email, enqueue a `password_reset` row (no token; the worker issues the 60-min token at send time); otherwise enqueue a `discard` row. Same 202 response.
-- Confirm: token must be an unused, unexpired `password_reset` token → password length + breach check → new Argon2id hash, mark token used, revoke all sessions of the user, in one transaction.
+- Request limits: 5 per IP per hour (`reset_ip`), recorded first; then 5 per normalized email per hour (`reset_email`), not counted when the IP is already over its limit.
+- Confirm: the pure length rule runs before any transaction; then, in one transaction, consume the unused, unexpired `password_reset` token → breach check → new Argon2id hash → increment `users.credentials_version` and set `users.password_changed_at` → revoke all sessions of the user.
+- Credentials version (user decision 2026-09-26, corrective loop after the Block 5 architecture review): every session stores the `credentials_version` of its user at creation (sign-in reads it with the password hash; refresh copies it from the current session). `GetCurrentSession` and refresh reject any session whose version differs from the user's, so a sign-in or refresh racing a reset produces a session that is dead on first use.
+- The email worker drops `password_reset` rows created before `users.password_changed_at`, so a link queued before a completed reset is never sent.
 
 **API contract**
 - Method + path: `POST /auth/password-reset/request`
@@ -434,8 +444,14 @@ All tests above pass; `GET /auth/session` returns the signed-in user and 401 aft
 - Error codes: 400 `TOKEN_INVALID`, 400 `PASSWORD_TOO_SHORT`, 400 `PASSWORD_BREACHED`, 503 `PASSWORD_CHECK_UNAVAILABLE`
 - Auth: public; `Origin` guard
 
+**Data model**
+- `users.credentials_version integer not null default 0`.
+- `users.password_changed_at timestamptz null` (null until the first reset).
+- `sessions.credentials_version integer not null default 0`.
+- Migration `0002_credentials_version` is additive; rollback drops the three columns.
+
 **Input validation**
-- `email` ≤ 254 chars; `token` 43 chars base64url; `newPassword` 10–128 chars.
+- `email` ≤ 254 chars; `token` 43 chars base64url; `newPassword` 1–128 code points in the shared schema (the minimum of 10 is the domain rule and returns `PASSWORD_TOO_SHORT`, as decided for Block 3).
 
 **Error handling**
 - Token unknown, older than 60 min or already used — 400 `TOKEN_INVALID`, password unchanged, UI offers a new request (AC-11).
@@ -448,6 +464,12 @@ All tests above pass; `GET /auth/session` returns the signed-in user and 401 aft
 - [ ] token older than 60 min and a used token return 400 `TOKEN_INVALID` and the password stays unchanged — validates AC-11, NFR-04, sad path
 - [ ] breached new password is rejected — sad path
 - [ ] 6th reset request for one email within an hour returns 429 — sad path (R-09)
+- [ ] 6th reset request from one IP within an hour returns 429 — sad path (R-09)
+- [ ] a sign-in that reads the old password hash before a reset commits and creates its session after it gets a session rejected with 401 on first use — sad path, validates AC-10
+- [ ] a refresh that races a reset produces a session rejected with 401 — sad path, validates AC-10
+- [ ] two concurrent confirms with the same token: exactly one returns 200 — sad path, validates NFR-04
+- [ ] a `password_reset` outbox row created before a completed reset is dropped by the worker and no link is sent — sad path
+- [ ] median response-time difference of `/auth/password-reset/request` between a registered and an unknown email is < 50 ms over 200 requests — validates NFR-08
 
 **Completion criterion**
 All tests above pass; a reset through Mailpit changes the password and the previous session no
@@ -567,8 +589,8 @@ Supports FR-02 and FR-04 (delivery of verification and reset links) when several
 
 **Files**
 - `apps/api/src/identity/infrastructure/db/schema.ts` (modified) — `email_outbox.next_attempt_at`; polling index on `created_at` where `sent_at is null` replaces the index on `sent_at`.
-- `apps/api/drizzle/0002_outbox_retry.sql` (new, generated), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0002_snapshot.json` (new, generated).
-- `apps/api/drizzle/rollback/0002_outbox_retry.down.sql` (new) — drops the column and the new index, restores the previous index, deletes the migration row.
+- `apps/api/drizzle/0003_outbox_retry.sql` (new, generated), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0003_snapshot.json` (new, generated).
+- `apps/api/drizzle/rollback/0003_outbox_retry.down.sql` (new) — drops the column and the new index, restores the previous index, deletes the migration row.
 - `apps/api/src/identity/infrastructure/email/email-worker.ts` (modified) — due rows are `next_attempt_at is null or next_attempt_at <= now`; each failure sets `next_attempt_at` (30 s, 90 s, 210 s, 450 s) in the same update that increments `attempts`; the in-memory retry map is removed; the failure update only matches rows with `sent_at is null`, and a missed match is logged at debug without scheduling anything.
 - `apps/api/src/identity/infrastructure/email/transports/resend-transport.ts` (modified) — the timed-out request is aborted with an `AbortSignal`; the outbox row id is sent as the Resend idempotency key.
 - `apps/api/src/shared/config/env.ts` (modified) — `EMAIL_PROVIDER=resend` requires `NODE_ENV=production` (the Resend SDK prints raw provider errors outside production).
@@ -600,10 +622,10 @@ changes close the smaller gaps the Block 3 architecture review listed.
 - [ ] `EMAIL_PROVIDER=resend` with `NODE_ENV` other than production fails to start — sad path
 - [ ] a log field named `to` in an unrelated object is kept, while `toEmail`, `to_email` and `message.to` are redacted — sad path
 - [ ] a second shutdown signal and a close that exceeds 10 s both exit with code 1 — sad path
-- [ ] migration 0002 applies, rolls back and re-applies — foundation
+- [ ] migration 0003 applies, rolls back and re-applies — foundation
 
 **Completion criterion**
-All tests above pass; `pnpm db:migrate` applies `0002_outbox_retry.sql`; the worker keeps no retry
+All tests above pass; `pnpm db:migrate` applies `0003_outbox_retry.sql`; the worker keeps no retry
 state in memory.
 
 ## Final verification
@@ -618,3 +640,6 @@ state in memory.
 - 2026-09-26: Email tokens are issued by the worker at send time; the outbox never stores a token (user decision, option A, corrective loop from CODE after the Block 2 review). Review findings carried in: atomic refresh rotation (Block 4), record-first rate limiting, `AttemptPurger` port, `auth_attempts(window_start)` index, hasher and HIBP error handling, typed responses (Block 3).
 - 2026-09-26: Block 3 as built (reviewed and accepted): unit-of-work port and adapter, `auth-context.ts`, `email-transport.ts` and `graceful-shutdown.ts` added; Zod password minimum is 1 so short passwords return `PASSWORD_TOO_SHORT` from the domain; `EMAIL_FROM` env (required with Resend); `EMAIL_PROVIDER` required; outbox rows lose `to_email` when sent or failed and are deleted after 7 days; per-user advisory lock when issuing email tokens; delivery is at-least-once (a send can succeed and its commit fail, producing a second email whose first link is dead); token rows stay locked while an email is being sent (a concurrent verify waits up to the transport timeout).
 - 2026-09-26: Block 8 added (corrective loop from CODE after the Block 3 review): retry schedule stored in `email_outbox.next_attempt_at` so several workers share it.
+- 2026-09-26: Block 4 as built (reviewed and accepted in 3 rounds): sign-in reserves one attempt unit per account and per IP before Argon2id and refunds it on success and on 429, into the exact window it was reserved in (`AttemptLimiter.record` returns its `windowStart`; `release(policy, key, windowStart)`); a failed refund after a correct password is reported and the sign-in completes; `AuthContext` is `{ userId, sessionId, emailVerified }`; the identity module is built first and hands `requireSession` to other modules' router factories; access tokens carry issuer `argent-api` and audience `argent-access`; only a rotated refresh token counts as reuse; the latency benchmark lives in `apps/api/test/perf/auth-latency.perf.test.ts` and runs in its own `pnpm test:perf` script and CI job; `UNKNOWN_IP` lives in `application/client-ip.ts`. Accepted tradeoff: more than 5 simultaneous in-flight sign-ins to one account get 429 even with the right password.
+- 2026-09-26: Block 5 limits: 5 reset requests per IP per hour and 5 per normalized email per hour (spec gave no number; aligned with registration).
+- 2026-09-26: Credentials version added to Block 5 (user decision after the Block 5 architecture review): a reset invalidates sessions created concurrently with it and queued reset emails; migration 0002 is `0002_credentials_version`, and Block 8's migration becomes `0003_outbox_retry`.

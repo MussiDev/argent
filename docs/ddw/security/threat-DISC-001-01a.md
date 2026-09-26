@@ -83,7 +83,7 @@
 - **Repudiation:** reset requests and completions are logged with account id and IP.
 - **Information Disclosure:** the request endpoint answers identically for registered and unknown emails (R-02); reset pages send `Referrer-Policy: no-referrer` so the token does not leak to third parties (R-17).
 - **Denial of Service:** reset requests limited per IP and per email with the same limiter as registration (R-09).
-- **Elevation of Privilege:** completing a reset revokes all existing sessions, evicting an attacker who held one (PRD AC-10).
+- **Elevation of Privilege:** completing a reset revokes all existing sessions and increments the user's credentials version, so a session created by a sign-in or refresh racing the reset is rejected on first use; queued reset emails older than the reset are dropped (PRD AC-10, R-21).
 
 ### `apps/api/src/shared/http/require-session.ts` + `apps/api/src/shared/http/require-verified-email.ts` + `apps/api/src/shared/access/access-policy.ts`
 - **Spoofing:** `requireSession` accepts only a valid, unexpired, signed access token whose session row is not revoked; otherwise 401.
@@ -135,6 +135,26 @@
 | R-18 | a future query forgets owner scoping | E | M | C | `AccessPolicy` scope required by repository signatures; 404 test per resource |
 | R-19 | cross-site request forgery | T | L | H | `SameSite=Strict`, custom header, `Origin` check |
 | R-20 | XSS steals session | I | L | C | `HttpOnly` cookies; CSP without inline scripts; React escaping |
+| R-21 | a session created by a sign-in or refresh racing a password reset survives it | E | M | H | credentials version stored on users and sessions; sessions with a stale version are rejected |
+| R-22 | fixed rate-limit windows allow up to 2x the limit in a short burst at a window boundary | S | M | L | accepted, see below |
+| R-23 | anyone who knows an email can lock its sign-in for 15 minutes with 5 wrong guesses | D | M | L | accepted, see below |
+| R-24 | 5 reset requests per IP per hour can throttle many users behind one carrier-grade NAT address | D | L | L | accepted, see below |
+
+## Accepted risks
+### R-22
+- **Accepted by:** project owner (user), in the session of 2026-09-26, when approving the Block 5 corrective loop.
+- **Justification:** the per-account cap still holds inside each window; the burst gives at most 10 guesses in a short span, and a sliding window would need extra state per attempt for a small gain at the current scale.
+- **Review conditions:** revisit if credential-stuffing attempts show up in production logs, or before opening registration to more than a few hundred users.
+
+### R-23
+- **Accepted by:** project owner (user), in the session of 2026-09-26, when approving the Block 5 corrective loop.
+- **Justification:** a lockout is inherent to a per-account limit and fails safe; the owner can always recover through password reset (Block 5), which is not blocked by the sign-in limit.
+- **Review conditions:** revisit if users report lockouts, or when adding 2FA (DISC-001-01c).
+
+### R-24
+- **Accepted by:** project owner (user), in the session of 2026-09-26, when approving the Block 5 corrective loop.
+- **Justification:** the product has about 10 users; the per-email limit is the one that protects victims, and a throttled user can retry within the hour.
+- **Review conditions:** raise the per-IP limit if more than one user shares an address, or when the user base grows.
 
 ## Supply chain
 New runtime dependencies: `express@5`, `zod`, `drizzle-orm`, `pg`, `@node-rs/argon2`, `jose`, `cookie-parser`, `helmet`, `resend` (API); `next@16`, `react`, `tailwindcss`, `lucide-react`, `next-intl`, shadcn/ui source copied into the repo (web). Versions are pinned through `pnpm-lock.yaml`, installs in CI use `--frozen-lockfile`, and the SAST step scans the result. External services: Have I Been Pwned (k-anonymity, no secrets sent) and Resend (send-only API key).

@@ -15,10 +15,10 @@
   ✅ F-SPEC-16: every documented error is named by a test
   ✅ F-SPEC-11: dependencies between blocks are declared
   ⚠️ W-SPEC-01: block referencing no FR — enabler or gold-plating?: Block 1 (Monorepo foundation)
-  ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (Monorepo foundation) (38 files, 781 words), Block 2 (Identity domain, ports and persistence) (25 files, 800 words), Block 3 (Registration, email verification and email outbox) (30 files, 1275 words), Block 4 (Sign-in, sessions and sign-out) (17 files, 787 words), Block 5 (Password reset) (6 files, 367 words), Block 6 (Access control) (9 files, 432 words), Block 7 (Web authentication screens) (15 files, 569 words), Block 8 (Email outbox hardening) (9 files, 821 words)
+  ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (Monorepo foundation) (38 files, 781 words), Block 2 (Identity domain, ports and persistence) (25 files, 800 words), Block 3 (Registration, email verification and email outbox) (30 files, 1275 words), Block 4 (Sign-in, sessions and sign-out) (17 files, 787 words), Block 5 (Password reset) (13 files, 792 words), Block 6 (Access control) (9 files, 432 words), Block 7 (Web authentication screens) (15 files, 569 words), Block 8 (Email outbox hardening) (9 files, 1021 words)
   👁  F-SPEC-12 (contradicts the PRD) and F-SPEC-13 (terminology diverging from
       the PRD) are MANUAL: judge them and say so explicitly in your report.
-  ✅ F-SPEC-LOOP: 2 loop(s) since a human decided, under the ceiling of 3; 5 in total for this document
+  ✅ F-SPEC-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 6 in total for this document
 ────────────────────────────────────────────────────────────────
 Total: 13 passed, 0 failed, 2 warnings
 Result: PASSED

@@ -61,6 +61,25 @@ async function sqlState(statement: string): Promise<string | undefined> {
   }
 }
 
+function rollback(tag: string): Promise<string> {
+  return readFile(`${migrationsFolder}/rollback/${tag}.down.sql`, 'utf8');
+}
+
+async function appliedMigrations(): Promise<number> {
+  const result = await client.query<{ n: string }>(
+    'select count(*) as n from drizzle.__drizzle_migrations',
+  );
+  return Number(result.rows[0]?.n);
+}
+
+async function indexDefinition(name: string): Promise<string | undefined> {
+  const result = await client.query<{ indexdef: string }>(
+    "select indexdef from pg_indexes where schemaname = 'public' and indexname = $1",
+    [name],
+  );
+  return result.rows[0]?.indexdef;
+}
+
 describe('0000_identity migration', () => {
   it('applies on an empty database and creates the five tables', async () => {
     expect(await publicTables()).toEqual([]);
@@ -156,13 +175,51 @@ describe('0000_identity migration', () => {
     );
   });
 
-  it('is reverted by the rollback script, after which it can be applied again', async () => {
-    const rollback = await readFile(`${migrationsFolder}/rollback/0000_identity.down.sql`, 'utf8');
-
-    await client.query(rollback);
+  it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
+    await client.query(await rollback('0001_outbox_hardening'));
+    await client.query(await rollback('0000_identity'));
     expect(await publicTables()).toEqual([]);
+    expect(await appliedMigrations()).toBe(0);
 
     await runMigrations(emptyDatabaseUrl);
     expect(await publicTables()).toEqual(IDENTITY_TABLES);
+  });
+});
+
+describe('0001_outbox_hardening migration', () => {
+  it('adds the auth_attempts(window_start) index and the email_outbox language check', async () => {
+    expect(await indexDefinition('auth_attempts_window_start_idx')).toMatch(
+      /^CREATE INDEX auth_attempts_window_start_idx ON public\.auth_attempts USING btree \(window_start\)$/,
+    );
+    expect(
+      await sqlState(
+        "insert into email_outbox (id, kind, language, payload) values (gen_random_uuid(), 'discard', 'pt', '{}')",
+      ),
+    ).toBe('23514');
+    expect(
+      await sqlState(
+        "insert into email_outbox (id, kind, language, payload) values (gen_random_uuid(), 'discard', 'en', '{\"userId\": null}')",
+      ),
+    ).toBeUndefined();
+    expect(await appliedMigrations()).toBe(2);
+  });
+
+  it('is reverted by its rollback script alone, leaving 0000 in place, and re-applies', async () => {
+    await client.query('delete from email_outbox');
+    await client.query(await rollback('0001_outbox_hardening'));
+
+    expect(await indexDefinition('auth_attempts_window_start_idx')).toBeUndefined();
+    expect(
+      await sqlState(
+        "insert into email_outbox (id, kind, language, payload) values (gen_random_uuid(), 'discard', 'pt', '{}')",
+      ),
+    ).toBeUndefined();
+    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await appliedMigrations()).toBe(1);
+
+    await client.query('delete from email_outbox');
+    await runMigrations(emptyDatabaseUrl);
+    expect(await indexDefinition('auth_attempts_window_start_idx')).toBeDefined();
+    expect(await appliedMigrations()).toBe(2);
   });
 });

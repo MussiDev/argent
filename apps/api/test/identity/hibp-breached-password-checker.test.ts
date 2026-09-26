@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { assertPasswordNotBreached } from '../../src/identity/application/ports/breached-password-checker';
+import { assertPasswordAcceptable } from '../../src/identity/application/password-policy';
 import { PasswordBreached, PasswordCheckUnavailable } from '../../src/identity/domain/errors';
 import {
   HIBP_RANGE_URL,
   HIBP_TIMEOUT_MS,
   HibpBreachedPasswordChecker,
 } from '../../src/identity/infrastructure/security/hibp-breached-password-checker';
-import { createLogger } from '../../src/shared/logging/logger';
+import { createLogger, serializeError } from '../../src/shared/logging/logger';
 
 const PASSWORD = 'correct horse battery staple';
 const SHA1 = createHash('sha1').update(PASSWORD).digest('hex').toUpperCase();
@@ -57,10 +57,10 @@ describe('HibpBreachedPasswordChecker', () => {
     const checker = new HibpBreachedPasswordChecker({ fetch });
 
     await expect(checker.isBreached(PASSWORD)).resolves.toBe(true);
-    await expect(assertPasswordNotBreached(checker, PASSWORD)).rejects.toMatchObject({
+    await expect(assertPasswordAcceptable(PASSWORD, checker)).rejects.toMatchObject({
       code: 'PASSWORD_BREACHED',
     });
-    await expect(assertPasswordNotBreached(checker, PASSWORD)).rejects.toBeInstanceOf(
+    await expect(assertPasswordAcceptable(PASSWORD, checker)).rejects.toBeInstanceOf(
       PasswordBreached,
     );
 
@@ -95,7 +95,7 @@ describe('HibpBreachedPasswordChecker', () => {
     const checker = new HibpBreachedPasswordChecker({ fetch });
 
     await expect(checker.isBreached(PASSWORD)).resolves.toBe(false);
-    await expect(assertPasswordNotBreached(checker, PASSWORD)).resolves.toBeUndefined();
+    await expect(assertPasswordAcceptable(PASSWORD, checker)).resolves.toBeUndefined();
   });
 
   it('raises PasswordCheckUnavailable when HIBP does not answer within 400 ms', async () => {
@@ -157,5 +157,73 @@ describe('HibpBreachedPasswordChecker', () => {
     expect(entry.latencyMs).toEqual(expect.any(Number));
     expect(lines[0]).not.toContain(PASSWORD);
     expect(lines[0]).not.toContain(PREFIX);
+  });
+
+  it('cancels the body of a 5xx response and keeps the URL out of the error cause', async () => {
+    let cancelled = false;
+    const { fetch } = fakeFetch(() => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('upstream error page'));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return Promise.resolve(new Response(body, { status: 503 }));
+    });
+    const checker = new HibpBreachedPasswordChecker({ fetch });
+
+    const error: unknown = await checker.isBreached(PASSWORD).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(PasswordCheckUnavailable);
+    expect(cancelled).toBe(true);
+    const cause = JSON.stringify(serializeError((error as Error).cause));
+    expect(cause).toContain('http_status');
+    expect(cause).not.toContain('pwnedpasswords');
+    expect(cause).not.toContain(PREFIX);
+  });
+
+  it('replaces a raw network error (which may carry the URL) with a sanitized cause', async () => {
+    const { fetch } = fakeFetch((request) =>
+      Promise.reject(
+        new TypeError('fetch failed', {
+          cause: new Error(`connect ECONNREFUSED while requesting ${request.url}`),
+        }),
+      ),
+    );
+    const checker = new HibpBreachedPasswordChecker({ fetch });
+
+    const error: unknown = await checker.isBreached(PASSWORD).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(PasswordCheckUnavailable);
+    const cause = JSON.stringify(serializeError((error as Error).cause));
+    expect(cause).toContain('network');
+    expect(cause).not.toContain('pwnedpasswords');
+    expect(cause).not.toContain(PREFIX);
+  });
+
+  it('logs at debug, instead of swallowing, a failure to cancel the error body', async () => {
+    const lines: string[] = [];
+    const logger = createLogger({
+      level: 'debug',
+      destination: { write: (line: string) => lines.push(line) },
+    });
+    const { fetch } = fakeFetch(() => {
+      const body = new ReadableStream<Uint8Array>({
+        cancel() {
+          throw new Error('cancel failed');
+        },
+      });
+      return Promise.resolve(new Response(body, { status: 500 }));
+    });
+    const checker = new HibpBreachedPasswordChecker({ fetch, logger });
+
+    await expect(checker.isBreached(PASSWORD)).rejects.toBeInstanceOf(PasswordCheckUnavailable);
+
+    const entries = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(entries).toContainEqual(
+      expect.objectContaining({ level: 20, msg: 'could not cancel the HIBP response body' }),
+    );
   });
 });

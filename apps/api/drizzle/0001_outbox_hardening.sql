@@ -1,0 +1,2 @@
+CREATE INDEX "auth_attempts_window_start_idx" ON "auth_attempts" USING btree ("window_start");--> statement-breakpoint
+ALTER TABLE "email_outbox" ADD CONSTRAINT "email_outbox_language_check" CHECK ("email_outbox"."language" in ('es', 'en'));

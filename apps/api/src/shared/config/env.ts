@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** Sender for local transports (console, Mailpit) when EMAIL_FROM is unset. */
+const LOCAL_EMAIL_FROM = 'Argent <no-reply@argent.local>';
+
 const jwtSecretSchema = z.string().min(32, 'must be at least 32 characters (256 bits)');
 
 interface RawEnv {
@@ -50,8 +53,16 @@ const envSchema = z
     WEB_ORIGIN: z.url(),
     API_ORIGIN: z.url(),
     WEB_BASE_URL: z.url(),
-    EMAIL_PROVIDER: z.enum(['console', 'mailpit', 'resend']).default('console'),
+    // No default: which provider delivers email must be a deliberate choice per environment.
+    EMAIL_PROVIDER: z.enum(['console', 'mailpit', 'resend']),
     RESEND_API_KEY: z.string().optional(),
+    /** Sender of auth emails; required with Resend, whose sending domain must be verified. */
+    EMAIL_FROM: z
+      .string()
+      .min(3)
+      .max(254)
+      .regex(/^[^\r\n]+$/, 'must be a single line')
+      .optional(),
     BREACH_CHECKER: z.enum(['hibp', 'fake']).default('hibp'),
     TRUST_PROXY: z.coerce.number().int().min(0).default(0),
   })
@@ -63,12 +74,21 @@ const envSchema = z
         message: 'required when EMAIL_PROVIDER=resend',
       });
     }
+    if (env.EMAIL_PROVIDER === 'resend' && !env.EMAIL_FROM) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EMAIL_FROM'],
+        message: 'required when EMAIL_PROVIDER=resend',
+      });
+    }
     if (env.NODE_ENV === 'production') {
       for (const issue of productionIssues(env)) ctx.addIssue({ code: 'custom', ...issue });
     }
   })
   .transform((env) => ({
     ...env,
+    // Only console and mailpit can get here without one (resend requires it above).
+    EMAIL_FROM: env.EMAIL_FROM ?? LOCAL_EMAIL_FROM,
     WEB_ORIGIN: new URL(env.WEB_ORIGIN).origin,
     API_ORIGIN: new URL(env.API_ORIGIN).origin,
   }));

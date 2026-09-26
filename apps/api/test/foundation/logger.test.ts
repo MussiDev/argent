@@ -46,6 +46,33 @@ describe('logger redaction (NFR-01)', () => {
   });
 });
 
+describe('logger redaction of email addresses (PII)', () => {
+  it('removes email, to, toEmail and to_email at the top level and nested', () => {
+    const lines: string[] = [];
+    const logger = createLogger({
+      level: 'info',
+      destination: { write: (line: string) => lines.push(line) },
+    });
+
+    logger.info(
+      { email: 'a1@example.com', to: 'a2@example.com', toEmail: 'a3@example.com' },
+      'top level',
+    );
+    logger.info(
+      {
+        row: { to_email: 'a4@example.com', toEmail: 'a5@example.com' },
+        message: { to: 'a6@example.com' },
+        body: { user: { email: 'a7@example.com' } },
+      },
+      'nested',
+    );
+
+    const output = lines.join('\n');
+    expect(output).not.toMatch(/a\d@example\.com/);
+    expect(output).toContain('[REDACTED]');
+  });
+});
+
 describe('logger error serialization (NFR-01)', () => {
   function pgUniqueViolation(): Error {
     return Object.assign(

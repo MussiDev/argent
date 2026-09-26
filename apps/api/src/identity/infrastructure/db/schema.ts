@@ -16,12 +16,16 @@ import {
 import type { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import { DISPLAY_CURRENCIES, LANGUAGES } from '../../domain/account-defaults';
 import { ATTEMPT_KINDS } from '../../application/ports/attempt-limiter';
+import { OUTBOX_EMAIL_KINDS } from '../../application/ports/email-sender';
 import { ONE_TIME_TOKEN_PURPOSES } from '../../application/ports/one-time-token-repository';
 
 /** The database or an open transaction: repositories accept either so use cases can compose them. */
 export type IdentityDb = PgDatabase<NodePgQueryResultHKT>;
 
-export const OUTBOX_KINDS = ['verification', 'password_reset', 'discard'] as const;
+/** What an outbox row carries besides its columns: never a token or any other secret (R-05). */
+export interface OutboxPayload {
+  userId: string | null;
+}
 
 /**
  * `column in ('a', 'b')` for check constraints. Values are inlined as literals because drizzle-kit
@@ -106,6 +110,8 @@ export const authAttempts = pgTable(
   (table) => [
     primaryKey({ columns: [table.kind, table.key, table.windowStart] }),
     check('auth_attempts_kind_check', oneOf(table.kind, ATTEMPT_KINDS)),
+    // The primary key leads with `kind`, so the worker's purge by age needs its own index.
+    index('auth_attempts_window_start_idx').on(table.windowStart),
   ],
 );
 
@@ -113,16 +119,17 @@ export const emailOutbox = pgTable(
   'email_outbox',
   {
     id: uuid('id').primaryKey(),
-    kind: text('kind', { enum: OUTBOX_KINDS }).notNull(),
+    kind: text('kind', { enum: OUTBOX_EMAIL_KINDS }).notNull(),
     toEmail: text('to_email'),
-    language: text('language').notNull(),
-    payload: jsonb('payload').notNull(),
+    language: text('language', { enum: LANGUAGES }).notNull(),
+    payload: jsonb('payload').$type<OutboxPayload>().notNull(),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     sentAt: timestamptz('sent_at'),
     attempts: integer('attempts').notNull().default(0),
   },
   (table) => [
-    check('email_outbox_kind_check', oneOf(table.kind, OUTBOX_KINDS)),
+    check('email_outbox_kind_check', oneOf(table.kind, OUTBOX_EMAIL_KINDS)),
+    check('email_outbox_language_check', oneOf(table.language, LANGUAGES)),
     index('email_outbox_pending_idx')
       .on(table.sentAt)
       .where(sql`${table.sentAt} is null`),

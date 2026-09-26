@@ -45,3 +45,24 @@ export class DuplicateEmail extends Error {
     this.name = 'DuplicateEmail';
   }
 }
+
+/** A verification or reset token that is unknown, expired, already used or of another purpose. */
+export class TokenInvalid extends AppError {
+  constructor() {
+    super('TOKEN_INVALID');
+  }
+}
+
+/** Too many attempts for a key in the current window (NFR-03, threat R-09). */
+export class RateLimited extends AppError {
+  constructor() {
+    super('RATE_LIMITED');
+  }
+}
+
+/** No valid session, or the session's user no longer exists. */
+export class Unauthenticated extends AppError {
+  constructor() {
+    super('UNAUTHENTICATED');
+  }
+}

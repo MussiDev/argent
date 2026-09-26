@@ -78,7 +78,7 @@ describe('validation middleware', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       body: { name: 'Ana', age: 30 },
-      contextKeys: ['cookies', 'ip', 'requestId', 'res'],
+      contextKeys: ['auth', 'cookies', 'ip', 'requestId', 'res'],
     });
     expect(response.text).not.toContain('isAdmin');
   });
@@ -117,6 +117,51 @@ describe('validation middleware', () => {
     // @ts-expect-error a passthrough-like record keeps every key
     validate({ query: z.record(z.string(), z.string()) }, handler);
     expect(typeof validate({ body: bodySchema }, handler)).toBe('function');
+  });
+
+  it('types res.json with the route response schema (compile-time)', () => {
+    const responseSchema = z.object({ status: z.literal('ok') });
+    const route = validate({ body: bodySchema, response: responseSchema }, (_input, { res }) => {
+      res.json({ status: 'ok' });
+      // @ts-expect-error a body that does not match the response schema does not compile
+      res.json({ status: 'created' });
+      // @ts-expect-error a missing required field does not compile either
+      res.json({});
+    });
+    expect(typeof route).toBe('function');
+  });
+
+  it('strips fields the response schema does not declare and fails closed on a mismatch', async () => {
+    const responseSchema = z.object({ status: z.literal('ok') });
+    const router = Router();
+    router.post(
+      '/typed',
+      validate({ response: responseSchema }, (_input, { res }) => {
+        const body = { status: 'ok' as const, passwordHash: 'must-not-leak' };
+        res.status(202).json(body);
+      }),
+    );
+    router.post(
+      '/mismatch',
+      validate({ response: responseSchema }, (_input, { res }) => {
+        const body: unknown = { status: 'nope' };
+        res.json(body as { status: 'ok' });
+      }),
+    );
+    const app = createApp({
+      env: testEnv(),
+      logger: createLogger({ level: 'silent' }),
+      routers: [router],
+    });
+
+    const typed = await request(app).post('/typed').set(trustedHeaders).send({});
+    expect(typed.status).toBe(202);
+    expect(typed.body).toEqual({ status: 'ok' });
+    expect(typed.text).not.toContain('must-not-leak');
+
+    const mismatch = await request(app).post('/mismatch').set(trustedHeaders).send({});
+    expect(mismatch.status).toBe(500);
+    expect(mismatch.body).toEqual({ code: 'INTERNAL' });
   });
 
   it('returns 400 VALIDATION_FAILED for malformed JSON', async () => {

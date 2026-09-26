@@ -1,5 +1,6 @@
 import type { CookieOptions, RequestHandler, Response } from 'express';
 import type { z } from 'zod';
+import type { AuthContext } from './auth-context';
 import { HttpError } from './error-handler';
 
 type ObjectSchema = z.ZodObject;
@@ -10,21 +11,34 @@ export interface InputSchemas {
   body?: ObjectSchema;
 }
 
+/** Input schemas plus, optionally, the schema of the success body the handler sends. */
+export interface RouteSchemas extends InputSchemas {
+  response?: z.ZodType;
+}
+
 /**
  * `z.looseObject` is assignable to `z.object` in the type system, so it is rejected explicitly:
  * a loose schema's output admits any string key, a stripping (or strict) one does not (R-10).
+ * The response schema is exempt: it describes what the API sends, not what it accepts.
  */
-type StrippingOnly<S extends InputSchemas> = {
-  [K in keyof S]: S[K] extends z.ZodObject<z.ZodRawShape, infer Config>
-    ? string extends keyof Config['out']
-      ? never
-      : S[K]
-    : never;
+type StrippingOnly<S extends RouteSchemas> = {
+  [K in keyof S]: K extends 'response'
+    ? S[K]
+    : S[K] extends z.ZodObject<z.ZodRawShape, infer Config>
+      ? string extends keyof Config['out']
+        ? never
+        : S[K]
+      : never;
 };
+
+/** What `res.json` accepts: the response schema's input type, or anything without a schema. */
+type ResponseBody<S extends RouteSchemas> = S['response'] extends z.ZodType
+  ? z.input<S['response']>
+  : unknown;
 
 type Infer<T> = T extends ObjectSchema ? z.infer<T> : undefined;
 
-export interface ValidatedInput<S extends InputSchemas> {
+export interface ValidatedInput<S extends RouteSchemas> {
   params: Infer<S['params']>;
   query: Infer<S['query']>;
   body: Infer<S['body']>;
@@ -32,26 +46,32 @@ export interface ValidatedInput<S extends InputSchemas> {
 
 /**
  * The only response operations a handler needs. Express' `Response` is not exposed because
- * `res.req` leads back to the raw, unvalidated request.
+ * `res.req` leads back to the raw, unvalidated request. `json` only accepts the route's response
+ * schema type, so success bodies are typed with the shared schemas.
  */
-export interface ResponseFacade {
-  status(code: number): ResponseFacade;
-  json(body: unknown): void;
-  cookie(name: string, value: string, options: CookieOptions): ResponseFacade;
-  clearCookie(name: string, options?: CookieOptions): ResponseFacade;
-  setHeader(name: string, value: string): ResponseFacade;
+export interface ResponseFacade<TBody = unknown> {
+  status(code: number): ResponseFacade<TBody>;
+  json(body: TBody): void;
+  cookie(name: string, value: string, options: CookieOptions): ResponseFacade<TBody>;
+  clearCookie(name: string, options?: CookieOptions): ResponseFacade<TBody>;
+  setHeader(name: string, value: string): ResponseFacade<TBody>;
   sendStatus(code: number): void;
   end(): void;
 }
 
-function responseFacade(res: Response): ResponseFacade {
-  const facade: ResponseFacade = {
+function responseFacade<TBody>(
+  res: Response,
+  responseSchema: z.ZodType | undefined,
+): ResponseFacade<TBody> {
+  const facade: ResponseFacade<TBody> = {
     status(code) {
       res.status(code);
       return facade;
     },
     json(body) {
-      res.json(body);
+      // Parsing strips undeclared fields, so a handler cannot leak one; a body that does not match
+      // throws and becomes 500 INTERNAL (fail closed).
+      res.json(responseSchema ? responseSchema.parse(body) : body);
     },
     cookie(name, value, options) {
       res.cookie(name, value, options);
@@ -89,11 +109,13 @@ function stringCookies(cookies: unknown): Readonly<Record<string, string>> {
  * What a handler may use besides its validated input. The raw request is deliberately absent so
  * no handler can read an unvalidated `req.body`, `req.query` or `req.params`.
  */
-export interface HandlerContext {
-  res: ResponseFacade;
+export interface HandlerContext<TBody = unknown> {
+  res: ResponseFacade<TBody>;
   cookies: Readonly<Record<string, string>>;
   ip: string | undefined;
   requestId: string;
+  /** Set when a session middleware ran before the route and authenticated the request. */
+  auth: AuthContext | undefined;
 }
 
 const PARTS = ['params', 'query', 'body'] as const;
@@ -103,11 +125,11 @@ const PARTS = ['params', 'query', 'body'] as const;
  * (unknown keys are stripped) and hands the handler only the parsed, typed values.
  * Failures become 400 `VALIDATION_FAILED` listing the failing paths, never the submitted values.
  */
-export function validate<S extends InputSchemas>(
+export function validate<S extends RouteSchemas>(
   schemas: S & StrippingOnly<S>,
-  handler: (input: ValidatedInput<S>, context: HandlerContext) => unknown,
+  handler: (input: ValidatedInput<S>, context: HandlerContext<ResponseBody<S>>) => unknown,
 ): RequestHandler {
-  const partSchemas: InputSchemas = schemas;
+  const partSchemas: RouteSchemas = schemas;
   return async (req, res) => {
     const parsed: Partial<Record<(typeof PARTS)[number], unknown>> = {};
     const fields = new Set<string>();
@@ -129,11 +151,12 @@ export function validate<S extends InputSchemas>(
       throw new HttpError(400, 'VALIDATION_FAILED', [...fields]);
     }
 
-    const context: HandlerContext = {
-      res: responseFacade(res),
+    const context: HandlerContext<ResponseBody<S>> = {
+      res: responseFacade(res, partSchemas.response),
       cookies: stringCookies(req.cookies),
       ip: req.ip,
       requestId: res.locals.requestId,
+      auth: req.auth,
     };
     // Each present part was produced by its own schema above, so the shape matches ValidatedInput<S>.
     await handler(parsed as ValidatedInput<S>, context);

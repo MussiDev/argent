@@ -51,4 +51,24 @@ describe('environment production rules', () => {
       ),
     ).not.toThrow();
   });
+
+  it('requires EMAIL_PROVIDER to be set explicitly (no default)', () => {
+    const source = testEnvSource();
+    delete source.EMAIL_PROVIDER;
+    expect(() => parseEnv(source)).toThrow(/EMAIL_PROVIDER/);
+  });
+
+  it('requires EMAIL_FROM when EMAIL_PROVIDER=resend', () => {
+    const resend = { EMAIL_PROVIDER: 'resend', RESEND_API_KEY: 're_test' };
+    expect(() => parseEnv(testEnvSource(resend))).toThrow(/EMAIL_FROM/);
+    expect(
+      parseEnv(testEnvSource({ ...resend, EMAIL_FROM: 'Argent <no-reply@argent.app>' })).EMAIL_FROM,
+    ).toBe('Argent <no-reply@argent.app>');
+  });
+
+  it('gives console and mailpit a local sender when EMAIL_FROM is unset', () => {
+    for (const provider of ['console', 'mailpit']) {
+      expect(parseEnv(testEnvSource({ EMAIL_PROVIDER: provider })).EMAIL_FROM).toMatch(/@/);
+    }
+  });
 });

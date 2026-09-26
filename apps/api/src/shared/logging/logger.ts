@@ -2,7 +2,18 @@ import { pino, type DestinationStream, type Logger } from 'pino';
 
 export type { Logger };
 
-const SECRET_KEYS = ['password', 'newPassword', 'token', 'cookies', 'authorization'];
+// Email addresses are PII: never logged, whatever key they travel under.
+const SECRET_KEYS = [
+  'password',
+  'newPassword',
+  'token',
+  'cookies',
+  'authorization',
+  'email',
+  'to',
+  'toEmail',
+  'to_email',
+];
 
 /**
  * pino redaction wildcards match exactly one level, so every secret key is listed at the top level

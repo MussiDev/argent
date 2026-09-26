@@ -3,6 +3,12 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Express, type RequestHandler, type Router } from 'express';
 import helmet from 'helmet';
+import {
+  createIdentityRouters,
+  type BreachedPasswordChecker,
+  type Clock,
+  type IdentityDb,
+} from './identity';
 import type { Env } from './shared/config/env';
 import { createErrorHandler, HttpError } from './shared/http/error-handler';
 import { healthRoutes } from './shared/http/health-routes';
@@ -11,12 +17,30 @@ import type { Logger } from './shared/logging/logger';
 
 export const JSON_BODY_LIMIT = '16kb';
 
+export interface IdentityModuleOptions {
+  db: IdentityDb;
+  clock?: Clock;
+  /**
+   * Session middleware for authenticated identity routes. Defaults to one that rejects every
+   * request with 401 until Block 4 provides the real `requireSession` (fail closed).
+   */
+  requireSession?: RequestHandler;
+  /** Test seam: replaces the breach checker selected by `BREACH_CHECKER`. */
+  breachedPasswordChecker?: BreachedPasswordChecker;
+}
+
 export interface AppDependencies {
   env: Env;
   logger: Logger;
+  /** When given, the identity module's routes are mounted. */
+  identity?: IdentityModuleOptions;
   /** Module routers, mounted after the cross-cutting middleware and before the error handler. */
   routers?: Router[];
 }
+
+const rejectWithoutSession: RequestHandler = (_req, _res, next) => {
+  next(new HttpError(401, 'UNAUTHENTICATED'));
+};
 
 function requestContext(logger: Logger): RequestHandler {
   return (req, res, next) => {
@@ -55,7 +79,7 @@ function httpsGuard(env: Env): RequestHandler {
   };
 }
 
-export function createApp({ env, logger, routers = [] }: AppDependencies): Express {
+export function createApp({ env, logger, identity, routers = [] }: AppDependencies): Express {
   const app = express();
 
   app.disable('x-powered-by');
@@ -71,6 +95,17 @@ export function createApp({ env, logger, routers = [] }: AppDependencies): Expre
   app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(cookieParser());
 
+  if (identity) {
+    const identityRouters = createIdentityRouters({
+      db: identity.db,
+      env,
+      logger,
+      ...(identity.clock ? { clock: identity.clock } : {}),
+      requireSession: identity.requireSession ?? rejectWithoutSession,
+      breachedPasswordChecker: identity.breachedPasswordChecker,
+    });
+    for (const router of identityRouters) app.use(router);
+  }
   for (const router of routers) app.use(router);
 
   app.use((_req, _res, next) => {

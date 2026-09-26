@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type {
   ConsumedOneTimeToken,
   NewOneTimeToken,
@@ -37,6 +37,16 @@ export class DrizzleOneTimeTokenRepository implements OneTimeTokenRepository {
       )
       .returning({ id: oneTimeTokens.id, userId: oneTimeTokens.userId });
     return consumed ?? null;
+  }
+
+  /**
+   * Transaction-scoped advisory lock keyed by (user, purpose): released automatically at commit or
+   * rollback. A hash collision only serializes two unrelated issuers, which is harmless.
+   */
+  async lockIssuance(userId: string, purpose: OneTimeTokenPurpose): Promise<void> {
+    await this.db.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`${purpose}:${userId}`}, 0))`,
+    );
   }
 
   async invalidateUnused(userId: string, purpose: OneTimeTokenPurpose, now: Date): Promise<void> {

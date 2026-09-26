@@ -25,6 +25,11 @@ export interface OneTimeTokenRepository {
     purpose: OneTimeTokenPurpose,
     now: Date,
   ): Promise<ConsumedOneTimeToken | null>;
+  /**
+   * Serializes token issue for one user and purpose until the current transaction ends, so two
+   * concurrent issuers cannot each leave a valid token behind. Must run inside a transaction.
+   */
+  lockIssuance(userId: string, purpose: OneTimeTokenPurpose): Promise<void>;
   /** Marks every still-unused token of the user and purpose as used. */
   invalidateUnused(userId: string, purpose: OneTimeTokenPurpose, now: Date): Promise<void>;
 }

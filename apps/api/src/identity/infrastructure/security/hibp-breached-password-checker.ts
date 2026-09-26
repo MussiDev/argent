@@ -73,7 +73,9 @@ export class HibpBreachedPasswordChecker implements BreachedPasswordChecker {
         },
         'breached password check unavailable',
       );
-      throw new PasswordCheckUnavailable({ cause: error });
+      // The sanitized failure, not the raw fetch error: driver errors can embed the request URL,
+      // which carries the password's hash prefix.
+      throw new PasswordCheckUnavailable({ cause: failure });
     } finally {
       clearTimeout(timer);
     }
@@ -86,7 +88,13 @@ export class HibpBreachedPasswordChecker implements BreachedPasswordChecker {
       headers: { 'Add-Padding': 'true' },
       signal,
     });
-    if (response.status !== 200) throw new HibpFailure('http_status', response.status);
+    if (response.status !== 200) {
+      // Release the connection instead of leaving an unread body to the garbage collector.
+      await response.body?.cancel().catch((error: unknown) => {
+        this.logger?.debug({ err: error }, 'could not cancel the HIBP response body');
+      });
+      throw new HibpFailure('http_status', response.status);
+    }
     return response.text();
   }
 }

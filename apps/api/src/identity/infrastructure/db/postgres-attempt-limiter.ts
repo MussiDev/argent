@@ -4,6 +4,7 @@ import type {
   AttemptPolicy,
   AttemptResult,
 } from '../../application/ports/attempt-limiter';
+import type { AttemptPurger } from '../../application/ports/attempt-purger';
 import type { Clock } from '../../application/ports/clock';
 import { authAttempts, type IdentityDb } from './schema';
 
@@ -16,7 +17,7 @@ function windowStart(now: Date, windowSeconds: number): Date {
   return new Date(Math.floor(now.getTime() / windowMs) * windowMs);
 }
 
-export class PostgresAttemptLimiter implements AttemptLimiter {
+export class PostgresAttemptLimiter implements AttemptLimiter, AttemptPurger {
   constructor(
     private readonly db: IdentityDb,
     private readonly clock: Clock,
@@ -56,9 +57,9 @@ export class PostgresAttemptLimiter implements AttemptLimiter {
     return { count: row.count, allowed: row.count <= policy.limit };
   }
 
-  /** Deletes windows that started before `before` (the worker purges rows older than 24 h). */
-  async purgeOlderThan(before: Date): Promise<number> {
-    const result = await this.db.delete(authAttempts).where(lt(authAttempts.windowStart, before));
+  /** Deletes windows that started before `cutoff` (the worker purges rows older than 24 h). */
+  async purgeOlderThan(cutoff: Date): Promise<number> {
+    const result = await this.db.delete(authAttempts).where(lt(authAttempts.windowStart, cutoff));
     return result.rowCount ?? 0;
   }
 }

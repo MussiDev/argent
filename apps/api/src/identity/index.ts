@@ -1,28 +1,45 @@
+import type { RequestHandler, Router } from 'express';
 import type { Env } from '../shared/config/env';
 import type { Logger } from '../shared/logging/logger';
+import { RegisterUser } from './application/register-user';
+import { ResendVerification } from './application/resend-verification';
+import { VerifyEmail } from './application/verify-email';
 import type { AttemptLimiter } from './application/ports/attempt-limiter';
+import type { AttemptPurger } from './application/ports/attempt-purger';
 import type { BreachedPasswordChecker } from './application/ports/breached-password-checker';
-import { systemClock, type Clock } from './application/ports/clock';
+import type { Clock } from './application/ports/clock';
+import type { EmailSender } from './application/ports/email-sender';
 import type { OneTimeTokenRepository } from './application/ports/one-time-token-repository';
 import type { PasswordHasher } from './application/ports/password-hasher';
 import type { SessionRepository } from './application/ports/session-repository';
 import type { TokenGenerator } from './application/ports/token-generator';
+import type { UnitOfWork } from './application/ports/unit-of-work';
 import type { UserRepository } from './application/ports/user-repository';
 import { DrizzleOneTimeTokenRepository } from './infrastructure/db/drizzle-one-time-token-repository';
 import { DrizzleSessionRepository } from './infrastructure/db/drizzle-session-repository';
+import { DrizzleUnitOfWork } from './infrastructure/db/drizzle-unit-of-work';
 import { DrizzleUserRepository } from './infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from './infrastructure/db/postgres-attempt-limiter';
 import type { IdentityDb } from './infrastructure/db/schema';
-import { Argon2idPasswordHasher } from './infrastructure/security/argon2id-password-hasher';
+import type { EmailTransport } from './infrastructure/email/email-transport';
+import { EmailWorker } from './infrastructure/email/email-worker';
+import { OutboxEmailSender } from './infrastructure/email/outbox-email-sender';
+import { createRegistrationRoutes } from './infrastructure/http/registration-routes';
+import {
+  Argon2idPasswordHasher,
+  DUMMY_PASSWORD_HASH,
+} from './infrastructure/security/argon2id-password-hasher';
 import { CryptoTokenGenerator } from './infrastructure/security/crypto-token-generator';
 import { FakeBreachedPasswordChecker } from './infrastructure/security/fake-breached-password-checker';
 import { HibpBreachedPasswordChecker } from './infrastructure/security/hibp-breached-password-checker';
+import { systemClock } from './infrastructure/system-clock';
 
 export * from './domain/account-defaults';
 export * from './domain/email';
 export * from './domain/errors';
 export * from './domain/password-rules';
 export * from './application/ports/attempt-limiter';
+export * from './application/ports/attempt-purger';
 export * from './application/ports/breached-password-checker';
 export * from './application/ports/clock';
 export * from './application/ports/email-sender';
@@ -30,8 +47,13 @@ export * from './application/ports/one-time-token-repository';
 export * from './application/ports/password-hasher';
 export * from './application/ports/session-repository';
 export * from './application/ports/token-generator';
+export * from './application/ports/unit-of-work';
 export * from './application/ports/user-repository';
 export type { IdentityDb } from './infrastructure/db/schema';
+export { systemClock } from './infrastructure/system-clock';
+export { createEmailTransport } from './infrastructure/email/email-transport';
+export type { EmailTransport } from './infrastructure/email/email-transport';
+export type { EmailWorker } from './infrastructure/email/email-worker';
 
 export interface IdentityInfrastructureDependencies {
   /** The application database; a transaction is accepted too. */
@@ -47,9 +69,12 @@ export interface IdentityInfrastructure {
   sessions: SessionRepository;
   oneTimeTokens: OneTimeTokenRepository;
   attemptLimiter: AttemptLimiter;
+  attemptPurger: AttemptPurger;
   passwordHasher: PasswordHasher;
   breachedPasswordChecker: BreachedPasswordChecker;
   tokenGenerator: TokenGenerator;
+  emailSender: EmailSender;
+  unitOfWork: UnitOfWork;
 }
 
 /** Composition root of the identity module's adapters. */
@@ -59,17 +84,96 @@ export function createIdentityInfrastructure({
   logger,
   clock = systemClock,
 }: IdentityInfrastructureDependencies): IdentityInfrastructure {
+  const attemptLimiter = new PostgresAttemptLimiter(db, clock);
   return {
     clock,
     users: new DrizzleUserRepository(db),
     sessions: new DrizzleSessionRepository(db),
     oneTimeTokens: new DrizzleOneTimeTokenRepository(db),
-    attemptLimiter: new PostgresAttemptLimiter(db, clock),
-    passwordHasher: new Argon2idPasswordHasher(),
+    attemptLimiter,
+    attemptPurger: attemptLimiter,
+    passwordHasher: new Argon2idPasswordHasher({ logger }),
     breachedPasswordChecker:
       env.BREACH_CHECKER === 'fake'
         ? new FakeBreachedPasswordChecker()
         : new HibpBreachedPasswordChecker({ logger }),
     tokenGenerator: new CryptoTokenGenerator(),
+    emailSender: new OutboxEmailSender(db, clock),
+    unitOfWork: new DrizzleUnitOfWork(db, clock),
   };
+}
+
+export interface IdentityRoutesDependencies extends IdentityInfrastructureDependencies {
+  /**
+   * Session middleware for the authenticated identity routes; it must set `req.auth`. Block 4
+   * supplies the real `requireSession`; until then the app passes one that always answers 401.
+   */
+  requireSession: RequestHandler;
+  /** Test seam: replaces the breach checker selected by `BREACH_CHECKER`. */
+  breachedPasswordChecker?: BreachedPasswordChecker | undefined;
+}
+
+/** The identity module's HTTP routers, wired to their use cases and adapters. */
+export function createIdentityRouters({
+  requireSession,
+  breachedPasswordChecker,
+  ...dependencies
+}: IdentityRoutesDependencies): Router[] {
+  const identity = createIdentityInfrastructure(dependencies);
+  return [
+    createRegistrationRoutes({
+      registerUser: new RegisterUser({
+        attemptLimiter: identity.attemptLimiter,
+        breachedPasswordChecker: breachedPasswordChecker ?? identity.breachedPasswordChecker,
+        passwordHasher: identity.passwordHasher,
+        dummyPasswordHash: DUMMY_PASSWORD_HASH,
+        users: identity.users,
+        emailSender: identity.emailSender,
+        unitOfWork: identity.unitOfWork,
+      }),
+      verifyEmail: new VerifyEmail({
+        tokenGenerator: identity.tokenGenerator,
+        clock: identity.clock,
+        unitOfWork: identity.unitOfWork,
+      }),
+      resendVerification: new ResendVerification({
+        attemptLimiter: identity.attemptLimiter,
+        users: identity.users,
+        emailSender: identity.emailSender,
+      }),
+      requireSession,
+      logger: dependencies.logger,
+    }),
+  ];
+}
+
+export interface EmailWorkerFactoryDependencies {
+  /** A database (not a transaction): the worker opens one transaction per outbox row. */
+  db: IdentityDb;
+  env: Pick<Env, 'WEB_BASE_URL'>;
+  logger: Logger;
+  transport: EmailTransport;
+  clock?: Clock;
+  pollIntervalMs?: number;
+}
+
+/** The outbox worker, with the PostgreSQL attempt purger and the crypto token generator. */
+export function createEmailWorker({
+  db,
+  env,
+  logger,
+  transport,
+  clock = systemClock,
+  pollIntervalMs,
+}: EmailWorkerFactoryDependencies): EmailWorker {
+  return new EmailWorker({
+    db,
+    transport,
+    tokenGenerator: new CryptoTokenGenerator(),
+    attemptPurger: new PostgresAttemptLimiter(db, clock),
+    clock,
+    logger,
+    webBaseUrl: env.WEB_BASE_URL,
+    ...(pollIntervalMs === undefined ? {} : { pollIntervalMs }),
+  });
 }

@@ -8,6 +8,12 @@ const INFRASTRUCTURE_IMPORTS = {
   message: 'Only infrastructure may depend on infrastructure (hexagonal boundary).',
 };
 
+// Production code never depends on tests, fixtures or fakes (e.g. test-only routes).
+const TEST_IMPORTS = {
+  group: ['**/test', '**/test/**'],
+  message: 'Production code must not import test code.',
+};
+
 // Frameworks, drivers, SDKs and Node built-ins are I/O concerns: domain code stays pure.
 const IO_IMPORTS = {
   group: [
@@ -63,16 +69,26 @@ export default defineConfig(
     files: ['**/*.{js,mjs,cjs}'],
     extends: [tseslint.configs.disableTypeChecked],
   },
+  // Flat config replaces rule options per file, so the more specific blocks below repeat TEST_IMPORTS.
+  {
+    files: ['apps/api/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [TEST_IMPORTS] }],
+    },
+  },
   {
     files: ['apps/api/src/*/domain/**/*.ts'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [INFRASTRUCTURE_IMPORTS, IO_IMPORTS] }],
+      'no-restricted-imports': [
+        'error',
+        { patterns: [INFRASTRUCTURE_IMPORTS, IO_IMPORTS, TEST_IMPORTS] },
+      ],
     },
   },
   {
     files: ['apps/api/src/*/application/**/*.ts'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [INFRASTRUCTURE_IMPORTS] }],
+      'no-restricted-imports': ['error', { patterns: [INFRASTRUCTURE_IMPORTS, TEST_IMPORTS] }],
     },
   },
 );

@@ -33,6 +33,8 @@ export interface IdentityHarnessOptions {
   env?: Record<string, string>;
   /** Other modules' routers, built with the real `requireSession`. */
   routerFactories?: RouterFactory[];
+  /** Test-only routers (fixtures); `createApp` mounts them only when NODE_ENV is `test`. */
+  testRouterFactories?: RouterFactory[];
 }
 
 /** The API with the identity routes and an email worker, sharing one clock and one transport. */
@@ -60,6 +62,7 @@ export function createIdentityHarness(
         : {}),
     },
     ...(options.routerFactories ? { routerFactories: options.routerFactories } : {}),
+    ...(options.testRouterFactories ? { testRouterFactories: options.testRouterFactories } : {}),
   });
   const worker = createEmailWorker({ db: connection.db, env, logger, transport, clock });
   return { app, worker, transport, clock, lines };

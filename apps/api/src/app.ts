@@ -50,6 +50,12 @@ export interface AppDependencies {
    * mounted after `routers`. Requires `identity`.
    */
   routerFactories?: RouterFactory[];
+  /**
+   * Test-only routers (e.g. the access-control fixture resource). Built and mounted, after
+   * `routerFactories`, only when NODE_ENV is `test`; in any other environment they are ignored,
+   * never even built. Requires `identity`.
+   */
+  testRouterFactories?: RouterFactory[];
 }
 
 function requestContext(logger: Logger): RequestHandler {
@@ -95,8 +101,9 @@ export function createApp({
   identity,
   routers = [],
   routerFactories = [],
+  testRouterFactories = [],
 }: AppDependencies): Express {
-  if (routerFactories.length > 0 && !identity) {
+  if ((routerFactories.length > 0 || testRouterFactories.length > 0) && !identity) {
     throw new Error('Router factories need the identity module (it provides requireSession)');
   }
   const app = express();
@@ -125,8 +132,10 @@ export function createApp({
     });
     for (const router of identityModule.routers) app.use(router);
     for (const router of routers) app.use(router);
-    for (const factory of routerFactories) {
-      app.use(factory({ requireSession: identityModule.requireSession }));
+    const modules: AppModules = { requireSession: identityModule.requireSession };
+    for (const factory of routerFactories) app.use(factory(modules));
+    if (env.NODE_ENV === 'test') {
+      for (const factory of testRouterFactories) app.use(factory(modules));
     }
   } else {
     for (const router of routers) app.use(router);

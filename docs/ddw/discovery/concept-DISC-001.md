@@ -102,5 +102,5 @@ Three usage contexts, all supported by the same product:
 | 6 | Savings Goals & Budgets | prd-DISC-001-06.md | validated | 2, 3 |
 | 7 | Investments | prd-DISC-001-07.md | validated | 1, 3 |
 | 8 | Recurring Payments & Reminders | prd-DISC-001-08.md | validated | 3 |
-| 9 | Dashboard & Reports | prd-DISC-001-09.md | identified | 3, 6, 7 |
+| 9 | Dashboard & Reports | prd-DISC-001-09.md | validated | 3, 6, 7 |
 | 10 | Credit Cards: Statements & Installments | prd-DISC-001-10.md | validated | 2, 3 |

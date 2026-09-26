@@ -81,13 +81,17 @@ Three usage contexts, all supported by the same product:
 - 2026-09-25: Savings scope = balances (as accounts) + goals + category budgets with alerts.
 - 2026-09-25: Split approved into 9 PRDs (see table). Accounts & categories separated from
   movements to keep PRDs reviewable; recurring payments and reminders grouped together.
+- 2026-09-25: Credit cards modeled with statement cycle (closing/due dates) and installment
+  purchases spread over future statements. Split into its own PRD 10 so PRD 02 only declares the
+  credit card account type.
+- 2026-09-25: Categories are predefined and editable per user, with one level of subcategories.
 
 ## Identified PRDs
 
 | # | Title | File | Status | Depends on |
 |---|-------|------|--------|------------|
 | 1 | Identity & Access | prd-DISC-001-01.md | validated | — |
-| 2 | Accounts & Categories | prd-DISC-001-02.md | identified | 1 |
+| 2 | Accounts & Categories | prd-DISC-001-02.md | validated | 1 |
 | 3 | Movements & Exchange Rates | prd-DISC-001-03.md | identified | 2 |
 | 4 | Offline Entry & Sync | prd-DISC-001-04.md | identified | 3 |
 | 5 | Groups & Expense Splitting | prd-DISC-001-05.md | identified | 1, 3 |
@@ -95,3 +99,4 @@ Three usage contexts, all supported by the same product:
 | 7 | Investments | prd-DISC-001-07.md | identified | 1, 3 |
 | 8 | Recurring Payments & Reminders | prd-DISC-001-08.md | identified | 3 |
 | 9 | Dashboard & Reports | prd-DISC-001-09.md | identified | 3, 6, 7 |
+| 10 | Credit Cards: Statements & Installments | prd-DISC-001-10.md | identified | 2, 3 |

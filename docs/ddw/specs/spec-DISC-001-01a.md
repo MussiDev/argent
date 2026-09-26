@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01a.md |
 | Tier | FEATURE |
 | Date | 2026-09-26 |
-| Spec loops | 2 |
-| Loops since last human decision | 0 |
+| Spec loops | 4 |
+| Loops since last human decision | 1 |
 
 ## Summary
 First code in the repository. Block 1 lays the pnpm monorepo declared in `AGENTS.md` (Next.js 16
@@ -231,8 +231,19 @@ no `domain` → `infrastructure` import.
 - `apps/api/src/identity/application/verify-email.ts` (new)
 - `apps/api/src/identity/application/resend-verification.ts` (new)
 - `apps/api/src/identity/infrastructure/http/registration-routes.ts` (new)
-- `apps/api/src/identity/infrastructure/email/outbox-email-sender.ts` (new) — `EmailSender` adapter that inserts into `email_outbox`.
-- `apps/api/src/identity/infrastructure/email/email-worker.ts` (new) — polls `email_outbox` every 2 s with `FOR UPDATE SKIP LOCKED`, renders, sends via the selected transport, marks `sent_at`, drops `discard` rows, purges old `auth_attempts`.
+- `apps/api/src/identity/application/ports/email-sender.ts` (modified) — `OutboxEmail` carries `{ kind, userId, toEmail, language }` and **never a token**.
+- `apps/api/src/identity/application/ports/attempt-purger.ts` (new) — `purgeOlderThan(cutoff)` port used by the worker.
+- `apps/api/src/identity/application/ports/clock.ts` (modified) — port only; `systemClock` moves to `apps/api/src/identity/infrastructure/system-clock.ts` (new).
+- `apps/api/src/identity/application/password-policy.ts` (new) — `assertPasswordAcceptable` (length rule + breach port); `apps/api/src/identity/application/ports/breached-password-checker.ts` (modified) loses `assertPasswordNotBreached`.
+- `apps/api/src/identity/application/issue-email-token.ts` (new) — used by the worker: invalidates unused tokens of the purpose, creates a new one (hash stored), returns the plaintext to the caller only.
+- `apps/api/src/identity/infrastructure/email/outbox-email-sender.ts` (new) — `EmailSender` adapter that inserts into `email_outbox` (no token in the row).
+- `apps/api/src/identity/infrastructure/email/email-worker.ts` (new) — polls `email_outbox` every 2 s with `FOR UPDATE SKIP LOCKED`; for `verification` and `password_reset` rows it issues the token **at send time** inside the same transaction, renders, sends via the selected transport, marks `sent_at`; drops `discard` rows; purges `auth_attempts` older than 24 h at most once per hour.
+- `apps/api/drizzle/0001_outbox_hardening.sql` (new, generated) and `apps/api/drizzle/meta/_journal.json` (modified) — index `auth_attempts_window_start_idx` on `window_start`; check `email_outbox.language in ('es','en')`.
+- `apps/api/drizzle/rollback/0001_outbox_hardening.down.sql` (new) — drops that index, that check and the migration row.
+- `apps/api/src/identity/infrastructure/db/schema.ts` (modified) — the index and check above; `payload` typed as `{ userId: string | null }`; outbox kinds derived from the port.
+- `apps/api/src/identity/infrastructure/security/argon2id-password-hasher.ts` (modified) — returns `false` only for malformed hashes (logged at warn without hash or password); rethrows any other error.
+- `apps/api/src/identity/infrastructure/security/hibp-breached-password-checker.ts` (modified) — cancels the body of non-200 responses; `PasswordCheckUnavailable.cause` is the sanitized failure, not the raw fetch error.
+- `apps/api/src/shared/http/validate.ts` (modified) — optional `response` schema per route; `res.json` accepts only that schema's type, so responses are typed with the shared schemas.
 - `apps/api/src/identity/infrastructure/email/transports/console-transport.ts` (new)
 - `apps/api/src/identity/infrastructure/email/transports/mailpit-transport.ts` (new) — SMTP to Mailpit for local/e2e.
 - `apps/api/src/identity/infrastructure/email/transports/resend-transport.ts` (new)
@@ -240,12 +251,19 @@ no `domain` → `infrastructure` import.
 - `apps/api/src/identity/infrastructure/email/messages/es.json`, `apps/api/src/identity/infrastructure/email/messages/en.json` (new)
 - `apps/api/src/worker.ts` (new) — worker process entry point.
 - `apps/api/src/app.ts` (modified) — mount registration routes.
-- `apps/api/test/fakes/in-memory-email-sender.ts` (new) — captures enqueued emails and tokens in unit tests.
+- `apps/api/test/fakes/in-memory-email-sender.ts` (new) — captures enqueued emails in unit tests.
+- `apps/api/test/fakes/capturing-transport.ts` (new) — captures sent emails and their links, so tests read tokens from what was sent, never from the database.
 
 **Logic**
-- Register: validate → rate limit by IP (counted before any lookup, same for new and existing emails) → breach check → Argon2id hash → insert user with defaults and verification token → enqueue verification email. If the email exists: verify the dummy hash instead, create nothing, enqueue a `discard` row. Same 202 response either way.
+- Register: validate → record the attempt for the IP first and reject when over the limit (atomic, counted the same for new and existing emails) → length + breach check → Argon2id hash → insert user with defaults → enqueue a `verification` row (no token). If the email exists: verify the dummy hash instead, create nothing, enqueue a `discard` row. Same 202 response either way.
+- Worker, per `verification` / `password_reset` row, in one transaction holding the row lock: issue the token (invalidate unused ones of that purpose, insert the new hash with its expiry), render the link with the plaintext token, send, set `sent_at`. If the transport fails, the transaction rolls back (no token row survives) and `attempts` is incremented in a separate statement; after 5 attempts the row is marked failed and logged. The plaintext token exists only in worker memory (user decision 2026-09-26, option A).
 - Verify: hash submitted token → find unused, unexpired `email_verification` token → set `used_at` and `users.email_verified_at` in one transaction.
-- Resend: requires a session of an unverified user; invalidates previous verification tokens, issues a new one; 3 per account per hour.
+- Resend: requires a session of an unverified user; records the attempt first (3 per account per hour, atomic), then enqueues a `verification` row; the worker invalidates previous tokens when it issues the new one.
+
+**Data model**
+- Migration `0001_outbox_hardening`: new index `auth_attempts_window_start_idx` on `auth_attempts(window_start)` (not unique); new check constraint `email_outbox_language_check` (`language in ('es','en')`), not null unchanged.
+- `email_outbox.payload` stays `jsonb not null`, typed as `{ userId: string | null }`; it never holds a token or any secret.
+- `one_time_tokens` rows are created by the worker at send time (unique `token_hash`, `expires_at` 24 h for verification and 60 min for reset, `used_at` null by default).
 
 **API contract**
 - Method + path: `POST /auth/register`
@@ -290,6 +308,13 @@ no `domain` → `infrastructure` import.
 - [ ] worker sends pending rows once, drops `discard` rows, and two workers never send the same row — validates NFR-09
 - [ ] every key in email `messages/es.json` exists in `messages/en.json` — validates NFR-10
 - [ ] a transport error is retried up to 5 times with backoff and logged, and the HTTP request is unaffected — sad path
+- [ ] a failed send leaves no token row, and a later successful send issues exactly one valid token — sad path
+- [ ] after registering and sending, no column of `email_outbox`, `one_time_tokens` or `users` contains the plaintext token captured from the transport — validates NFR-04, threat R-05
+- [ ] a second verification email invalidates the first link — validates AC-06
+- [ ] the argon2 hasher returns false for a malformed hash and rethrows any other error — sad path
+- [ ] HIBP 5xx cancels the response body and the error cause carries no URL — sad path
+- [ ] a handler response that does not match the route's response schema fails typecheck (compile-time `@ts-expect-error` test) — validates NFR-10 typing rule
+- [ ] purge removes `auth_attempts` rows older than 24 h through the `AttemptPurger` port and runs at most once per hour — validates NFR-03
 
 **Completion criterion**
 All tests above pass; a registration against the local stack delivers a Spanish or English
@@ -305,6 +330,7 @@ verification email to Mailpit, and opening its link verifies the account.
 - `apps/api/src/identity/application/sign-out.ts` (new)
 - `apps/api/src/identity/application/sign-out-all.ts` (new)
 - `apps/api/src/identity/application/get-current-session.ts` (new)
+- `apps/api/src/identity/application/ports/session-repository.ts` (modified), `apps/api/src/identity/infrastructure/db/drizzle-session-repository.ts` (modified) — conditional, atomic `markReplaced` returning whether it claimed the row.
 - `apps/api/src/identity/application/ports/access-token-issuer.ts` (new)
 - `apps/api/src/identity/infrastructure/security/jose-access-token-issuer.ts` (new) — HS256, `alg` pinned, 15 min.
 - `apps/api/src/identity/infrastructure/http/session-cookies.ts` (new) — `__Host-argent_at` (Path=/), `__Secure-argent_rt` (Path=/auth); HttpOnly, Secure, SameSite=Strict.
@@ -317,7 +343,7 @@ verification email to Mailpit, and opening its link verifies the account.
 
 **Logic**
 - Sign-in: validate → check limiter for the normalized email and the IP (before hashing) → load user; if missing, verify the dummy hash → on failure increment both counters and return the generic error → on success create a session (new family), set both cookies. Unverified users do get a session (they need it to resend verification); financial endpoints reject them in Block 6.
-- Refresh: hash the cookie → session must exist, not revoked, used within 30 days → if it was already replaced (reuse), revoke the whole family and return 401 → else rotate: new session row in the same family, old one `revoked_at` + `replaced_by`, new cookies.
+- Refresh: hash the cookie → session must exist, not revoked, used within 30 days → claim the rotation atomically (`UPDATE sessions SET revoked_at, replaced_by WHERE id = ? AND revoked_at IS NULL RETURNING id`, in the same transaction as the insert of the successor); if the claim affects no row, it is a reuse: revoke the whole family and return 401; otherwise set the new cookies.
 - Sign-out: revoke the current session, clear both cookies.
 - Sign-out-all: revoke every session of the user, clear cookies.
 - Current session: return user id, email, `emailVerified`, language, time zone.
@@ -372,6 +398,7 @@ verification email to Mailpit, and opening its link verifies the account.
 - [ ] sign-out revokes the current refresh token and clears cookies; the old access token is rejected — validates AC-12
 - [ ] sign-out-all revokes every refresh token of the user — validates AC-13
 - [ ] refresh rotates the token; reusing the old one revokes the family — sad path (R-15)
+- [ ] two concurrent refreshes with the same token: exactly one succeeds and the other is treated as reuse (family revoked, 401) — sad path (R-15)
 - [ ] session idle for 31 days is rejected — validates NFR-05
 - [ ] tampered JWT and `alg: none` token are rejected — sad path (R-14)
 - [ ] a session created on instance A is accepted by instance B — validates NFR-09
@@ -391,7 +418,7 @@ All tests above pass; `GET /auth/session` returns the signed-in user and 401 aft
 - `apps/api/src/app.ts` (modified) — mount reset routes.
 
 **Logic**
-- Request: limit by IP and by normalized email → if the user exists with a verified email, issue a 60-min reset token and enqueue the email; otherwise enqueue a `discard` row. Same 202 response.
+- Request: record the attempt first for the IP and for the normalized email (atomic, reject when over the limit) → if the user exists with a verified email, enqueue a `password_reset` row (no token; the worker issues the 60-min token at send time); otherwise enqueue a `discard` row. Same 202 response.
 - Confirm: token must be an unused, unexpired `password_reset` token → password length + breach check → new Argon2id hash, mark token used, revoke all sessions of the user, in one transaction.
 
 **API contract**
@@ -416,7 +443,7 @@ All tests above pass; `GET /auth/session` returns the signed-in user and 401 aft
 - Too many requests — 429 `RATE_LIMITED`.
 
 **Required tests**
-- [ ] reset request for a registered email enqueues a reset email; for an unknown email it enqueues a `discard` row; responses are identical — validates AC-09, NFR-08
+- [ ] reset request for a registered email enqueues a `password_reset` row without a token and the worker sends a 60-min single-use link; for an unknown email it enqueues a `discard` row; responses are identical — validates AC-09, NFR-08
 - [ ] confirming with a valid token updates the password and revokes all sessions — validates AC-10
 - [ ] token older than 60 min and a used token return 400 `TOKEN_INVALID` and the password stays unchanged — validates AC-11, NFR-04, sad path
 - [ ] breached new password is rejected — sad path
@@ -543,3 +570,4 @@ screen renders in `/es` and `/en`.
 
 ## Decision log
 - 2026-09-26: Package manager pinned to pnpm 11 (user decision, corrective loop from CODE); local PostgreSQL exposed on host port 5434.
+- 2026-09-26: Email tokens are issued by the worker at send time; the outbox never stores a token (user decision, option A, corrective loop from CODE after the Block 2 review). Review findings carried in: atomic refresh rotation (Block 4), record-first rate limiting, `AttemptPurger` port, `auth_attempts(window_start)` index, hasher and HIBP error handling, typed responses (Block 3).

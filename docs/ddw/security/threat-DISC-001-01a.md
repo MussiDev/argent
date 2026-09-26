@@ -65,7 +65,7 @@
 - **Spoofing:** the sending domain is configured with SPF, DKIM and DMARC so users can tell real emails from phishing.
 - **Tampering:** link URLs are built from a configured base URL, never from the request `Host` header, so an attacker cannot make the API email links to their own domain (R-08).
 - **Repudiation:** the provider message id is logged per send.
-- **Information Disclosure:** emails contain only the link and the user's language copy; no password or account data.
+- **Information Disclosure:** emails contain only the link and the user's language copy; no password or account data. Outbox rows carry no token: the worker issues the token at send time inside the row's transaction, so a database dump yields no usable link (R-05).
 - **Denial of Service:** resend of verification limited to 3 per account per hour to avoid email bombing a victim (R-09).
 - **Elevation of Privilege:** the provider API key has send-only scope and lives in the environment, never in the repository.
 
@@ -107,7 +107,7 @@
 | password | credentials | Argon2id (m=19 MiB, t=2, p=1); plaintext never stored or logged | TLS 1.2+ |
 | refresh token | credentials | SHA-256 hash in `sessions`; database volume encrypted with AES-256 by the managed provider | TLS 1.2+, `HttpOnly` `Secure` `SameSite=Strict` cookie |
 | access token (JWT) | credentials | not stored server-side; signing key in environment secrets | TLS 1.2+, `HttpOnly` `Secure` `SameSite=Strict` cookie |
-| verification / reset token | credentials | SHA-256 hash; database volume encrypted with AES-256 | TLS 1.2+ in the link; email transport outside our control |
+| verification / reset token | credentials | SHA-256 hash only; the plaintext exists only in the email worker's memory at send time and is never written to `email_outbox` or any other table; database volume encrypted with AES-256 | TLS 1.2+ in the link; email transport outside our control |
 | email address | PII | database volume encrypted with AES-256 by the managed provider; never written to logs | TLS 1.2+ |
 | IP address (rate limiting, logs) | PII | `auth_attempts` rows deleted after 24 h; database volume encrypted with AES-256 | TLS 1.2+ |
 | time zone, language, default rate type, display currency | public | plain columns | TLS 1.2+ |

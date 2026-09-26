@@ -3,6 +3,7 @@ import type { AccessTokenIssuer } from '../../src/identity/application/ports/acc
 import type { AttemptLimiter } from '../../src/identity/application/ports/attempt-limiter';
 import type { PasswordHasher } from '../../src/identity/application/ports/password-hasher';
 import type {
+  NewSession,
   Session,
   SessionRepository,
 } from '../../src/identity/application/ports/session-repository';
@@ -37,6 +38,8 @@ const user: User = {
   timeZone: 'America/Cordoba',
   language: 'es',
   createdAt: JUST_BEFORE_BOUNDARY,
+  credentialsVersion: 4,
+  passwordChangedAt: null,
 };
 
 /** SignIn with the real PostgreSQL limiter and fakes for everything else. */
@@ -46,13 +49,15 @@ function buildSignIn(options: {
   /** Runs while the password is being verified, i.e. between reserve and refund. */
   duringHash?: () => void;
   reportRefundFailure?: (error: unknown) => void;
+  /** Receives every session the sign-in asks to create. */
+  created?: NewSession[];
 }) {
   const users: UserRepository = {
     create: () => Promise.reject(new Error('unused')),
     findById: () => Promise.resolve(user),
     findByEmail: () => Promise.resolve(user),
     markEmailVerified: () => Promise.resolve(),
-    updatePasswordHash: () => Promise.resolve(),
+    changePassword: () => Promise.resolve(),
   };
   const passwordHasher: PasswordHasher = {
     hash: () => Promise.reject(new Error('unused')),
@@ -62,15 +67,17 @@ function buildSignIn(options: {
     },
   };
   const sessions: SessionRepository = {
-    create: (session) =>
-      Promise.resolve({
+    create: (session) => {
+      options.created?.push(session);
+      return Promise.resolve({
         id: '00000000-0000-4000-8000-0000000000aa',
         familyId: '00000000-0000-4000-8000-0000000000aa',
         createdAt: options.clock.now(),
         revokedAt: null,
         replacedBy: null,
         ...session,
-      } as Session),
+      } as Session);
+    },
     findById: () => Promise.resolve(null),
     findByRefreshTokenHash: () => Promise.resolve(null),
     markReplaced: () => Promise.resolve(true),
@@ -156,5 +163,18 @@ describe('SignIn limiter reservations', () => {
     // Reported once for the refund as a whole; the leaked units fail safe (they only restrict).
     expect(reported).toEqual([failure]);
     expect((await attemptRows()).map((row) => row.count)).toEqual([1, 1]);
+  });
+
+  it("stores the user's credentials version, read with the password hash, on the new session", async () => {
+    const created: NewSession[] = [];
+    const signIn = buildSignIn({
+      clock: new MutableClock(new Date('2026-09-26T14:00:00.000Z')),
+      created,
+    });
+
+    const result = await signIn.execute({ email: EMAIL, password: 'right one', ip: IP });
+
+    expect(result.outcome).toBe('signed_in');
+    expect(created).toEqual([expect.objectContaining({ userId: user.id, credentialsVersion: 4 })]);
   });
 });

@@ -115,3 +115,75 @@ describe('sign-in timing (NFR-08, R-02)', () => {
     expect(difference).toBeLessThan(MAX_MEDIAN_DIFFERENCE_MS);
   }, 120_000);
 });
+
+/** Below the per-email reset limit (5), so no registered email ever answers 429 instead of 202. */
+const RESET_REQUESTS_PER_ACCOUNT = 4;
+
+describe('password reset request timing (NFR-08, R-02)', () => {
+  it('has a median response-time difference below 50 ms between registered and unknown email over 200 requests', async () => {
+    // Every request comes from its own address, so the per-IP limit (5) never answers instead.
+    const harness = createIdentityHarness(connection, {
+      realSessions: true,
+      env: { TRUST_PROXY: '1' },
+    });
+    const accounts = Math.ceil((PAIRS + WARM_UP) / RESET_REQUESTS_PER_ACCOUNT);
+    const emails: string[] = [];
+    for (let index = 0; index < accounts; index += 1) {
+      const email = `member${index}@example.com`;
+      await seedUser(connection, { email, password: PASSWORD });
+      emails.push(email);
+    }
+    server = createServer(harness.app);
+    await new Promise<void>((resolve) => server?.listen(0, '127.0.0.1', resolve));
+    const target = server;
+
+    let requestNumber = 0;
+    async function timedRequest(
+      email: string,
+    ): Promise<{ ms: number; status: number; body: string }> {
+      requestNumber += 1;
+      const ip = `10.${Math.floor(requestNumber / 250)}.${requestNumber % 250}.2`;
+      const started = performance.now();
+      const response = await request(target)
+        .post('/auth/password-reset/request')
+        .set(trustedHeaders)
+        .set('X-Forwarded-For', ip)
+        .send({ email });
+      return { ms: performance.now() - started, status: response.status, body: response.text };
+    }
+
+    const registered = (index: number) =>
+      timedRequest(emails[Math.floor(index / RESET_REQUESTS_PER_ACCOUNT)] ?? '');
+    const unknownEmail = (index: number) => timedRequest(`nobody${index}@example.com`);
+
+    for (let index = 0; index < WARM_UP; index += 1) {
+      await registered(PAIRS + index);
+      await unknownEmail(PAIRS + index);
+    }
+
+    const known: number[] = [];
+    const unknown: number[] = [];
+    const bodies = new Set<string>();
+    const statuses = new Set<number>();
+    for (let index = 0; index < PAIRS; index += 1) {
+      const pair =
+        index % 2 === 0
+          ? [await registered(index), await unknownEmail(index)]
+          : [await unknownEmail(index), await registered(index)].reverse();
+      const [existing, missing] = pair;
+      if (!existing || !missing) throw new Error('missing measurement');
+      known.push(existing.ms);
+      unknown.push(missing.ms);
+      for (const result of pair) {
+        bodies.add(result.body);
+        statuses.add(result.status);
+      }
+    }
+
+    expect([...statuses]).toEqual([202]);
+    expect([...bodies]).toEqual([JSON.stringify({ status: 'reset_sent_if_registered' })]);
+    expect(known.length + unknown.length).toBe(2 * PAIRS);
+    const difference = Math.abs(median(known) - median(unknown));
+    expect(difference).toBeLessThan(MAX_MEDIAN_DIFFERENCE_MS);
+  }, 120_000);
+});

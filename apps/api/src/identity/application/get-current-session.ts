@@ -28,7 +28,8 @@ export interface GetCurrentSessionDependencies {
 
 /**
  * Authenticates an access token: a valid signature and expiry are not enough, the session row it
- * names must still be live (threat R-16) and its user must exist. The user id comes only from the
+ * names must still be live (threat R-16), its user must exist and the password must not have
+ * changed since the session was created. The user id comes only from the
  * verified token, never from the request.
  */
 export class GetCurrentSession {
@@ -49,6 +50,9 @@ export class GetCurrentSession {
     }
 
     const user = await this.deps.users.findById(session.userId);
-    return user ? { sessionId: session.id, user } : null;
+    // A password change since the session was created ends it, even if a revocation missed it
+    // because the session was committed concurrently with the reset (AC-10).
+    if (!user || user.credentialsVersion !== session.credentialsVersion) return null;
+    return { sessionId: session.id, user };
   }
 }

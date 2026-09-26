@@ -116,6 +116,9 @@ export class SignIn {
       userId: user.id,
       refreshTokenHash: this.deps.tokenGenerator.hash(refreshToken),
       lastUsedAt: this.deps.clock.now(),
+      // Read in the same row as the hash that was verified: if a reset commits meanwhile, this
+      // session is created stale and rejected on first use (AC-10).
+      credentialsVersion: user.credentialsVersion,
     });
     const accessToken = await this.deps.accessTokens.issue({
       userId: user.id,

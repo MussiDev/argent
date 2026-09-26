@@ -6,3 +6,4 @@ export * from './auth/verify-email';
 export * from './auth/resend-verification';
 export * from './auth/sign-in';
 export * from './auth/session';
+export * from './auth/password-reset';

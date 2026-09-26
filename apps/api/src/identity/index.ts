@@ -2,9 +2,11 @@ import type { RequestHandler, Router } from 'express';
 import type { Env } from '../shared/config/env';
 import { createRequireSession } from '../shared/http/require-session';
 import type { Logger } from '../shared/logging/logger';
+import { ConfirmPasswordReset } from './application/confirm-password-reset';
 import { GetCurrentSession } from './application/get-current-session';
 import { RefreshSession } from './application/refresh-session';
 import { RegisterUser } from './application/register-user';
+import { RequestPasswordReset } from './application/request-password-reset';
 import { ResendVerification } from './application/resend-verification';
 import { SignIn } from './application/sign-in';
 import { SignOut } from './application/sign-out';
@@ -30,6 +32,7 @@ import type { IdentityDb } from './infrastructure/db/schema';
 import type { EmailTransport } from './infrastructure/email/email-transport';
 import { EmailWorker } from './infrastructure/email/email-worker';
 import { OutboxEmailSender } from './infrastructure/email/outbox-email-sender';
+import { createPasswordResetRoutes } from './infrastructure/http/password-reset-routes';
 import { createRegistrationRoutes } from './infrastructure/http/registration-routes';
 import { ACCESS_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
 import { createSessionRoutes } from './infrastructure/http/session-routes';
@@ -212,6 +215,7 @@ export function createIdentityModule({
       }),
       refreshSession: new RefreshSession({
         sessions: identity.sessions,
+        users: identity.users,
         tokenGenerator: identity.tokenGenerator,
         accessTokens,
         unitOfWork: identity.unitOfWork,
@@ -226,6 +230,21 @@ export function createIdentityModule({
       signOutAll: new SignOutAll({ sessions: identity.sessions, clock: identity.clock }),
       getCurrentSession,
       requireSession: routeSession,
+      logger: dependencies.logger,
+    }),
+    createPasswordResetRoutes({
+      requestPasswordReset: new RequestPasswordReset({
+        attemptLimiter: identity.attemptLimiter,
+        users: identity.users,
+        emailSender: identity.emailSender,
+      }),
+      confirmPasswordReset: new ConfirmPasswordReset({
+        tokenGenerator: identity.tokenGenerator,
+        clock: identity.clock,
+        breachedPasswordChecker: breachedPasswordChecker ?? identity.breachedPasswordChecker,
+        passwordHasher: identity.passwordHasher,
+        unitOfWork: identity.unitOfWork,
+      }),
       logger: dependencies.logger,
     }),
   ];

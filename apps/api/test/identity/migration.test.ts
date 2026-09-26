@@ -176,6 +176,7 @@ describe('0000_identity migration', () => {
   });
 
   it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
+    await client.query(await rollback('0002_credentials_version'));
     await client.query(await rollback('0001_outbox_hardening'));
     await client.query(await rollback('0000_identity'));
     expect(await publicTables()).toEqual([]);
@@ -201,11 +202,13 @@ describe('0001_outbox_hardening migration', () => {
         "insert into email_outbox (id, kind, language, payload) values (gen_random_uuid(), 'discard', 'en', '{\"userId\": null}')",
       ),
     ).toBeUndefined();
-    expect(await appliedMigrations()).toBe(2);
+    expect(await appliedMigrations()).toBe(3);
   });
 
-  it('is reverted by its rollback script alone, leaving 0000 in place, and re-applies', async () => {
+  it('is reverted by its rollback script (after the newer ones), leaving 0000 in place, and re-applies', async () => {
     await client.query('delete from email_outbox');
+    // Newest first: drizzle only applies migrations newer than the last one recorded.
+    await client.query(await rollback('0002_credentials_version'));
     await client.query(await rollback('0001_outbox_hardening'));
 
     expect(await indexDefinition('auth_attempts_window_start_idx')).toBeUndefined();
@@ -220,6 +223,79 @@ describe('0001_outbox_hardening migration', () => {
     await client.query('delete from email_outbox');
     await runMigrations(emptyDatabaseUrl);
     expect(await indexDefinition('auth_attempts_window_start_idx')).toBeDefined();
+    expect(await appliedMigrations()).toBe(3);
+  });
+});
+
+interface ColumnInfo {
+  table_name: string;
+  column_name: string;
+  data_type: string;
+  is_nullable: string;
+  column_default: string | null;
+}
+
+async function credentialsColumns(): Promise<ColumnInfo[]> {
+  const result = await client.query<ColumnInfo>(
+    `select table_name, column_name, data_type, is_nullable, column_default
+       from information_schema.columns
+      where table_schema = 'public'
+        and column_name in ('credentials_version', 'password_changed_at')
+      order by table_name, column_name`,
+  );
+  return result.rows;
+}
+
+describe('0002_credentials_version migration', () => {
+  it('adds users.credentials_version, users.password_changed_at and sessions.credentials_version', async () => {
+    expect(await credentialsColumns()).toEqual([
+      {
+        table_name: 'sessions',
+        column_name: 'credentials_version',
+        data_type: 'integer',
+        is_nullable: 'NO',
+        column_default: '0',
+      },
+      {
+        table_name: 'users',
+        column_name: 'credentials_version',
+        data_type: 'integer',
+        is_nullable: 'NO',
+        column_default: '0',
+      },
+      {
+        table_name: 'users',
+        column_name: 'password_changed_at',
+        data_type: 'timestamp with time zone',
+        is_nullable: 'YES',
+        column_default: null,
+      },
+    ]);
+    const inserted = await client.query<{
+      id: string;
+      credentials_version: number;
+      password_changed_at: Date | null;
+    }>(
+      "insert into users (email, password_hash, time_zone, language) values ('cv@example.com', 'h', 'UTC', 'es') returning id, credentials_version, password_changed_at",
+    );
+    expect(inserted.rows[0]).toMatchObject({ credentials_version: 0, password_changed_at: null });
+    const session = await client.query<{ credentials_version: number }>(
+      `insert into sessions (id, user_id, family_id, refresh_token_hash, last_used_at) values (gen_random_uuid(), '${inserted.rows[0]?.id ?? ''}', gen_random_uuid(), 'cv1', now()) returning credentials_version`,
+    );
+    expect(session.rows).toEqual([{ credentials_version: 0 }]);
+  });
+
+  it('is reverted by its rollback script alone, keeping the data of the older columns, and re-applies', async () => {
+    await client.query(await rollback('0002_credentials_version'));
+
+    expect(await credentialsColumns()).toEqual([]);
+    expect(await publicTables()).toEqual(IDENTITY_TABLES);
     expect(await appliedMigrations()).toBe(2);
+    const kept = await client.query("select 1 from users where email = 'cv@example.com'");
+    expect(kept.rowCount).toBe(1);
+
+    await runMigrations(emptyDatabaseUrl);
+    expect(await credentialsColumns()).toHaveLength(3);
+    expect(await appliedMigrations()).toBe(3);
   });
 });

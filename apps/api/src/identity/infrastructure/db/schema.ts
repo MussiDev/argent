@@ -52,6 +52,9 @@ export const users = pgTable(
     timeZone: text('time_zone').notNull(),
     language: text('language', { enum: LANGUAGES }).notNull(),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
+    /** Bumped by every password change; sessions created with an older value are dead (AC-10). */
+    credentialsVersion: integer('credentials_version').notNull().default(0),
+    passwordChangedAt: timestamptz('password_changed_at'),
   },
   (table) => [
     check('users_default_rate_type_check', oneOf(table.defaultRateType, RATE_TYPES)),
@@ -92,6 +95,8 @@ export const sessions = pgTable(
     lastUsedAt: timestamptz('last_used_at').notNull(),
     revokedAt: timestamptz('revoked_at'),
     replacedBy: uuid('replaced_by'),
+    /** The user's credentials version when the session (or its family's first one) was created. */
+    credentialsVersion: integer('credentials_version').notNull().default(0),
   },
   (table) => [
     index('sessions_user_id_idx').on(table.userId),

@@ -7,6 +7,8 @@ export interface Session {
   lastUsedAt: Date;
   revokedAt: Date | null;
   replacedBy: string | null;
+  /** The user's credentials version this session was created under; see `User`. */
+  credentialsVersion: number;
 }
 
 export interface NewSession {
@@ -16,6 +18,8 @@ export interface NewSession {
   /** SHA-256 of the refresh token; the token itself is never stored (threat R-05). */
   refreshTokenHash: string;
   lastUsedAt: Date;
+  /** Sign-in: the user's, read with the password hash. Refresh: the replaced session's. */
+  credentialsVersion: number;
 }
 
 export interface SessionRepository {

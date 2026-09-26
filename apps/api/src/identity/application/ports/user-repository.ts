@@ -13,6 +13,13 @@ export interface User {
   timeZone: string;
   language: Language;
   createdAt: Date;
+  /**
+   * Bumped by every password change. A session carries the version it was created with and is
+   * rejected once they differ, so a session racing a reset cannot outlive it (AC-10).
+   */
+  credentialsVersion: number;
+  /** When the password was last changed through a reset; null until then. */
+  passwordChangedAt: Date | null;
 }
 
 export interface NewUser {
@@ -30,5 +37,9 @@ export interface UserRepository {
   findById(id: string): Promise<User | null>;
   findByEmail(email: Email): Promise<User | null>;
   markEmailVerified(id: string, at: Date): Promise<void>;
-  updatePasswordHash(id: string, passwordHash: string): Promise<void>;
+  /**
+   * Sets the new password hash, bumps `credentialsVersion` and records `passwordChangedAt = at`,
+   * in one statement.
+   */
+  changePassword(id: string, passwordHash: string, at: Date): Promise<void>;
 }

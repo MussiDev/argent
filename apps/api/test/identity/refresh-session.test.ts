@@ -6,6 +6,7 @@ import type {
   SessionRepository,
 } from '../../src/identity/application/ports/session-repository';
 import type { TokenGenerator } from '../../src/identity/application/ports/token-generator';
+import type { User, UserRepository } from '../../src/identity/application/ports/user-repository';
 import type {
   TransactionalRepositories,
   UnitOfWork,
@@ -25,6 +26,7 @@ function session(overrides: Partial<Session> = {}): Session {
     lastUsedAt: NOW,
     revokedAt: null,
     replacedBy: null,
+    credentialsVersion: 0,
     ...overrides,
   };
 }
@@ -33,7 +35,10 @@ function session(overrides: Partial<Session> = {}): Session {
  * In-memory sessions with a unit of work that only keeps what a transaction created when the
  * transaction resolves, like PostgreSQL does on commit and rollback.
  */
-function buildRefresh(current: Session, options: { claim: boolean }) {
+function buildRefresh(
+  current: Session,
+  options: { claim: boolean; userCredentialsVersion?: number },
+) {
   const committed: Session[] = [current];
   const revokedFamilies: string[] = [];
   let created = 0;
@@ -103,8 +108,18 @@ function buildRefresh(current: Session, options: { claim: boolean }) {
     verify: () => Promise.resolve(null),
   };
 
+  const users = {
+    findById: (id: string) =>
+      Promise.resolve(
+        id === current.userId
+          ? ({ id, credentialsVersion: options.userCredentialsVersion ?? 0 } as User)
+          : null,
+      ),
+  } as unknown as UserRepository;
+
   const refreshSession = new RefreshSession({
     sessions,
+    users,
     tokenGenerator,
     accessTokens,
     unitOfWork,
@@ -161,5 +176,31 @@ describe('RefreshSession', () => {
     expect(await refreshSession.execute('presented')).toEqual({ outcome: 'rejected' });
     expect(revokedFamilies).toEqual([]);
     expect(committed).toHaveLength(1);
+  });
+
+  it("rejects a session whose credentials version differs from the user's, rotating nothing (AC-10)", async () => {
+    const stale = session({ credentialsVersion: 0 });
+    const { refreshSession, committed, revokedFamilies } = buildRefresh(stale, {
+      claim: true,
+      userCredentialsVersion: 1,
+    });
+
+    expect(await refreshSession.execute('presented')).toEqual({ outcome: 'rejected' });
+    expect(committed.map((row) => row.id)).toEqual(['session-1']);
+    expect(revokedFamilies).toEqual([]);
+  });
+
+  it('gives the successor the credentials version of the session it replaces', async () => {
+    const current = session({ credentialsVersion: 2 });
+    const { refreshSession, committed } = buildRefresh(current, {
+      claim: true,
+      userCredentialsVersion: 2,
+    });
+
+    expect(await refreshSession.execute('presented')).toMatchObject({ outcome: 'rotated' });
+    expect(committed.map((row) => [row.id, row.credentialsVersion])).toEqual([
+      ['session-1', 2],
+      ['successor-1', 2],
+    ]);
   });
 });

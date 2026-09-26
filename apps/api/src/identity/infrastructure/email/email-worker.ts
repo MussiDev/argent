@@ -224,6 +224,14 @@ export class EmailWorker {
     const user = await new DrizzleUserRepository(tx).findById(userId);
     if (!user) return drop('user deleted');
     if (row.kind === 'verification' && user.emailVerifiedAt) return drop('already verified');
+    // Requested before the password was last reset: that reset already answered it.
+    if (
+      row.kind === 'password_reset' &&
+      user.passwordChangedAt &&
+      row.createdAt < user.passwordChangedAt
+    ) {
+      return drop('superseded by a completed reset');
+    }
 
     const kind = row.kind;
     const to = row.toEmail;

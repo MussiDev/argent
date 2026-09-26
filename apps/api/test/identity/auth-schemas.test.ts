@@ -1,4 +1,8 @@
 import {
+  passwordResetConfirmRequestSchema,
+  passwordResetConfirmResponseSchema,
+  passwordResetRequestSchema,
+  passwordResetResponseSchema,
   refreshResponseSchema,
   sessionResponseSchema,
   signInRequestSchema,
@@ -115,5 +119,33 @@ describe('shared auth schemas', () => {
       { user: { ...user, timeZone: 'America/Cordoba' } },
     );
     expect(refreshResponseSchema.parse({ status: 'refreshed' })).toEqual({ status: 'refreshed' });
+  });
+
+  it('describes the password reset bodies; the token travels only in the body', () => {
+    expect(passwordResetRequestSchema.parse({ email: ' ana@example.com ', extra: 1 })).toEqual({
+      email: 'ana@example.com',
+    });
+    expect(passwordResetRequestSchema.safeParse({ email: 'x'.repeat(255) }).success).toBe(false);
+    expect(passwordResetRequestSchema.safeParse({}).success).toBe(false);
+
+    const token = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO-_';
+    const confirmAccepts = (body: Record<string, unknown>) =>
+      passwordResetConfirmRequestSchema.safeParse(body).success;
+    expect(confirmAccepts({ token, newPassword: 'x' })).toBe(true);
+    expect(confirmAccepts({ token, newPassword: 'x'.repeat(128) })).toBe(true);
+    expect(confirmAccepts({ token, newPassword: LOCK_EMOJI.repeat(129) })).toBe(false);
+    expect(confirmAccepts({ token, newPassword: '' })).toBe(false);
+    expect(confirmAccepts({ token: 'A'.repeat(42), newPassword: 'a long passphrase' })).toBe(false);
+    expect(confirmAccepts({ token: `${'A'.repeat(42)}=`, newPassword: 'a long passphrase' })).toBe(
+      false,
+    );
+
+    expect(passwordResetResponseSchema.parse({ status: 'reset_sent_if_registered' })).toEqual({
+      status: 'reset_sent_if_registered',
+    });
+    expect(passwordResetConfirmResponseSchema.parse({ status: 'password_updated' })).toEqual({
+      status: 'password_updated',
+    });
+    expect(passwordResetResponseSchema.safeParse({ status: 'sent' }).success).toBe(false);
   });
 });

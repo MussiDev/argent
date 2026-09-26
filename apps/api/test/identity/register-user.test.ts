@@ -63,6 +63,8 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
         timeZone: user.timeZone,
         language: user.language,
         createdAt: new Date(),
+        credentialsVersion: 0,
+        passwordChangedAt: null,
       } satisfies User);
     },
     findByEmail: (email) => {
@@ -72,7 +74,7 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
     },
     findById: () => Promise.resolve(null),
     markEmailVerified: () => Promise.resolve(),
-    updatePasswordHash: () => Promise.resolve(),
+    changePassword: () => Promise.resolve(),
   };
   const unitOfWork: UnitOfWork = {
     run: (work) =>

@@ -44,6 +44,7 @@ describe('DrizzleSessionRepository', () => {
       userId,
       familyId,
       refreshTokenHash: 'rt1',
+      credentialsVersion: 3,
       lastUsedAt: T0,
     });
 
@@ -51,6 +52,7 @@ describe('DrizzleSessionRepository', () => {
       userId,
       familyId,
       refreshTokenHash: 'rt1',
+      credentialsVersion: 3,
       lastUsedAt: T0,
       revokedAt: null,
       replacedBy: null,
@@ -62,8 +64,20 @@ describe('DrizzleSessionRepository', () => {
 
   it('records the replacement when a session is rotated', async () => {
     const familyId = randomUUID();
-    const old = await sessions.create({ userId, familyId, refreshTokenHash: 'a', lastUsedAt: T0 });
-    const next = await sessions.create({ userId, familyId, refreshTokenHash: 'b', lastUsedAt: T1 });
+    const old = await sessions.create({
+      userId,
+      familyId,
+      refreshTokenHash: 'a',
+      lastUsedAt: T0,
+      credentialsVersion: 0,
+    });
+    const next = await sessions.create({
+      userId,
+      familyId,
+      refreshTokenHash: 'b',
+      lastUsedAt: T1,
+      credentialsVersion: 0,
+    });
 
     expect(await sessions.markReplaced(old.id, next.id, T1)).toBe(true);
 
@@ -73,17 +87,25 @@ describe('DrizzleSessionRepository', () => {
 
   it('claims a rotation only once: replacing an already revoked session changes nothing (R-15)', async () => {
     const familyId = randomUUID();
-    const old = await sessions.create({ userId, familyId, refreshTokenHash: 'r1', lastUsedAt: T0 });
+    const old = await sessions.create({
+      userId,
+      familyId,
+      refreshTokenHash: 'r1',
+      lastUsedAt: T0,
+      credentialsVersion: 0,
+    });
     const first = await sessions.create({
       userId,
       familyId,
       refreshTokenHash: 'r2',
+      credentialsVersion: 0,
       lastUsedAt: T1,
     });
     const second = await sessions.create({
       userId,
       familyId,
       refreshTokenHash: 'r3',
+      credentialsVersion: 0,
       lastUsedAt: T1,
     });
 
@@ -95,7 +117,13 @@ describe('DrizzleSessionRepository', () => {
 
   it('of two overlapping rotation transactions, the one that waited for the row lock loses its claim (R-15)', async () => {
     const familyId = randomUUID();
-    const old = await sessions.create({ userId, familyId, refreshTokenHash: 'x1', lastUsedAt: T0 });
+    const old = await sessions.create({
+      userId,
+      familyId,
+      refreshTokenHash: 'x1',
+      lastUsedAt: T0,
+      credentialsVersion: 0,
+    });
     let claimed!: () => void;
     const firstClaimed = new Promise<void>((resolve) => (claimed = resolve));
     let release!: () => void;
@@ -107,6 +135,7 @@ describe('DrizzleSessionRepository', () => {
         userId,
         familyId,
         refreshTokenHash: 'x2',
+        credentialsVersion: 0,
         lastUsedAt: T1,
       });
       const won = await repository.markReplaced(old.id, successor.id, T1);
@@ -122,6 +151,7 @@ describe('DrizzleSessionRepository', () => {
         userId,
         familyId,
         refreshTokenHash: 'x3',
+        credentialsVersion: 0,
         lastUsedAt: T1,
       });
       return repository.markReplaced(old.id, successor.id, T2);
@@ -135,7 +165,12 @@ describe('DrizzleSessionRepository', () => {
   });
 
   it('starts a new family, named after the session, when no family is given', async () => {
-    const created = await sessions.create({ userId, refreshTokenHash: 'n1', lastUsedAt: T0 });
+    const created = await sessions.create({
+      userId,
+      refreshTokenHash: 'n1',
+      lastUsedAt: T0,
+      credentialsVersion: 0,
+    });
 
     expect(created.familyId).toBe(created.id);
   });
@@ -145,6 +180,7 @@ describe('DrizzleSessionRepository', () => {
       userId,
       familyId: randomUUID(),
       refreshTokenHash: 'c',
+      credentialsVersion: 0,
       lastUsedAt: T0,
     });
 
@@ -160,24 +196,28 @@ describe('DrizzleSessionRepository', () => {
       userId,
       familyId: family,
       refreshTokenHash: 'f1',
+      credentialsVersion: 0,
       lastUsedAt: T0,
     });
     const b = await sessions.create({
       userId,
       familyId: family,
       refreshTokenHash: 'f2',
+      credentialsVersion: 0,
       lastUsedAt: T0,
     });
     const c = await sessions.create({
       userId,
       familyId: randomUUID(),
       refreshTokenHash: 'f3',
+      credentialsVersion: 0,
       lastUsedAt: T0,
     });
     const other = await sessions.create({
       userId: otherUserId,
       familyId: randomUUID(),
       refreshTokenHash: 'o1',
+      credentialsVersion: 0,
       lastUsedAt: T0,
     });
 

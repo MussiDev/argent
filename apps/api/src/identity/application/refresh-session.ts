@@ -4,10 +4,12 @@ import type { Clock } from './ports/clock';
 import type { SessionRepository } from './ports/session-repository';
 import type { TokenGenerator } from './ports/token-generator';
 import type { UnitOfWork } from './ports/unit-of-work';
+import type { UserRepository } from './ports/user-repository';
 import type { SessionTokens } from './sign-in';
 
 export interface RefreshSessionDependencies {
   sessions: SessionRepository;
+  users: UserRepository;
   tokenGenerator: TokenGenerator;
   accessTokens: AccessTokenIssuer;
   unitOfWork: UnitOfWork;
@@ -16,8 +18,8 @@ export interface RefreshSessionDependencies {
 
 /**
  * `reused`: an already rotated token came back, so a copy exists somewhere and the whole family
- * was revoked (R-15). `rejected`: unknown token, a session revoked by sign-out or sign-out-all, or
- * a session idle too long. Both answer 401.
+ * was revoked (R-15). `rejected`: unknown token, a session revoked by sign-out or sign-out-all, a
+ * session idle too long, or one created before the user's last password change. All answer 401.
  */
 export type RefreshSessionResult =
   | { outcome: 'rotated'; userId: string; previousSessionId: string; session: SessionTokens }
@@ -50,6 +52,11 @@ export class RefreshSession {
         : { outcome: 'rejected' };
     }
     if (!isSessionLive(current, now)) return { outcome: 'rejected' };
+    // A session that survived a reset (it was committed concurrently with it) is dead (AC-10).
+    const user = await this.deps.users.findById(current.userId);
+    if (!user || user.credentialsVersion !== current.credentialsVersion) {
+      return { outcome: 'rejected' };
+    }
 
     const nextRefreshToken = this.deps.tokenGenerator.generate();
     let successorId: string;
@@ -61,6 +68,9 @@ export class RefreshSession {
           familyId: current.familyId,
           refreshTokenHash: this.deps.tokenGenerator.hash(nextRefreshToken),
           lastUsedAt: now,
+          // Inherited, never re-read: a successor committed after a reset stays as dead as its
+          // predecessor.
+          credentialsVersion: current.credentialsVersion,
         });
         if (!(await sessions.markReplaced(current.id, successor.id, now))) {
           throw new RotationAlreadyClaimed();

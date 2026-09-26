@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { NewUser, User, UserRepository } from '../../application/ports/user-repository';
 import type { Email } from '../../domain/email';
 import { DuplicateEmail } from '../../domain/errors';
@@ -61,7 +61,14 @@ export class DrizzleUserRepository implements UserRepository {
     await this.db.update(users).set({ emailVerifiedAt: at }).where(eq(users.id, id));
   }
 
-  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
-    await this.db.update(users).set({ passwordHash }).where(eq(users.id, id));
+  async changePassword(id: string, passwordHash: string, at: Date): Promise<void> {
+    await this.db
+      .update(users)
+      .set({
+        passwordHash,
+        credentialsVersion: sql`${users.credentialsVersion} + 1`,
+        passwordChangedAt: at,
+      })
+      .where(eq(users.id, id));
   }
 }

@@ -64,16 +64,33 @@ describe('DrizzleUserRepository', () => {
     expect(await users.findById('00000000-0000-4000-8000-000000000000')).toBeNull();
   });
 
-  it('marks the email verified and updates the password hash', async () => {
+  it('marks the email verified', async () => {
     const created = await users.create(newUser());
     const verifiedAt = new Date('2026-09-26T12:00:00.000Z');
 
     await users.markEmailVerified(created.id, verifiedAt);
-    await users.updatePasswordHash(created.id, 'new-hash');
 
+    expect(await users.findById(created.id)).toMatchObject({ emailVerifiedAt: verifiedAt });
+  });
+
+  it('starts at credentials version 0; a password change bumps it and records when', async () => {
+    const created = await users.create(newUser());
+    expect(created).toMatchObject({ credentialsVersion: 0, passwordChangedAt: null });
+    const first = new Date('2026-09-26T12:00:00.000Z');
+    const second = new Date('2026-09-26T13:00:00.000Z');
+
+    await users.changePassword(created.id, 'new-hash', first);
     expect(await users.findById(created.id)).toMatchObject({
-      emailVerifiedAt: verifiedAt,
       passwordHash: 'new-hash',
+      credentialsVersion: 1,
+      passwordChangedAt: first,
+    });
+
+    await users.changePassword(created.id, 'newer-hash', second);
+    expect(await users.findById(created.id)).toMatchObject({
+      passwordHash: 'newer-hash',
+      credentialsVersion: 2,
+      passwordChangedAt: second,
     });
   });
 });

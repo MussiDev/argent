@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01a.md |
 | Tier | FEATURE |
 | Date | 2026-09-26 |
-| Spec loops | 4 |
-| Loops since last human decision | 1 |
+| Spec loops | 5 |
+| Loops since last human decision | 2 |
 
 ## Summary
 First code in the repository. Block 1 lays the pnpm monorepo declared in `AGENTS.md` (Next.js 16
@@ -47,8 +47,8 @@ bilingual auth screens in the web app.
 
 ## Dependencies between blocks
 Block 1 → Block 2 → Block 3 → Block 4 → Block 5 → Block 6 → Block 7. Block 5 and Block 6 depend
-on Block 4 (sessions); Block 7 depends on Blocks 3–6 (API endpoints). Execution order: 1, 2, 3, 4,
-5, 6, 7.
+on Block 4 (sessions); Block 7 depends on Blocks 3–6 (API endpoints). Block 8 depends on Block 3
+(email worker) and is independent of Blocks 4–7. Execution order: 1, 2, 3, 4, 5, 6, 7, 8.
 
 ## Justified new dependencies
 - `express@5` — HTTP framework chosen in `AGENTS.md`; v5 routes rejected promises to the error middleware.
@@ -561,6 +561,51 @@ from the URL and post it to the API. The verify notice offers resend.
 All e2e tests pass in CI with `BREACH_CHECKER=fake` and `EMAIL_PROVIDER=mailpit`; every auth
 screen renders in `/es` and `/en`.
 
+## Block 8 — Email outbox hardening
+
+Supports FR-02 and FR-04 (delivery of verification and reset links) when several workers run.
+
+**Files**
+- `apps/api/src/identity/infrastructure/db/schema.ts` (modified) — `email_outbox.next_attempt_at`; polling index on `created_at` where `sent_at is null` replaces the index on `sent_at`.
+- `apps/api/drizzle/0002_outbox_retry.sql` (new, generated), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0002_snapshot.json` (new, generated).
+- `apps/api/drizzle/rollback/0002_outbox_retry.down.sql` (new) — drops the column and the new index, restores the previous index, deletes the migration row.
+- `apps/api/src/identity/infrastructure/email/email-worker.ts` (modified) — due rows are `next_attempt_at is null or next_attempt_at <= now`; each failure sets `next_attempt_at` (30 s, 90 s, 210 s, 450 s) in the same update that increments `attempts`; the in-memory retry map is removed; the failure update only matches rows with `sent_at is null`, and a missed match is logged at debug without scheduling anything.
+- `apps/api/src/identity/infrastructure/email/transports/resend-transport.ts` (modified) — the timed-out request is aborted with an `AbortSignal`; the outbox row id is sent as the Resend idempotency key.
+- `apps/api/src/shared/config/env.ts` (modified) — `EMAIL_PROVIDER=resend` requires `NODE_ENV=production` (the Resend SDK prints raw provider errors outside production).
+- `apps/api/src/shared/logging/logger.ts` (modified) — redaction targets `toEmail`, `to_email` and `message.to` instead of every key named `to`.
+- `apps/api/src/shared/process/graceful-shutdown.ts` (modified) — a second signal exits with code 1; closing the server and the pool has a 10 s deadline.
+- `apps/api/test/identity/email-worker-retry.test.ts` (new), plus changes to `apps/api/test/identity/email-transports.test.ts`, `apps/api/test/foundation/env.test.ts`, `apps/api/test/foundation/logger.test.ts`, `apps/api/test/foundation/graceful-shutdown.test.ts`, `apps/api/test/identity/migration.test.ts` (modified).
+
+**Logic**
+Retry scheduling moves from worker memory to the database, so every worker sees the same schedule
+and a row can never burn its 5 attempts in seconds when several workers poll it. The remaining
+changes close the smaller gaps the Block 3 architecture review listed.
+
+**Data model**
+- `email_outbox.next_attempt_at timestamptz null` (no default; null means due now).
+- Index `email_outbox_pending_idx` on `email_outbox(created_at)` where `sent_at is null`, replacing the partial index on `sent_at`.
+
+**Error handling**
+- Transport failure or poison row — `attempts + 1` and `next_attempt_at` set in one statement, only while `sent_at is null`.
+- Failure update matches no row (another worker already sent or dropped it) — logged at debug, nothing scheduled.
+- Resend timeout — request aborted, counted as a transport failure.
+- `EMAIL_PROVIDER=resend` outside production — startup fails with a configuration error.
+- Shutdown that does not finish in 10 s, or a second signal — process exits with code 1.
+
+**Required tests**
+- [ ] with two workers polling, a failed row is not retried before its `next_attempt_at` — sad path, validates NFR-09
+- [ ] after a failure, `attempts` and `next_attempt_at` are updated together, and after 5 failures the row is failed permanently — sad path
+- [ ] the failure update on a row that another worker already sent changes nothing and schedules nothing — sad path
+- [ ] a Resend call that exceeds the timeout is aborted through its signal and sends the outbox row id as the idempotency key — sad path
+- [ ] `EMAIL_PROVIDER=resend` with `NODE_ENV` other than production fails to start — sad path
+- [ ] a log field named `to` in an unrelated object is kept, while `toEmail`, `to_email` and `message.to` are redacted — sad path
+- [ ] a second shutdown signal and a close that exceeds 10 s both exit with code 1 — sad path
+- [ ] migration 0002 applies, rolls back and re-applies — foundation
+
+**Completion criterion**
+All tests above pass; `pnpm db:migrate` applies `0002_outbox_retry.sql`; the worker keeps no retry
+state in memory.
+
 ## Final verification
 - `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm e2e` pass in CI.
 - Every FR-01..FR-11 and AC-01..AC-22 of the PRD maps to a passing test listed above.
@@ -571,3 +616,5 @@ screen renders in `/es` and `/en`.
 ## Decision log
 - 2026-09-26: Package manager pinned to pnpm 11 (user decision, corrective loop from CODE); local PostgreSQL exposed on host port 5434.
 - 2026-09-26: Email tokens are issued by the worker at send time; the outbox never stores a token (user decision, option A, corrective loop from CODE after the Block 2 review). Review findings carried in: atomic refresh rotation (Block 4), record-first rate limiting, `AttemptPurger` port, `auth_attempts(window_start)` index, hasher and HIBP error handling, typed responses (Block 3).
+- 2026-09-26: Block 3 as built (reviewed and accepted): unit-of-work port and adapter, `auth-context.ts`, `email-transport.ts` and `graceful-shutdown.ts` added; Zod password minimum is 1 so short passwords return `PASSWORD_TOO_SHORT` from the domain; `EMAIL_FROM` env (required with Resend); `EMAIL_PROVIDER` required; outbox rows lose `to_email` when sent or failed and are deleted after 7 days; per-user advisory lock when issuing email tokens; delivery is at-least-once (a send can succeed and its commit fail, producing a second email whose first link is dead); token rows stay locked while an email is being sent (a concurrent verify waits up to the transport timeout).
+- 2026-09-26: Block 8 added (corrective loop from CODE after the Block 3 review): retry schedule stored in `email_outbox.next_attempt_at` so several workers share it.

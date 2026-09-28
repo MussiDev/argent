@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01a.md |
 | Tier | FEATURE |
 | Date | 2026-09-26 |
-| Spec loops | 6 |
-| Loops since last human decision | 0 |
+| Spec loops | 7 |
+| Loops since last human decision | 1 |
 
 ## Summary
 First code in the repository. Block 1 lays the pnpm monorepo declared in `AGENTS.md` (Next.js 16
@@ -592,7 +592,8 @@ Supports FR-02 and FR-04 (delivery of verification and reset links) when several
 - `apps/api/drizzle/0003_outbox_retry.sql` (new, generated), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0003_snapshot.json` (new, generated).
 - `apps/api/drizzle/rollback/0003_outbox_retry.down.sql` (new) — drops the column and the new index, restores the previous index, deletes the migration row.
 - `apps/api/src/identity/infrastructure/email/email-worker.ts` (modified) — due rows are `next_attempt_at is null or next_attempt_at <= now`; each failure sets `next_attempt_at` (30 s, 90 s, 210 s, 450 s) in the same update that increments `attempts`; the in-memory retry map is removed; the failure update only matches rows with `sent_at is null`, and a missed match is logged at debug without scheduling anything.
-- `apps/api/src/identity/infrastructure/email/transports/resend-transport.ts` (modified) — the timed-out request is aborted with an `AbortSignal`; the outbox row id is sent as the Resend idempotency key.
+- `apps/api/src/identity/infrastructure/email/transports/resend-transport.ts` (modified) — the timed-out request is aborted with an `AbortSignal`; the Resend idempotency key is `<outbox row id>:<attempt number>`, one per attempt, because each attempt carries a new token (a different body) and Resend answers 409 `invalid_idempotent_request` when a key is reused with a different payload.
+- `apps/api/src/identity/infrastructure/email/email-transport.ts` (modified) — `EmailMessage.idempotencyKey` (required).
 - `apps/api/src/shared/config/env.ts` (modified) — `EMAIL_PROVIDER=resend` requires `NODE_ENV=production` (the Resend SDK prints raw provider errors outside production).
 - `apps/api/src/shared/logging/logger.ts` (modified) — redaction targets `toEmail`, `to_email` and `message.to` instead of every key named `to`.
 - `apps/api/src/shared/process/graceful-shutdown.ts` (modified) — a second signal exits with code 1; closing the server and the pool has a 10 s deadline.
@@ -618,7 +619,7 @@ changes close the smaller gaps the Block 3 architecture review listed.
 - [ ] with two workers polling, a failed row is not retried before its `next_attempt_at` — sad path, validates NFR-09
 - [ ] after a failure, `attempts` and `next_attempt_at` are updated together, and after 5 failures the row is failed permanently — sad path
 - [ ] the failure update on a row that another worker already sent changes nothing and schedules nothing — sad path
-- [ ] a Resend call that exceeds the timeout is aborted through its signal and sends the outbox row id as the idempotency key — sad path
+- [ ] a Resend call that exceeds the timeout is aborted through its signal, and each attempt of the same row sends a different idempotency key (`<row id>:<attempt>`) — sad path
 - [ ] `EMAIL_PROVIDER=resend` with `NODE_ENV` other than production fails to start — sad path
 - [ ] a log field named `to` in an unrelated object is kept, while `toEmail`, `to_email` and `message.to` are redacted — sad path
 - [ ] a second shutdown signal and a close that exceeds 10 s both exit with code 1 — sad path
@@ -643,3 +644,4 @@ state in memory.
 - 2026-09-26: Block 4 as built (reviewed and accepted in 3 rounds): sign-in reserves one attempt unit per account and per IP before Argon2id and refunds it on success and on 429, into the exact window it was reserved in (`AttemptLimiter.record` returns its `windowStart`; `release(policy, key, windowStart)`); a failed refund after a correct password is reported and the sign-in completes; `AuthContext` is `{ userId, sessionId, emailVerified }`; the identity module is built first and hands `requireSession` to other modules' router factories; access tokens carry issuer `argent-api` and audience `argent-access`; only a rotated refresh token counts as reuse; the latency benchmark lives in `apps/api/test/perf/auth-latency.perf.test.ts` and runs in its own `pnpm test:perf` script and CI job; `UNKNOWN_IP` lives in `application/client-ip.ts`. Accepted tradeoff: more than 5 simultaneous in-flight sign-ins to one account get 429 even with the right password.
 - 2026-09-26: Block 5 limits: 5 reset requests per IP per hour and 5 per normalized email per hour (spec gave no number; aligned with registration).
 - 2026-09-26: Credentials version added to Block 5 (user decision after the Block 5 architecture review): a reset invalidates sessions created concurrently with it and queued reset emails; migration 0002 is `0002_credentials_version`, and Block 8's migration becomes `0003_outbox_retry`.
+- 2026-09-28: Block 8 idempotency key changed from the outbox row id to `<row id>:<attempt>` (corrective loop from CODE). Resend keeps keys for 24 h and rejects a reused key with a different payload with 409 `invalid_idempotent_request`; every attempt issues a new token, so a per-row key would make every retry after a timed-out first send fail and leave the user with a dead link. Source: resend.com/docs/dashboard/emails/idempotency-keys. Block 8 also fixes the flaky `migration.test.ts` teardown by resetting schemas instead of dropping the database.

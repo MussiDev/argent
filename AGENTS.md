@@ -34,6 +34,7 @@ payments — usable offline at the moment of paying.
 | Install | `pnpm install --frozen-lockfile` |
 | Lint | `pnpm lint` |
 | Typecheck | `pnpm typecheck` |
+| Audit | `pnpm audit --prod --audit-level high` |
 
 ## Architecture conventions
 

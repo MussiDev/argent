@@ -92,6 +92,19 @@
 | R-35 | race creating two users or two identities for one Google account | T | L | M | unique constraints; one retry, then fail closed |
 | R-36 | third-party script in the web app reads session context | I | L | H | no Google script; top-level redirect flow; CSP unchanged |
 | R-37 | a Google account whose verified email is not authoritative (for example, created while someone else controlled the mailbox) takes over or keeps access to the account of the current mailbox owner | E | L | H | linking and superseding only for `gmail.com` or `hd` accounts (PRD AC-09); non-authoritative identities flagged at link time and deleted by a password reset, which proves current control of the mailbox |
+| R-38 | someone registers the victim's `gmail.com` address with a password, the victim clicks the unsolicited verification link, then signs in with Google and the account is linked (AC-06) while the other person's password still works | E | L | H | accepted, see below |
+| R-39 | a verified but non-authoritative Google account creates the account first; the real mailbox owner registering later gets the generic "verification sent" answer and no email, and is not told to reset the password (a reset would remove that Google link, R-37) | E | L | M | accepted, see below |
+
+## Accepted risks
+### R-38
+- **Accepted by:** project owner (user), in the session of 2026-09-28, when approving the DISC-001-01b spec after architecture review round 2.
+- **Justification:** the victim must confirm a registration they never made by clicking an unsolicited verification email; the gap belongs to the DISC-001-01a verification flow, not to Google linking, and closing it (for example, clearing the password or notifying the mailbox on link) changes 01a flows that fit the hardening ticket better. The product has about 10 users.
+- **Review conditions:** in the identity hardening follow-up ticket, or before opening registration to more than a few hundred users, whichever comes first.
+
+### R-39
+- **Accepted by:** project owner (user), in the session of 2026-09-28, when approving the DISC-001-01b spec after architecture review round 2.
+- **Justification:** it needs a Google account verified for an address its holder no longer controls, for a domain that is neither Gmail nor Workspace; the real owner can recover the account with a password reset, which also removes that Google link (R-37).
+- **Review conditions:** in the identity hardening follow-up ticket (for example, telling a registering user to reset when the email already exists), or when the user base grows.
 
 ## Supply chain
 No new runtime dependency: ID tokens are verified with `jose` (already pinned in `pnpm-lock.yaml`) and the token endpoint is called with the platform `fetch`. New external service: Google Identity (OAuth 2.0 / OpenID Connect), reached only from the API with a confidential client; the client secret is an environment secret with access limited to the API deployment. Tests use a local fake OIDC server, never Google.

@@ -5,7 +5,7 @@
 | Ticket | DISC-001-01b |
 | Tracker | none |
 | Date | 2026-09-26 |
-| PRD loops | 2 |
+| PRD loops | 3 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -31,8 +31,11 @@ be linkable, never duplicated. Split from `prd-DISC-001-01.md` (2026-09-26, user
   Google email when Google reports that email as verified, instead of creating a duplicate account.
 - FR-05: The system must, when it links a Google identity to an account whose email is unverified,
   remove that account's password, end all of its sessions and mark its email as verified.
-- FR-06: The system must refuse to link or create an account when Google reports the email as
-  unverified and an account with that email already exists.
+- FR-06: The system must refuse to create or link an account when Google reports the email as
+  unverified.
+- FR-07: The system must link a Google identity to an existing account, or supersede it, only when
+  Google is authoritative for the email: a `gmail.com` address or a Google Workspace account
+  (identified by the `hd` claim).
 
 ## Non-Functional Requirements
 - NFR-01: Handling the Google OAuth callback must answer in < 500 ms at p95, measured server-side
@@ -42,7 +45,8 @@ be linkable, never duplicated. Split from `prd-DISC-001-01.md` (2026-09-26, user
   before an account is created, linked or signed in.
 
 ## Acceptance Criteria
-- AC-01 (FR-01): WHEN a visitor completes Google sign-in with an email that has no account, THE
+- AC-01 (FR-01): WHEN a visitor completes Google sign-in with an email that Google reports as
+  verified and that has no account, THE
   system SHALL create an account linked to that Google identity and start a session.
 - AC-02 (FR-01): IF the Google OAuth flow fails or is cancelled, THEN THE system SHALL return to
   the sign-in screen with the message "Google sign-in failed. Please try again." and
@@ -53,17 +57,22 @@ be linkable, never duplicated. Split from `prd-DISC-001-01.md` (2026-09-26, user
 - AC-04 (FR-03): WHEN an account is created through Google and Google reports
   `email_verified = true`, THE system SHALL mark the email as verified and SHALL not send a
   verification email.
-- AC-05 (FR-03): IF Google reports `email_verified = false` for a new account, THEN THE system
-  SHALL create the account as unverified and send a verification email.
-- AC-06 (FR-04): WHEN a user signs in with Google, Google reports `email_verified = true` and the
-  email matches an existing verified account, THE system SHALL link the Google identity to that
+- AC-05 (FR-06): IF Google reports `email_verified = false` and no account has that email, THEN
+  THE system SHALL create no account and SHALL return to the sign-in screen with the message
+  "Google sign-in failed. Please try again."
+- AC-06 (FR-04): WHEN a user signs in with Google, Google reports `email_verified = true`, Google
+  is authoritative for the email and the email matches an existing verified account, THE system SHALL link the Google identity to that
   account and start a session on it.
-- AC-07 (FR-05): IF Google reports `email_verified = true` and the email matches an existing
-  account whose email is unverified, THEN THE system SHALL remove that account's password, end all
+- AC-07 (FR-05): IF Google reports `email_verified = true`, Google is authoritative for the email
+  and the email matches an existing account whose email is unverified, THEN THE system SHALL remove that account's password, end all
   of its sessions, mark its email as verified, link the Google identity and start a session on it,
   and the previous password SHALL no longer sign in.
 - AC-08 (FR-06): IF Google reports `email_verified = false` and the email matches an existing
   account, THEN THE system SHALL not link the Google identity, SHALL create no account and SHALL
+  return to the sign-in screen with the message "Google sign-in failed. Please try again."
+- AC-09 (FR-07): IF Google reports `email_verified = true` for an email that matches an existing
+  account and Google is not authoritative for it (neither a `gmail.com` address nor an `hd` claim),
+  THEN THE system SHALL not link the Google identity, SHALL leave the account unchanged and SHALL
   return to the sign-in screen with the message "Google sign-in failed. Please try again."
 
 ## Out of Scope
@@ -73,7 +82,10 @@ be linkable, never duplicated. Split from `prd-DISC-001-01.md` (2026-09-26, user
 
 ## Risks and Mitigations
 - **Account takeover through linking** → link only when Google reports the email as verified
-  (AC-06, AC-08).
+  and is authoritative for it (AC-06, AC-08, AC-09).
+- **Pre-hijacking through an unverified Google email** (an attacker's Google account claims the
+  victim's email unverified, and the resulting account keeps the attacker's Google link after the
+  victim verifies it) → an unverified Google email never creates or links an account (AC-05).
 - **Account pre-hijacking** (someone registers the victim's email with a password before the victim
   signs in with Google) → a Google-verified email supersedes the unverified account: its password
   and sessions are removed before linking (AC-07).
@@ -96,3 +108,10 @@ be linkable, never duplicated. Split from `prd-DISC-001-01.md` (2026-09-26, user
   keeps working. Replaced by FR-05/AC-07 (a Google-verified email supersedes the unverified account,
   removing its password and sessions) and FR-06/AC-08 (an unverified Google email never links).
   FR-04/AC-06 now require Google's `email_verified = true`.
+- 2026-09-28: Second corrective loop from PLAN (user decision, after the architecture review of the
+  spec). The former AC-05 created an unverified account from an unverified Google email; an
+  attacker's Google account claiming the victim's email kept its link after the victim verified the
+  email and reset the password. Now an unverified Google email never creates or links (FR-06,
+  AC-05). Google documents `email_verified` as authoritative only for `gmail.com` and Workspace
+  (`hd`) accounts, so linking and superseding require one of those (FR-07, AC-09); new accounts
+  with a verified email of another domain are still created.

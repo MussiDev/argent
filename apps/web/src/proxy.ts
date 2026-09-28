@@ -2,6 +2,7 @@ import createMiddleware from 'next-intl/middleware';
 import type { NextRequest } from 'next/server';
 import { routing } from './i18n/routing';
 import { contentSecurityPolicy } from './lib/content-security-policy';
+import { referrerPolicyFor } from './lib/referrer-policy';
 import { parseWebEnv } from './lib/web-env';
 
 // Parsed when the proxy module loads, so a production server without API_ORIGIN fails at startup.
@@ -23,6 +24,8 @@ export default function proxy(request: NextRequest) {
 
   const response = handleI18nRouting(request);
   response.headers.set('Content-Security-Policy', csp);
+  const referrerPolicy = referrerPolicyFor(request.nextUrl.pathname);
+  if (referrerPolicy) response.headers.set('Referrer-Policy', referrerPolicy);
   return response;
 }
 

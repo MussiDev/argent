@@ -6,5 +6,90 @@
   "home": {
     "title": "Argent",
     "tagline": "Your accounts, expenses and savings in pesos and dollars, in one place."
+  },
+  "app": {
+    "loading": "Loading…",
+    "retry": "Try again"
+  },
+  "auth": {
+    "fields": {
+      "email": "Email",
+      "password": "Password",
+      "newPassword": "New password"
+    },
+    "passwordHint": "Use at least 10 characters.",
+    "register": {
+      "title": "Create your account",
+      "description": "Manage your pesos and dollars in one place.",
+      "submit": "Create account",
+      "pending": "Creating account…",
+      "haveAccount": "Already have an account?",
+      "signInLink": "Sign in"
+    },
+    "signIn": {
+      "title": "Sign in",
+      "description": "Enter your email and password.",
+      "submit": "Sign in",
+      "pending": "Signing in…",
+      "forgotPassword": "Forgot your password?",
+      "noAccount": "Don't have an account?",
+      "registerLink": "Create an account"
+    },
+    "forgotPassword": {
+      "title": "Reset your password",
+      "description": "Enter your email and we will send you a link to choose a new password.",
+      "submit": "Send link",
+      "pending": "Sending…",
+      "sent": "If an account exists for that email, we sent a link to reset the password. It expires in 60 minutes.",
+      "backToSignIn": "Back to sign in"
+    },
+    "resetPassword": {
+      "title": "Choose a new password",
+      "description": "Your new password ends every open session.",
+      "submit": "Save password",
+      "pending": "Saving…",
+      "successTitle": "Password updated",
+      "success": "Your password was changed and every open session was closed. Sign in with the new password.",
+      "signInLink": "Sign in",
+      "requestNewLink": "Request a new link"
+    },
+    "verifyEmail": {
+      "title": "Email verification",
+      "verifying": "Verifying your email…",
+      "verifiedTitle": "Email verified",
+      "verified": "Your email is verified. You can now use Argent.",
+      "continue": "Continue",
+      "resend": "Send a new link",
+      "resending": "Sending…",
+      "resent": "We sent a new link to your email."
+    },
+    "checkYourEmail": {
+      "title": "Check your email",
+      "description": "We sent a verification link to your email. Open it to activate your account; it expires in 24 hours.",
+      "resend": "Resend email",
+      "resending": "Sending…",
+      "resent": "We sent a new link to your email.",
+      "backToSignIn": "Back to sign in"
+    },
+    "signOut": {
+      "label": "Sign out",
+      "pending": "Signing out…"
+    }
+  },
+  "errors": {
+    "invalidCredentials": "Invalid email or password",
+    "passwordTooShort": "The password must be at least 10 characters long.",
+    "passwordBreached": "This password appeared in a data breach. Choose a different one.",
+    "passwordTooLong": "The password can be at most 128 characters long.",
+    "passwordRequired": "Enter a password.",
+    "emailRequired": "Enter your email.",
+    "emailTooLong": "The email is too long.",
+    "tokenInvalid": "This link is invalid or has expired.",
+    "retryLater": "Too many attempts or the service is busy. Try again in a few minutes.",
+    "network": "We could not connect. Check your connection and try again.",
+    "unexpected": "Something went wrong. Try again.",
+    "unauthenticated": "Your session has ended. Sign in again.",
+    "emailNotVerified": "Verify your email to continue.",
+    "validationFailed": "Check the data you entered and try again."
   }
 }

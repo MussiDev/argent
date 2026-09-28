@@ -1,0 +1,16 @@
+{
+  "verification": {
+    "subject": "Confirm your email for Argent",
+    "intro": "Hi. To finish creating your Argent account, confirm your email address.",
+    "action": "Confirm email",
+    "expiry": "The link expires in 24 hours and works only once.",
+    "ignore": "If you did not create an Argent account, ignore this message."
+  },
+  "password_reset": {
+    "subject": "Reset your Argent password",
+    "intro": "Hi. We received a request to reset the password of your Argent account.",
+    "action": "Choose a new password",
+    "expiry": "The link expires in 60 minutes and works only once.",
+    "ignore": "If you did not ask for it, ignore this message: your password stays the same."
+  }
+}

@@ -1,0 +1,41 @@
+import { z } from 'zod';
+
+export const ERROR_CODES = [
+  'VALIDATION_FAILED',
+  'UNAUTHENTICATED',
+  'EMAIL_NOT_VERIFIED',
+  'NOT_FOUND',
+  'RATE_LIMITED',
+  'PASSWORD_TOO_SHORT',
+  'PASSWORD_BREACHED',
+  'PASSWORD_CHECK_UNAVAILABLE',
+  'TOKEN_INVALID',
+  'INVALID_CREDENTIALS',
+  'INTERNAL',
+] as const;
+
+export const errorCodeSchema = z.enum(ERROR_CODES);
+
+export type ErrorCode = z.infer<typeof errorCodeSchema>;
+
+/** Body of every API error response. `fields` lists failing input paths, never their values. */
+export const errorResponseSchema = z.object({
+  code: errorCodeSchema,
+  fields: z.array(z.string()).optional(),
+});
+
+export type ErrorResponse = z.infer<typeof errorResponseSchema>;
+
+/**
+ * Base class for typed application and domain errors. The API error handler maps `code` to an
+ * HTTP status; the web client maps it to a message key.
+ */
+export class AppError extends Error {
+  readonly code: ErrorCode;
+
+  constructor(code: ErrorCode, message: string = code) {
+    super(message);
+    this.name = new.target.name;
+    this.code = code;
+  }
+}

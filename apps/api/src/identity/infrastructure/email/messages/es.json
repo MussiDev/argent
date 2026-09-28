@@ -1,0 +1,16 @@
+{
+  "verification": {
+    "subject": "Confirmá tu email en Argent",
+    "intro": "Hola. Para terminar de crear tu cuenta de Argent, confirmá tu dirección de email.",
+    "action": "Confirmar email",
+    "expiry": "El enlace vence en 24 horas y sirve una sola vez.",
+    "ignore": "Si no creaste una cuenta en Argent, ignorá este mensaje."
+  },
+  "password_reset": {
+    "subject": "Restablecé tu contraseña de Argent",
+    "intro": "Hola. Recibimos un pedido para restablecer la contraseña de tu cuenta de Argent.",
+    "action": "Elegir una contraseña nueva",
+    "expiry": "El enlace vence en 60 minutos y sirve una sola vez.",
+    "ignore": "Si no lo pediste, ignorá este mensaje: tu contraseña no cambia."
+  }
+}

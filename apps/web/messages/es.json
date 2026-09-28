@@ -1,0 +1,95 @@
+{
+  "metadata": {
+    "title": "Argent",
+    "description": "Tus finanzas personales y compartidas, en pesos y dólares, incluso sin conexión."
+  },
+  "home": {
+    "title": "Argent",
+    "tagline": "Tus cuentas, gastos y ahorros en pesos y dólares, en un solo lugar."
+  },
+  "app": {
+    "loading": "Cargando…",
+    "retry": "Reintentar"
+  },
+  "auth": {
+    "fields": {
+      "email": "Correo electrónico",
+      "password": "Contraseña",
+      "newPassword": "Nueva contraseña"
+    },
+    "passwordHint": "Usa al menos 10 caracteres.",
+    "register": {
+      "title": "Crea tu cuenta",
+      "description": "Administra tus pesos y dólares en un solo lugar.",
+      "submit": "Crear cuenta",
+      "pending": "Creando cuenta…",
+      "haveAccount": "¿Ya tienes una cuenta?",
+      "signInLink": "Inicia sesión"
+    },
+    "signIn": {
+      "title": "Iniciar sesión",
+      "description": "Ingresa tu correo electrónico y tu contraseña.",
+      "submit": "Iniciar sesión",
+      "pending": "Iniciando sesión…",
+      "forgotPassword": "¿Olvidaste tu contraseña?",
+      "noAccount": "¿No tienes una cuenta?",
+      "registerLink": "Crea una cuenta"
+    },
+    "forgotPassword": {
+      "title": "Restablece tu contraseña",
+      "description": "Ingresa tu correo electrónico y te enviaremos un enlace para elegir una nueva contraseña.",
+      "submit": "Enviar enlace",
+      "pending": "Enviando…",
+      "sent": "Si existe una cuenta con ese correo, te enviamos un enlace para restablecer la contraseña. Vence en 60 minutos.",
+      "backToSignIn": "Volver a iniciar sesión"
+    },
+    "resetPassword": {
+      "title": "Elige una nueva contraseña",
+      "description": "La nueva contraseña cierra todas las sesiones abiertas.",
+      "submit": "Guardar contraseña",
+      "pending": "Guardando…",
+      "successTitle": "Contraseña actualizada",
+      "success": "Cambiamos tu contraseña y cerramos todas las sesiones abiertas. Inicia sesión con la nueva contraseña.",
+      "signInLink": "Iniciar sesión",
+      "requestNewLink": "Solicitar un nuevo enlace"
+    },
+    "verifyEmail": {
+      "title": "Verificación de correo",
+      "verifying": "Verificando tu correo…",
+      "verifiedTitle": "Correo verificado",
+      "verified": "Tu correo está verificado. Ya puedes usar Argent.",
+      "continue": "Continuar",
+      "resend": "Enviar un nuevo enlace",
+      "resending": "Enviando…",
+      "resent": "Te enviamos un nuevo enlace a tu correo."
+    },
+    "checkYourEmail": {
+      "title": "Revisa tu correo",
+      "description": "Te enviamos un enlace de verificación. Ábrelo para activar tu cuenta; vence en 24 horas.",
+      "resend": "Reenviar correo",
+      "resending": "Enviando…",
+      "resent": "Te enviamos un nuevo enlace a tu correo.",
+      "backToSignIn": "Volver a iniciar sesión"
+    },
+    "signOut": {
+      "label": "Cerrar sesión",
+      "pending": "Cerrando sesión…"
+    }
+  },
+  "errors": {
+    "invalidCredentials": "Email o contraseña incorrectos",
+    "passwordTooShort": "La contraseña debe tener al menos 10 caracteres.",
+    "passwordBreached": "Esta contraseña apareció en una filtración de datos. Elige otra.",
+    "passwordTooLong": "La contraseña puede tener como máximo 128 caracteres.",
+    "passwordRequired": "Ingresa una contraseña.",
+    "emailRequired": "Ingresa tu correo electrónico.",
+    "emailTooLong": "El correo electrónico es demasiado largo.",
+    "tokenInvalid": "Este enlace no es válido o ya venció.",
+    "retryLater": "Demasiados intentos o el servicio está ocupado. Vuelve a intentarlo en unos minutos.",
+    "network": "No pudimos conectarnos. Revisa tu conexión y vuelve a intentarlo.",
+    "unexpected": "Algo salió mal. Vuelve a intentarlo.",
+    "unauthenticated": "Tu sesión terminó. Vuelve a iniciar sesión.",
+    "emailNotVerified": "Verifica tu correo para continuar.",
+    "validationFailed": "Revisa los datos ingresados y vuelve a intentarlo."
+  }
+}

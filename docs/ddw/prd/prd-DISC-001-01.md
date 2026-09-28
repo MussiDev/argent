@@ -10,8 +10,8 @@
 
 | Sub-ticket | Title | PRD | Dependencies | Status |
 |---|---|---|---|---|
-| DISC-001-01a | Email & Password Authentication (+ project foundation) | prd-DISC-001-01a.md | none | active |
-| DISC-001-01b | Google Sign-In | prd-DISC-001-01b.md | depends on a | pending |
+| DISC-001-01a | Email & Password Authentication (+ project foundation) | prd-DISC-001-01a.md | none | done — draft PR #2; 01b branches off this branch until #2 merges |
+| DISC-001-01b | Google Sign-In | prd-DISC-001-01b.md | depends on a | active |
 | DISC-001-01c | Two-Factor Authentication | prd-DISC-001-01c.md | depends on a | pending |
 | DISC-001-01d | Profile, Preferences & Account Deletion | prd-DISC-001-01d.md | depends on a; shows 2FA status from c | pending |
 

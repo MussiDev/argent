@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Email } from '../../src/identity/domain/email';
+import { DrizzleUserRepository } from '../../src/identity/infrastructure/db/drizzle-user-repository';
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
 import {
   createIdentityHarness,
@@ -28,6 +30,7 @@ afterAll(async () => {
 
 const EMAIL = 'ana@example.com';
 const PASSWORD = 'a long enough passphrase';
+const GOOGLE_EMAIL = 'google@gmail.com';
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
 
 /** Moves the clock to the start of the next 15-minute window, so a loop never straddles two. */
@@ -118,6 +121,35 @@ describe('POST /auth/sign-in', () => {
     expect(parseSetCookies(wrongPassword).size).toBe(0);
     expect(parseSetCookies(unknownEmail).size).toBe(0);
     expect(await sessionRows()).toEqual([]);
+  });
+
+  it('answers a password sign-in for a password-less (Google) user like a wrong password, keeping the reserved units', async () => {
+    const harness = createIdentityHarness(connection, { realSessions: true });
+    await seedUser(connection, { email: EMAIL, password: PASSWORD });
+    await new DrizzleUserRepository(connection.db).create({
+      email: Email.parse(GOOGLE_EMAIL),
+      passwordHash: null,
+      emailVerifiedAt: new Date(),
+      defaultRateType: 'mep',
+      displayCurrency: 'ARS',
+      timeZone: 'America/Cordoba',
+      language: 'es',
+    });
+
+    const wrongPassword = await signIn(harness.app, EMAIL, 'not the right passphrase');
+    const passwordLess = await signIn(harness.app, GOOGLE_EMAIL, PASSWORD);
+
+    expect(passwordLess.status).toBe(401);
+    expect(passwordLess.body).toEqual({ code: 'INVALID_CREDENTIALS' });
+    expect(passwordLess.text).toBe(wrongPassword.text);
+    expect(passwordLess.headers['content-type']).toBe(wrongPassword.headers['content-type']);
+    expect(parseSetCookies(passwordLess).size).toBe(0);
+    expect(await sessionRows()).toEqual([]);
+    const reserved = await connection.pool.query<{ count: number }>(
+      "select count from auth_attempts where kind = 'sign_in_account' and key = $1",
+      [GOOGLE_EMAIL],
+    );
+    expect(reserved.rows).toEqual([{ count: 1 }]);
   });
 
   it('returns 429 on the 6th failure for one account within 15 min, identical for a non-existent email (NFR-03)', async () => {

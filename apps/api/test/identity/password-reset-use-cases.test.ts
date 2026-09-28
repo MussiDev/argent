@@ -10,6 +10,7 @@ import type {
 import type { OneTimeTokenRepository } from '../../src/identity/application/ports/one-time-token-repository';
 import type { SessionRepository } from '../../src/identity/application/ports/session-repository';
 import type { UnitOfWork } from '../../src/identity/application/ports/unit-of-work';
+import type { UserIdentityRepository } from '../../src/identity/application/ports/user-identity-repository';
 import type { User, UserRepository } from '../../src/identity/application/ports/user-repository';
 import {
   RequestPasswordReset,
@@ -166,6 +167,7 @@ function buildConfirm(options: { consumes?: boolean; breachCheck?: () => Promise
         users,
         oneTimeTokens,
         sessions,
+        identities: {} as UserIdentityRepository,
         emailSender: new InMemoryEmailSender(),
       });
       committed = true;

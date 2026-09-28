@@ -17,15 +17,20 @@ import type { AttemptPurger } from './application/ports/attempt-purger';
 import type { BreachedPasswordChecker } from './application/ports/breached-password-checker';
 import type { Clock } from './application/ports/clock';
 import type { EmailSender } from './application/ports/email-sender';
+import type { OAuthStatePurger } from './application/ports/oauth-state-purger';
+import type { OAuthStateRepository } from './application/ports/oauth-state-repository';
 import type { OneTimeTokenRepository } from './application/ports/one-time-token-repository';
 import type { PasswordHasher } from './application/ports/password-hasher';
 import type { SessionRepository } from './application/ports/session-repository';
 import type { TokenGenerator } from './application/ports/token-generator';
 import type { UnitOfWork } from './application/ports/unit-of-work';
+import type { UserIdentityRepository } from './application/ports/user-identity-repository';
 import type { UserRepository } from './application/ports/user-repository';
+import { DrizzleOAuthStateRepository } from './infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from './infrastructure/db/drizzle-one-time-token-repository';
 import { DrizzleSessionRepository } from './infrastructure/db/drizzle-session-repository';
 import { DrizzleUnitOfWork } from './infrastructure/db/drizzle-unit-of-work';
+import { DrizzleUserIdentityRepository } from './infrastructure/db/drizzle-user-identity-repository';
 import { DrizzleUserRepository } from './infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from './infrastructure/db/postgres-attempt-limiter';
 import type { IdentityDb } from './infrastructure/db/schema';
@@ -56,11 +61,14 @@ export * from './application/ports/attempt-purger';
 export * from './application/ports/breached-password-checker';
 export * from './application/ports/clock';
 export * from './application/ports/email-sender';
+export * from './application/ports/oauth-state-purger';
+export * from './application/ports/oauth-state-repository';
 export * from './application/ports/one-time-token-repository';
 export * from './application/ports/password-hasher';
 export * from './application/ports/session-repository';
 export * from './application/ports/token-generator';
 export * from './application/ports/unit-of-work';
+export * from './application/ports/user-identity-repository';
 export * from './application/ports/user-repository';
 export type { IdentityDb } from './infrastructure/db/schema';
 export { systemClock } from './infrastructure/system-clock';
@@ -82,6 +90,9 @@ export interface IdentityInfrastructure {
   users: UserRepository;
   sessions: SessionRepository;
   oneTimeTokens: OneTimeTokenRepository;
+  identities: UserIdentityRepository;
+  oauthStates: OAuthStateRepository;
+  oauthStatePurger: OAuthStatePurger;
   attemptLimiter: AttemptLimiter;
   attemptPurger: AttemptPurger;
   passwordHasher: PasswordHasher;
@@ -99,11 +110,15 @@ export function createIdentityInfrastructure({
   clock = systemClock,
 }: IdentityInfrastructureDependencies): IdentityInfrastructure {
   const attemptLimiter = new PostgresAttemptLimiter(db, clock);
+  const oauthStates = new DrizzleOAuthStateRepository(db);
   return {
     clock,
     users: new DrizzleUserRepository(db),
     sessions: new DrizzleSessionRepository(db),
     oneTimeTokens: new DrizzleOneTimeTokenRepository(db),
+    identities: new DrizzleUserIdentityRepository(db),
+    oauthStates,
+    oauthStatePurger: oauthStates,
     attemptLimiter,
     attemptPurger: attemptLimiter,
     passwordHasher: new Argon2idPasswordHasher({ logger }),
@@ -261,7 +276,10 @@ export interface EmailWorkerFactoryDependencies {
   pollIntervalMs?: number;
 }
 
-/** The outbox worker, with the PostgreSQL attempt purger and the crypto token generator. */
+/**
+ * The outbox worker, with the PostgreSQL attempt and OAuth-state purgers and the crypto token
+ * generator.
+ */
 export function createEmailWorker({
   db,
   env,
@@ -275,6 +293,7 @@ export function createEmailWorker({
     transport,
     tokenGenerator: new CryptoTokenGenerator(),
     attemptPurger: new PostgresAttemptLimiter(db, clock),
+    oauthStatePurger: new DrizzleOAuthStateRepository(db),
     clock,
     logger,
     webBaseUrl: env.WEB_BASE_URL,

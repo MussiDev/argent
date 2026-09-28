@@ -6,7 +6,8 @@ export interface User {
   id: string;
   /** Always lower-cased. */
   email: string;
-  passwordHash: string;
+  /** Null for accounts created through Google that never set a password. */
+  passwordHash: string | null;
   emailVerifiedAt: Date | null;
   defaultRateType: RateType;
   displayCurrency: DisplayCurrency;
@@ -24,7 +25,9 @@ export interface User {
 
 export interface NewUser {
   email: Email;
-  passwordHash: string;
+  passwordHash: string | null;
+  /** Set when the email is already proven, e.g. verified by Google (PRD 01b FR-03). */
+  emailVerifiedAt?: Date;
   defaultRateType: RateType;
   displayCurrency: DisplayCurrency;
   timeZone: string;
@@ -42,4 +45,10 @@ export interface UserRepository {
    * in one statement.
    */
   changePassword(id: string, passwordHash: string, at: Date): Promise<void>;
+  /**
+   * For an account whose email is still unverified: removes the password, bumps
+   * `credentialsVersion`, and sets `passwordChangedAt` and `emailVerifiedAt` to `at`, in one
+   * statement. Resolves null, changing nothing, when the email is already verified.
+   */
+  supersedeUnverified(id: string, at: Date): Promise<User | null>;
 }

@@ -59,6 +59,7 @@ function buildSignIn(options: {
     findByEmail: () => Promise.resolve(user),
     markEmailVerified: () => Promise.resolve(),
     changePassword: () => Promise.resolve(),
+    supersedeUnverified: () => Promise.reject(new Error('unused')),
   };
   const passwordHasher: PasswordHasher = {
     hash: () => Promise.reject(new Error('unused')),

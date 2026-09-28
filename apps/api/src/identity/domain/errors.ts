@@ -46,6 +46,18 @@ export class DuplicateEmail extends Error {
   }
 }
 
+/**
+ * Raised by the identity repository when the external identity is already linked, or the user
+ * already has one of that provider. Not an `AppError`, like `DuplicateEmail`: the Google sign-in
+ * use case handles it, so if it ever escapes the error handler answers 500 `INTERNAL`.
+ */
+export class IdentityAlreadyLinked extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super('Identity already linked', options);
+    this.name = 'IdentityAlreadyLinked';
+  }
+}
+
 /** A verification or reset token that is unknown, expired, already used or of another purpose. */
 export class TokenInvalid extends AppError {
   constructor() {

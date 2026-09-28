@@ -31,6 +31,9 @@ payments — usable offline at the moment of paying.
 | Test runner | Vitest (unit/integration), Playwright (end-to-end, including offline flows) |
 | Linter / formatter | ESLint + Prettier |
 | Package manager | pnpm workspaces (monorepo) |
+| Install | `pnpm install --frozen-lockfile` |
+| Lint | `pnpm lint` |
+| Typecheck | `pnpm typecheck` |
 
 ## Architecture conventions
 

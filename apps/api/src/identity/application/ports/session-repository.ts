@@ -29,7 +29,8 @@ export interface SessionRepository {
   /**
    * Claims a refresh rotation: revokes `id` and records the session that replaced it, only if `id`
    * is not revoked yet. Atomic, so of two concurrent rotations of one session exactly one resolves
-   * true; false means the token was already used (reuse, threat R-15).
+   * true. False only means the session was already revoked: by a concurrent rotation (`replacedBy`
+   * set, reuse, threat R-15) or by a sign-out, sign-out-all or reset (no successor).
    */
   markReplaced(id: string, replacedBy: string, at: Date): Promise<boolean>;
   /** Revokes one session; already revoked sessions keep their original `revokedAt`. */

@@ -10,7 +10,14 @@ import { JoseAccessTokenIssuer } from '../../src/identity/infrastructure/securit
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
 import { createLogger } from '../../src/shared/logging/logger';
 import { createIdentityHarness, type IdentityHarness } from '../helpers/identity-harness';
-import { currentSession, refresh, seedUser, sessionFrom, signIn } from '../helpers/session-client';
+import {
+  currentSession,
+  refresh,
+  seedUser,
+  sessionFrom,
+  signIn,
+  signOut,
+} from '../helpers/session-client';
 import { testDatabaseUrl } from '../helpers/test-database';
 import { testEnv, trustedHeaders } from '../helpers/test-env';
 
@@ -193,5 +200,44 @@ describe('credentials version (AC-10)', () => {
     };
     expect((await currentSession(harness.app, successor)).status).toBe(401);
     expect((await refresh(harness.app, successor)).status).toBe(401);
+  });
+});
+
+describe('refresh racing a sign-out (FIX-001)', () => {
+  it('rejects (401) a refresh whose claim loses to a sign-out, without treating it as reuse', async () => {
+    const harness = createIdentityHarness(connection, { realSessions: true });
+    await seedUser(connection, { email: EMAIL, password: PASSWORD });
+    const cookies = sessionFrom(await signIn(harness.app, EMAIL, PASSWORD));
+    const { infrastructure, accessTokens } = adaptersFor(harness);
+    const claiming = latch();
+    const release = latch();
+    // Holds the refresh after it read the live session and before its rotation transaction starts.
+    const lateClaim: UnitOfWork = {
+      run: async (work) => {
+        claiming.open();
+        await release.promise;
+        return infrastructure.unitOfWork.run(work);
+      },
+    };
+    const refreshSession = new RefreshSession({
+      sessions: infrastructure.sessions,
+      users: infrastructure.users,
+      tokenGenerator: infrastructure.tokenGenerator,
+      accessTokens,
+      unitOfWork: lateClaim,
+      clock: harness.clock,
+    });
+
+    const racing = refreshSession.execute(cookies.refreshToken);
+    await claiming.promise;
+    expect((await signOut(harness.app, cookies)).status).toBe(204);
+    release.open();
+
+    expect(await racing).toEqual({ outcome: 'rejected' });
+    // The lost claim rolled back its successor; only the signed-out session remains.
+    const rows = await connection.pool.query<{ replaced_by: string | null }>(
+      'select replaced_by from sessions',
+    );
+    expect(rows.rows).toEqual([{ replaced_by: null }]);
   });
 });

@@ -19,3 +19,9 @@ All notable changes to this project are documented in this file. The format foll
   anything that is not the user's; unverified accounts blocked from data.
 - DISC-001-01a Web authentication screens (register, verify, sign in, forgot and reset password)
   in Spanish and English, with time zone and language defaults from the device.
+
+### Fixed
+
+- FIX-001 A refresh that races a sign-out, sign-out-all or password reset is rejected without
+  being logged as refresh token reuse or revoking the session family.
+- FIX-001 A rate-limited sign-in answers 429 even when refunding its reserved attempts fails.

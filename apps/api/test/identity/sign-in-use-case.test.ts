@@ -9,6 +9,7 @@ import type {
 } from '../../src/identity/application/ports/session-repository';
 import type { User, UserRepository } from '../../src/identity/application/ports/user-repository';
 import { SignIn } from '../../src/identity/application/sign-in';
+import { RateLimited } from '../../src/identity/domain/errors';
 import { PostgresAttemptLimiter } from '../../src/identity/infrastructure/db/postgres-attempt-limiter';
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
 import { MutableClock } from '../fakes/mutable-clock';
@@ -163,6 +164,49 @@ describe('SignIn limiter reservations', () => {
     // Reported once for the refund as a whole; the leaked units fail safe (they only restrict).
     expect(reported).toEqual([failure]);
     expect((await attemptRows()).map((row) => row.count)).toEqual([1, 1]);
+  });
+
+  /** A limiter that refuses every attempt, with a refund that resolves or rejects as asked. */
+  function refusingLimiter(release: () => Promise<void>): AttemptLimiter {
+    return {
+      isLimitReached: () => Promise.resolve(true),
+      record: () =>
+        Promise.resolve({
+          count: 6,
+          allowed: false,
+          windowStart: new Date('2026-09-26T15:00:00.000Z'),
+        }),
+      release,
+    };
+  }
+
+  it('answers 429 RateLimited and reports the failure when the refund of a refused attempt fails (FIX-001 AC-04)', async () => {
+    const failure = new Error('database unavailable');
+    const reported: unknown[] = [];
+    const signIn = buildSignIn({
+      clock: new MutableClock(new Date('2026-09-26T15:00:00.000Z')),
+      attemptLimiter: refusingLimiter(() => Promise.reject(failure)),
+      reportRefundFailure: (error) => reported.push(error),
+    });
+
+    await expect(
+      signIn.execute({ email: EMAIL, password: 'right one', ip: IP }),
+    ).rejects.toBeInstanceOf(RateLimited);
+    expect(reported).toEqual([failure]);
+  });
+
+  it('answers 429 RateLimited without reporting anything when the refund of a refused attempt succeeds (FIX-001 AC-05)', async () => {
+    const reported: unknown[] = [];
+    const signIn = buildSignIn({
+      clock: new MutableClock(new Date('2026-09-26T15:00:00.000Z')),
+      attemptLimiter: refusingLimiter(() => Promise.resolve()),
+      reportRefundFailure: (error) => reported.push(error),
+    });
+
+    await expect(
+      signIn.execute({ email: EMAIL, password: 'right one', ip: IP }),
+    ).rejects.toBeInstanceOf(RateLimited);
+    expect(reported).toEqual([]);
   });
 
   it("stores the user's credentials version, read with the password hash, on the new session", async () => {

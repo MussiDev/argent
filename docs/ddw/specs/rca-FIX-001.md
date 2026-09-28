@@ -7,7 +7,7 @@
 | Date | 2026-09-28 |
 | Origin | `/code-review` of PR #2 (DISC-001-01a) |
 | Related PRD | `docs/ddw/prd/prd-DISC-001-01a.md` (no gap) |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -98,7 +98,9 @@ recorded and accepted in `spec-DISC-001-01a.md` (Block 3 drift, 2026-09-26). By 
   stop revoking its family. Mitigation: AC-01 is tested against the real repository with two
   concurrent rotations, not only with a fake.
 - **Silent refund failures:** reporting instead of throwing could hide a broken limiter store.
-  Mitigation: the same `reportRefundFailure` hook as the success path, which logs at error level.
+  Mitigation: the same `reportRefundFailure` hook as the success path, which logs at warn level
+  (`apps/api/src/identity/index.ts:208`). User decision 2026-09-28: keep warn, because a failed
+  refund only makes the limiter stricter.
 
 ## Dependencies
 

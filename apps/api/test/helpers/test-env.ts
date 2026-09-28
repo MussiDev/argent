@@ -23,6 +23,8 @@ export const productionOverrides: Record<string, string> = {
   EMAIL_FROM: 'Argent <no-reply@argent.test>',
   BREACH_CHECKER: 'hibp',
   TRUST_PROXY: '1',
+  GOOGLE_CLIENT_ID: 'argent-test.apps.googleusercontent.com',
+  GOOGLE_CLIENT_SECRET: 'google-test-client-secret',
 };
 
 export function testEnvSource(

@@ -30,3 +30,23 @@ Block verifier: PASSED (0 FAIL, 2 WARN). The password-less sign-in test failed o
 (`password_hash` was `not null`); the spec states the block adds that test without new logic.
 Architecture auditor: PASSED (0 FAIL, 5 WARN); the rollback header now says to stop the API and
 worker first.
+
+## Block 2 — Google OpenID Connect adapter
+
+| Required test | File:line | Failure in the red run |
+|---|---|---|
+| valid code → subject, lower-cased email, `emailVerified`, `hostedDomain` | `apps/api/test/identity/google-oidc-identity-provider.test.ts:85, 97` | `Error: not implemented` (stub) |
+| `isGoogleAuthoritative` | `apps/api/test/identity/google-authority.test.ts:5, 9, 14, 18, 25, 29` | `Error: not implemented` |
+| ID token signed with another key (same `kid`) | `google-oidc-identity-provider.test.ts:108` | `Error: not implemented` |
+| wrong audience, issuer, array `aud` with foreign `azp`, expired token | `google-oidc-identity-provider.test.ts:116, 124, 132, 161` (+ `143, 151, 169`) | `Error: not implemented` |
+| nonce mismatch | `google-oidc-identity-provider.test.ts:179, 187` | `Error: not implemented` |
+| wrong PKCE verifier (400) and token endpoint slower than 2 s | `google-oidc-identity-provider.test.ts:197, 217` | `Error: not implemented` |
+| `authorizationUrl` parameters | `google-oidc-identity-provider.test.ts:332` | `Error: not implemented` |
+| production env without client credentials or with a non-Google endpoint | `apps/api/test/foundation/env.test.ts:136, 147` | `expected [Function] to throw an error` |
+| unconfigured provider fails every call | `google-oidc-identity-provider.test.ts:368` | asymmetric matcher mismatch |
+
+Red run: 48/48 new tests failing. After: 48/48; full suite 553/553.
+
+Block verifier: PASSED (0 FAIL, 4 WARN). Architecture auditor: PASSED (0 FAIL, 5 WARN). Follow-up
+fixes (trimmed client credentials, shared issuer constant, algorithm/`kid`/`iat`/JWKS tests, stricter
+fake `/authorize`) land in a separate commit.

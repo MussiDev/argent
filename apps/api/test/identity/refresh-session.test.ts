@@ -32,12 +32,19 @@ function session(overrides: Partial<Session> = {}): Session {
 }
 
 /**
+ * How the rotation claim ends. `won`: this request claims the session. The others lose it to a
+ * concurrent writer that committed first: `rotated` by another refresh (`replacedBy` set),
+ * `revoked` by a sign-out, sign-out-all or reset (no successor), `deleted` by a row removal.
+ */
+type ClaimOutcome = 'won' | 'rotated' | 'revoked' | 'deleted';
+
+/**
  * In-memory sessions with a unit of work that only keeps what a transaction created when the
  * transaction resolves, like PostgreSQL does on commit and rollback.
  */
 function buildRefresh(
   current: Session,
-  options: { claim: boolean; userCredentialsVersion?: number },
+  options: { claim: ClaimOutcome; userCredentialsVersion?: number; rereadError?: Error },
 ) {
   const committed: Session[] = [current];
   const revokedFamilies: string[] = [];
@@ -62,7 +69,10 @@ function buildRefresh(
       committed.push(row);
       return Promise.resolve(row);
     },
-    findById: (id) => Promise.resolve(committed.find((row) => row.id === id) ?? null),
+    findById: (id) =>
+      options.rereadError
+        ? Promise.reject(options.rereadError)
+        : Promise.resolve(committed.find((row) => row.id === id) ?? null),
     findByRefreshTokenHash: (hash) =>
       Promise.resolve(committed.find((row) => row.refreshTokenHash === hash) ?? null),
     markReplaced: unsupported,
@@ -84,8 +94,18 @@ function buildRefresh(
           staged.push(row);
           return Promise.resolve(row);
         },
-        // The fake's claim result is fixed by the test: false means another request won.
-        markReplaced: () => Promise.resolve(options.claim),
+        // A lost claim first applies what the concurrent writer committed, then reports false.
+        markReplaced: (id) => {
+          if (options.claim === 'won') return Promise.resolve(true);
+          const index = committed.findIndex((row) => row.id === id);
+          const row = committed[index];
+          if (row && options.claim === 'deleted') committed.splice(index, 1);
+          if (row && options.claim === 'rotated') {
+            committed[index] = { ...row, revokedAt: NOW, replacedBy: 'concurrent-successor' };
+          }
+          if (row && options.claim === 'revoked') committed[index] = { ...row, revokedAt: NOW };
+          return Promise.resolve(false);
+        },
       };
       const result = await work({
         sessions: transactional,
@@ -129,9 +149,9 @@ function buildRefresh(
 }
 
 describe('RefreshSession', () => {
-  it('treats a lost rotation claim as reuse: revokes the family and keeps no successor (A-6, R-15)', async () => {
+  it('treats a claim lost to a concurrent rotation as reuse (401): revokes the family and keeps no successor (A-6, R-15, FIX-001 AC-01)', async () => {
     const { refreshSession, committed, revokedFamilies } = buildRefresh(session(), {
-      claim: false,
+      claim: 'rotated',
     });
 
     const result = await refreshSession.execute('presented');
@@ -141,9 +161,40 @@ describe('RefreshSession', () => {
     expect(committed.map((row) => row.id)).toEqual(['session-1']);
   });
 
+  it('rejects (401) a claim lost to a sign-out without revoking the family (FIX-001 AC-02)', async () => {
+    const { refreshSession, committed, revokedFamilies } = buildRefresh(session(), {
+      claim: 'revoked',
+    });
+
+    expect(await refreshSession.execute('presented')).toEqual({ outcome: 'rejected' });
+    expect(revokedFamilies).toEqual([]);
+    expect(committed.map((row) => row.id)).toEqual(['session-1']);
+  });
+
+  it('rejects (401) a lost claim whose session row is missing on re-read (FIX-001 AC-03)', async () => {
+    const { refreshSession, committed, revokedFamilies } = buildRefresh(session(), {
+      claim: 'deleted',
+    });
+
+    expect(await refreshSession.execute('presented')).toEqual({ outcome: 'rejected' });
+    expect(revokedFamilies).toEqual([]);
+    expect(committed).toEqual([]);
+  });
+
+  it('propagates a re-read error after a lost claim and revokes nothing (FIX-001)', async () => {
+    const failure = new Error('database unavailable');
+    const { refreshSession, revokedFamilies } = buildRefresh(session(), {
+      claim: 'revoked',
+      rereadError: failure,
+    });
+
+    await expect(refreshSession.execute('presented')).rejects.toBe(failure);
+    expect(revokedFamilies).toEqual([]);
+  });
+
   it('rotates when the claim is won: one successor in the same family', async () => {
     const { refreshSession, committed, revokedFamilies } = buildRefresh(session(), {
-      claim: true,
+      claim: 'won',
     });
 
     const result = await refreshSession.execute('presented');
@@ -161,7 +212,7 @@ describe('RefreshSession', () => {
 
   it('treats a rotated token (replacedBy set) as reuse and revokes the family', async () => {
     const rotated = session({ revokedAt: NOW, replacedBy: 'session-2' });
-    const { refreshSession, revokedFamilies } = buildRefresh(rotated, { claim: true });
+    const { refreshSession, revokedFamilies } = buildRefresh(rotated, { claim: 'won' });
 
     expect(await refreshSession.execute('presented')).toMatchObject({ outcome: 'reused' });
     expect(revokedFamilies).toEqual(['family-1']);
@@ -170,7 +221,7 @@ describe('RefreshSession', () => {
   it('only rejects a token revoked without replacement (sign-out): no family revocation (A-2)', async () => {
     const signedOut = session({ revokedAt: NOW, replacedBy: null });
     const { refreshSession, committed, revokedFamilies } = buildRefresh(signedOut, {
-      claim: true,
+      claim: 'won',
     });
 
     expect(await refreshSession.execute('presented')).toEqual({ outcome: 'rejected' });
@@ -181,7 +232,7 @@ describe('RefreshSession', () => {
   it("rejects a session whose credentials version differs from the user's, rotating nothing (AC-10)", async () => {
     const stale = session({ credentialsVersion: 0 });
     const { refreshSession, committed, revokedFamilies } = buildRefresh(stale, {
-      claim: true,
+      claim: 'won',
       userCredentialsVersion: 1,
     });
 
@@ -193,7 +244,7 @@ describe('RefreshSession', () => {
   it('gives the successor the credentials version of the session it replaces', async () => {
     const current = session({ credentialsVersion: 2 });
     const { refreshSession, committed } = buildRefresh(current, {
-      claim: true,
+      claim: 'won',
       userCredentialsVersion: 2,
     });
 

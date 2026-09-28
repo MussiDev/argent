@@ -18,8 +18,9 @@ export interface RefreshSessionDependencies {
 
 /**
  * `reused`: an already rotated token came back, so a copy exists somewhere and the whole family
- * was revoked (R-15). `rejected`: unknown token, a session revoked by sign-out or sign-out-all, a
- * session idle too long, or one created before the user's last password change. All answer 401.
+ * was revoked (R-15). `rejected`: unknown token, a session revoked by sign-out or sign-out-all
+ * (including one that races this refresh), a session idle too long, or one created before the
+ * user's last password change. All answer 401.
  */
 export type RefreshSessionResult =
   | { outcome: 'rotated'; userId: string; previousSessionId: string; session: SessionTokens }
@@ -78,9 +79,13 @@ export class RefreshSession {
         return successor.id;
       });
     } catch (error) {
-      // A concurrent request rotated this token first: the same token was used twice.
       if (!(error instanceof RotationAlreadyClaimed)) throw error;
-      return this.reuse(current.userId, current.familyId, now);
+      // Another writer revoked the session first. Only a concurrent rotation proves the token was
+      // used twice; a sign-out, sign-out-all or reset leaves no successor and simply ends it.
+      const claimed = await this.deps.sessions.findById(current.id);
+      return claimed?.replacedBy
+        ? this.reuse(current.userId, current.familyId, now)
+        : { outcome: 'rejected' };
     }
 
     const accessToken = await this.deps.accessTokens.issue({

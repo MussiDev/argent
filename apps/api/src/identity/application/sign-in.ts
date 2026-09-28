@@ -45,8 +45,9 @@ export interface SignInDependencies {
   accessTokens: AccessTokenIssuer;
   clock: Clock;
   /**
-   * Told when the refund after a successful sign-in fails. The sign-in still succeeds: the leaked
-   * units only make the limiter stricter (fail safe). Must not log secrets.
+   * Told when a refund fails, after a successful sign-in or a rate-limited refusal. The outcome is
+   * unchanged (signed in, or 429): the leaked units only make the limiter stricter (fail safe).
+   * Must not log secrets.
    */
   reportRefundFailure: (error: unknown) => void;
 }
@@ -89,8 +90,13 @@ export class SignIn {
     ]);
     const reservations: Reservations = { accountKey: email.value, ip, account, address };
     if (!account.allowed || !address.allowed) {
-      // Refused without hashing: the attempt is not a guess, so it does not count either.
-      await this.refund(reservations);
+      // Refused without hashing: the attempt is not a guess, so it does not count either. A failed
+      // refund must not turn the refusal into an error.
+      try {
+        await this.refund(reservations);
+      } catch (error) {
+        this.deps.reportRefundFailure(error);
+      }
       throw new RateLimited();
     }
 

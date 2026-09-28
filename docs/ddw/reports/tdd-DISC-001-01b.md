@@ -50,3 +50,16 @@ Red run: 48/48 new tests failing. After: 48/48; full suite 553/553.
 Block verifier: PASSED (0 FAIL, 4 WARN). Architecture auditor: PASSED (0 FAIL, 5 WARN). Follow-up
 fixes (trimmed client credentials, shared issuer constant, algorithm/`kid`/`iat`/JWKS tests, stricter
 fake `/authorize`) land in a separate commit.
+
+### Block 2 review follow-ups
+
+| Item | Test (file:line) | Failure in the red run |
+|---|---|---|
+| whitespace-only client credentials rejected; values trimmed | `apps/api/test/foundation/env.test.ts:146, 153, 159` | `expected [Function] to throw an error`; `expected ' local-client ' to be 'local-client'` |
+| production-only secret rule isolated | `env.test.ts:141` | red by mutation (rule removed → wrong issue message) |
+| token body limited to 16 KB | `apps/api/test/identity/google-oidc-identity-provider.test.ts:258, 279, 303` | `expected undefined to be 16384`; unbounded read of 134 MB; body read despite Content-Length |
+| HS256 / `none`, unknown `kid`, future `iat` rejected | `google-oidc-identity-provider.test.ts:334, 347, 355` | `expected the exchange to fail` |
+| JWKS slower than 2 s fails | `google-oidc-identity-provider.test.ts:371` | `expected undefined to be 2000` |
+| fake `/authorize` rejects unregistered `redirect_uri` and scope without `openid` | `apps/api/test/identity/fake-google-oidc.test.ts:54, 58, 70, 88` | `expected 200 to be 400` |
+
+21/25 red before (the rest: regression guards and pre-existing fixture paths); 25/25 after; full suite 581/581.

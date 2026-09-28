@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { emailInputSchema } from '@argent/shared';
 import { createRemoteJWKSet, errors, jwtVerify, type JWTPayload } from 'jose';
 import { z } from 'zod';
+import { GOOGLE_ENDPOINT_DEFAULTS } from '../../../shared/config/env';
 import type { Clock } from '../../application/ports/clock';
 import {
   GoogleSignInFailed,
@@ -16,15 +17,17 @@ import { Email } from '../../domain/email';
 
 /** Bounds the whole token-endpoint exchange, body included (NFR-01). */
 export const GOOGLE_TOKEN_TIMEOUT_MS = 2000;
-const JWKS_TIMEOUT_MS = 2000;
+export const GOOGLE_JWKS_TIMEOUT_MS = 2000;
+/** Google's token responses are a few KB; a bigger body is refused before it is buffered whole. */
+export const GOOGLE_TOKEN_BODY_LIMIT_BYTES = 16 * 1024;
 export const GOOGLE_CALLBACK_PATH = '/auth/google/callback';
 const ALGORITHM = 'RS256';
 const CLOCK_TOLERANCE_SECONDS = 60;
 /** Google ID tokens live one hour; bounding `iat` too refuses tokens dated in the future. */
 const MAX_TOKEN_AGE = '1h';
 /** Google signs with either spelling of its issuer (OpenID Connect discovery documents both). */
-const GOOGLE_ISSUER = 'https://accounts.google.com';
-const GOOGLE_ISSUERS = [GOOGLE_ISSUER, 'accounts.google.com'];
+const GOOGLE_ISSUER = GOOGLE_ENDPOINT_DEFAULTS.GOOGLE_ISSUER;
+const GOOGLE_ISSUERS = [GOOGLE_ISSUER, new URL(GOOGLE_ISSUER).host];
 
 const tokenResponseSchema = z.object({ id_token: z.string().min(1).max(4096) });
 
@@ -74,7 +77,9 @@ export class GoogleOidcIdentityProvider implements GoogleIdentityProvider {
     this.issuers = options.issuer === GOOGLE_ISSUER ? GOOGLE_ISSUERS : [options.issuer];
     this.fetchFn = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? GOOGLE_TOKEN_TIMEOUT_MS;
-    this.jwks = createRemoteJWKSet(new URL(options.jwksUrl), { timeoutDuration: JWKS_TIMEOUT_MS });
+    this.jwks = createRemoteJWKSet(new URL(options.jwksUrl), {
+      timeoutDuration: GOOGLE_JWKS_TIMEOUT_MS,
+    });
   }
 
   authorizationUrl({ state, nonce, codeVerifier }: GoogleAuthorizationRequest): string {
@@ -179,10 +184,17 @@ export class GoogleOidcIdentityProvider implements GoogleIdentityProvider {
       await response.body?.cancel().catch(() => undefined);
       throw new GoogleSignInFailed('token_http_status', response.status);
     }
+    let text: string | null;
     try {
-      return await response.json();
+      text = await readLimitedText(response, GOOGLE_TOKEN_BODY_LIMIT_BYTES);
     } catch (error) {
       if (signal.aborted) throw error;
+      throw new GoogleSignInFailed('token_response_malformed');
+    }
+    if (text === null) throw new GoogleSignInFailed('token_response_malformed');
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
       throw new GoogleSignInFailed('token_response_malformed');
     }
   }
@@ -214,6 +226,29 @@ export class GoogleOidcIdentityProvider implements GoogleIdentityProvider {
     const b = Buffer.from(expected, 'utf8');
     return a.length === b.length && timingSafeEqual(a, b);
   }
+}
+
+/** The body as UTF-8 text, or null once it exceeds `limit` bytes (declared or actually read). */
+async function readLimitedText(response: Response, limit: number): Promise<string | null> {
+  if (Number(response.headers.get('content-length')) > limit) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!response.body) return '';
+  const reader: ReadableStreamDefaultReader<Uint8Array> = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
 }
 
 function verificationFailure(error: unknown): GoogleSignInFailureReason {

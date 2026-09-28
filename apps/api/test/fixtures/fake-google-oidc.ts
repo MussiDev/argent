@@ -11,7 +11,8 @@ import { exportJWK, generateKeyPair, SignJWT, type CryptoKey, type JWK } from 'j
  *   the API as its GOOGLE_* variables, take the `Location` of `GET /auth/google/start`, call
  *   `google.consent(location, identity)` and request `continueUrl` (or `cancelUrl`) against the
  *   API with the binding cookie. `google.setTokenOptions(...)` makes the next token responses
- *   misbehave (wrong audience, issuer, nonce, expiry, foreign key, delay); `resetTokenOptions()`
+ *   misbehave (wrong audience, issuer, nonce, expiry, foreign key, algorithm, kid, future `iat`,
+ *   delays, oversized body); `resetTokenOptions()`
  *   restores them. `issueCode(...)` mints a code without the consent page (benchmarks that seed
  *   OAuth states directly).
  * - End-to-end tests (Block 4): Playwright starts `test/fake-google-oidc-server.ts` on 127.0.0.1.
@@ -23,6 +24,8 @@ import { exportJWK, generateKeyPair, SignJWT, type CryptoKey, type JWK } from 'j
 export const FAKE_GOOGLE_CLIENT_ID = 'fake-google-client.apps.googleusercontent.com';
 export const FAKE_GOOGLE_CLIENT_SECRET = 'fake-google-client-secret';
 const KEY_ID = 'fake-google-key-1';
+/** What the API's test environment (API_ORIGIN http://localhost:4000) sends as redirect_uri. */
+const DEFAULT_REDIRECT_URI = 'http://localhost:4000/auth/google/callback';
 const ID_TOKEN_TTL_SECONDS = 3600;
 const CODE_TTL_MS = 5 * 60 * 1000;
 
@@ -46,6 +49,12 @@ export interface FakeTokenOptions {
   expiresInSeconds?: number;
   /** Signs with a key absent from `/jwks` but under the same `kid`. */
   signWithForeignKey?: boolean;
+  /** HS256 signs with a random secret; `none` sends an unsigned token. */
+  algorithm?: 'RS256' | 'HS256' | 'none';
+  /** Replaces the `kid` header, e.g. with one absent from `/jwks`. */
+  kid?: string;
+  /** Shifts `iat` from now; positive for a token issued in the future. */
+  issuedAtOffsetSeconds?: number;
   /** Claims removed from the ID token. */
   omitClaims?: string[];
   /** Waits this long before answering `/token`. */
@@ -54,6 +63,10 @@ export interface FakeTokenOptions {
   failWithStatus?: number;
   /** Answers `/token` 200 with this body instead of a token response. */
   rawTokenBody?: string;
+  /** Adds a `padding` field of this many characters to an otherwise valid token response. */
+  tokenResponsePaddingBytes?: number;
+  /** Waits this long before answering `/jwks`. */
+  jwksDelayMs?: number;
 }
 
 export interface FakeGoogleOidcOptions {
@@ -62,6 +75,8 @@ export interface FakeGoogleOidcOptions {
   port?: number;
   clientId?: string;
   clientSecret?: string;
+  /** Redirect URIs registered for the client; `/authorize` refuses any other, like Google. */
+  redirectUris?: string[];
 }
 
 export interface IssueCodeInput {
@@ -80,6 +95,7 @@ export interface FakeGoogleOidc {
   readonly jwksUrl: string;
   readonly clientId: string;
   readonly clientSecret: string;
+  readonly redirectUris: readonly string[];
   /** The GOOGLE_* environment variables pointing the API at this server. */
   readonly env: Record<string, string>;
   /** Token requests received, successful or not. */
@@ -174,6 +190,7 @@ export async function startFakeGoogleOidc(
   const host = options.host ?? '127.0.0.1';
   const clientId = options.clientId ?? FAKE_GOOGLE_CLIENT_ID;
   const clientSecret = options.clientSecret ?? FAKE_GOOGLE_CLIENT_SECRET;
+  const redirectUris = [...(options.redirectUris ?? [DEFAULT_REDIRECT_URI])];
 
   const signingKey = await generateKeyPair('RS256', { extractable: true });
   const foreignKey = await generateKeyPair('RS256');
@@ -212,6 +229,14 @@ export async function startFakeGoogleOidc(
       !challenge
     ) {
       send(response, 400, 'invalid_request');
+      return;
+    }
+    if (!redirectUris.includes(redirectUri)) {
+      send(response, 400, 'redirect_uri_mismatch');
+      return;
+    }
+    if (!(params.get('scope') ?? '').split(' ').includes('openid')) {
+      send(response, 400, 'invalid_scope');
       return;
     }
 
@@ -274,7 +299,7 @@ export async function startFakeGoogleOidc(
       email: pending.identity.email,
       email_verified: pending.identity.emailVerified,
       nonce: tokenOptions.nonce ?? pending.nonce,
-      iat: now,
+      iat: now + (tokenOptions.issuedAtOffsetSeconds ?? 0),
       exp: now + (tokenOptions.expiresInSeconds ?? ID_TOKEN_TTL_SECONDS),
       ...(pending.identity.hd ? { hd: pending.identity.hd } : {}),
     };
@@ -283,12 +308,21 @@ export async function startFakeGoogleOidc(
     const payload = Object.fromEntries(
       Object.entries(claims).filter(([name]) => !omitted.has(name)),
     );
-    const key: CryptoKey = tokenOptions.signWithForeignKey
-      ? foreignKey.privateKey
-      : signingKey.privateKey;
-    return new SignJWT(payload)
-      .setProtectedHeader({ alg: 'RS256', kid: KEY_ID, typ: 'JWT' })
-      .sign(key);
+    const algorithm = tokenOptions.algorithm ?? 'RS256';
+    const header = { alg: algorithm, kid: tokenOptions.kid ?? KEY_ID, typ: 'JWT' };
+    if (algorithm === 'none') {
+      const encode = (part: unknown) => Buffer.from(JSON.stringify(part)).toString('base64url');
+      return `${encode(header)}.${encode(payload)}.`;
+    }
+    let key: CryptoKey | Uint8Array = signingKey.privateKey;
+    if (algorithm === 'HS256') key = randomBytes(32);
+    else if (tokenOptions.signWithForeignKey) key = foreignKey.privateKey;
+    return new SignJWT(payload).setProtectedHeader(header).sign(key);
+  }
+
+  async function jwks(response: ServerResponse) {
+    if (tokenOptions.jwksDelayMs) await delay(tokenOptions.jwksDelayMs);
+    sendJson(response, 200, { keys: [publicJwk] });
   }
 
   async function token(request: IncomingMessage, response: ServerResponse) {
@@ -328,6 +362,9 @@ export async function startFakeGoogleOidc(
       scope: 'openid https://www.googleapis.com/auth/userinfo.email',
       token_type: 'Bearer',
       id_token: await signIdToken(pending),
+      ...(current.tokenResponsePaddingBytes === undefined
+        ? {}
+        : { padding: 'a'.repeat(current.tokenResponsePaddingBytes) }),
     });
   }
 
@@ -340,7 +377,9 @@ export async function startFakeGoogleOidc(
         send(response, 500, error instanceof Error ? error.message : 'error');
       });
     } else if (request.method === 'GET' && url.pathname === '/jwks') {
-      sendJson(response, 200, { keys: [publicJwk] });
+      jwks(response).catch((error: unknown) => {
+        send(response, 500, error instanceof Error ? error.message : 'error');
+      });
     } else {
       send(response, 404, 'not found');
     }
@@ -363,6 +402,7 @@ export async function startFakeGoogleOidc(
     jwksUrl: `${origin}/jwks`,
     clientId,
     clientSecret,
+    redirectUris,
     env: {
       GOOGLE_CLIENT_ID: clientId,
       GOOGLE_CLIENT_SECRET: clientSecret,

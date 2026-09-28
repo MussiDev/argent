@@ -104,8 +104,8 @@ const envSchema = z
     BREACH_CHECKER: z.enum(['hibp', 'fake']).default('hibp'),
     TRUST_PROXY: z.coerce.number().int().min(0).default(0),
     /** Unset outside production disables Google sign-in. */
-    GOOGLE_CLIENT_ID: optionalSetting(z.string().max(255)),
-    GOOGLE_CLIENT_SECRET: optionalSetting(z.string().max(255)),
+    GOOGLE_CLIENT_ID: optionalSetting(z.string().trim().min(1).max(255)),
+    GOOGLE_CLIENT_SECRET: optionalSetting(z.string().trim().min(1).max(255)),
     GOOGLE_AUTHORIZATION_URL: googleEndpoint('GOOGLE_AUTHORIZATION_URL'),
     GOOGLE_TOKEN_URL: googleEndpoint('GOOGLE_TOKEN_URL'),
     GOOGLE_JWKS_URL: googleEndpoint('GOOGLE_JWKS_URL'),

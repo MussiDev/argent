@@ -6,6 +6,8 @@ import {
 } from '../../src/identity/application/ports/google-identity-provider';
 import { CryptoTokenGenerator } from '../../src/identity/infrastructure/security/crypto-token-generator';
 import {
+  GOOGLE_JWKS_TIMEOUT_MS,
+  GOOGLE_TOKEN_BODY_LIMIT_BYTES,
   GOOGLE_TOKEN_TIMEOUT_MS,
   GoogleOidcIdentityProvider,
   type GoogleOidcOptions,
@@ -252,6 +254,134 @@ describe('GoogleOidcIdentityProvider.exchangeCode', () => {
       'token_response_malformed',
     );
   });
+
+  it('rejects a token response body over 16 KB even when it holds a valid ID token', async () => {
+    expect(GOOGLE_TOKEN_BODY_LIMIT_BYTES).toBe(16 * 1024);
+    const google_ = provider();
+    const exchange = await approve(google_, GMAIL_USER);
+    google.setTokenOptions({ tokenResponsePaddingBytes: GOOGLE_TOKEN_BODY_LIMIT_BYTES });
+
+    expect((await failureOf(google_.exchangeCode(exchange))).reason).toBe(
+      'token_response_malformed',
+    );
+  });
+
+  it('accepts a padded token response that stays under 16 KB', async () => {
+    const google_ = provider();
+    const exchange = await approve(google_, GMAIL_USER);
+    google.setTokenOptions({ tokenResponsePaddingBytes: GOOGLE_TOKEN_BODY_LIMIT_BYTES - 4096 });
+
+    await expect(google_.exchangeCode(exchange)).resolves.toMatchObject({
+      subject: GMAIL_USER.sub,
+    });
+  });
+
+  it('stops reading a streamed token response without Content-Length once it passes 16 KB', async () => {
+    let chunksPulled = 0;
+    const endlessFetch: typeof fetch = () => {
+      const chunk = new TextEncoder().encode(`{"padding":"${'a'.repeat(1024)}`);
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          chunksPulled += 1;
+          controller.enqueue(chunk);
+        },
+      });
+      return Promise.resolve(
+        new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      );
+    };
+    const google_ = provider({ fetch: endlessFetch });
+
+    const failure = await failureOf(
+      google_.exchangeCode({ code: 'c', codeVerifier: 'v', expectedNonceHash: 'h' }),
+    );
+
+    expect(failure.reason).toBe('token_response_malformed');
+    expect(chunksPulled).toBeLessThan(32);
+  });
+
+  it('rejects a token response whose Content-Length announces more than 16 KB', async () => {
+    let bodyRead = false;
+    const liarFetch: typeof fetch = () => {
+      // highWaterMark 0: the stream pulls only when someone reads it.
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            bodyRead = true;
+            controller.enqueue(new TextEncoder().encode('{}'));
+            controller.close();
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      return Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Content-Length': '100000' },
+        }),
+      );
+    };
+    const google_ = provider({ fetch: liarFetch });
+
+    const failure = await failureOf(
+      google_.exchangeCode({ code: 'c', codeVerifier: 'v', expectedNonceHash: 'h' }),
+    );
+
+    expect(failure.reason).toBe('token_response_malformed');
+    expect(bodyRead).toBe(false);
+  });
+
+  it.each(['HS256', 'none'] as const)(
+    'rejects an ID token with alg %s (RS256 is pinned, NFR-02)',
+    async (algorithm) => {
+      const google_ = provider();
+      const exchange = await approve(google_, GMAIL_USER);
+      google.setTokenOptions({ algorithm });
+
+      expect((await failureOf(google_.exchangeCode(exchange))).reason).toBe(
+        'algorithm_not_allowed',
+      );
+    },
+  );
+
+  it('rejects an ID token whose kid is not in the JWKS', async () => {
+    const google_ = provider();
+    const exchange = await approve(google_, GMAIL_USER);
+    google.setTokenOptions({ kid: 'unknown-key' });
+
+    expect((await failureOf(google_.exchangeCode(exchange))).reason).toBe('no_matching_key');
+  });
+
+  it('rejects an ID token issued in the future beyond the 60 s clock tolerance', async () => {
+    const google_ = provider();
+    const exchange = await approve(google_, GMAIL_USER);
+    google.setTokenOptions({ issuedAtOffsetSeconds: 600 });
+
+    expect((await failureOf(google_.exchangeCode(exchange))).reason).toBe('invalid_token');
+  });
+
+  it('rejects an ID token without iat', async () => {
+    const google_ = provider();
+    const exchange = await approve(google_, GMAIL_USER);
+    google.setTokenOptions({ omitClaims: ['iat'] });
+
+    expect((await failureOf(google_.exchangeCode(exchange))).reason).toBe('invalid_token');
+  });
+
+  it('rejects when the JWKS endpoint is slower than 2 s', async () => {
+    expect(GOOGLE_JWKS_TIMEOUT_MS).toBe(2000);
+    const google_ = provider();
+    const exchange = await approve(google_, GMAIL_USER);
+    google.setTokenOptions({ jwksDelayMs: GOOGLE_JWKS_TIMEOUT_MS + 1000 });
+
+    const startedAt = performance.now();
+    const failure = await failureOf(google_.exchangeCode(exchange));
+    const elapsed = performance.now() - startedAt;
+
+    expect(failure.reason).toBe('jwks_unavailable');
+    expect(elapsed).toBeGreaterThanOrEqual(GOOGLE_JWKS_TIMEOUT_MS - 50);
+    expect(elapsed).toBeLessThan(GOOGLE_JWKS_TIMEOUT_MS + 800);
+  }, 10_000);
 
   it('rejects a token endpoint that cannot be reached', async () => {
     const google_ = provider({ tokenUrl: 'http://127.0.0.1:1/token' });

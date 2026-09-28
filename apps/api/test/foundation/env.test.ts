@@ -133,9 +133,36 @@ describe('environment production rules', () => {
     expect(env.GOOGLE_ISSUER).toBe('http://127.0.0.1:4100');
   });
 
-  it.each(['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'])('requires %s in production', (name) => {
-    const source = { ...testEnvSource(productionOverrides), [name]: undefined };
-    expect(() => parseEnv(source)).toThrow(new RegExp(name));
+  it('requires GOOGLE_CLIENT_ID in production', () => {
+    const source = { ...testEnvSource(productionOverrides), GOOGLE_CLIENT_ID: undefined };
+    expect(() => parseEnv(source)).toThrow('GOOGLE_CLIENT_ID: required in production');
+  });
+
+  it('requires GOOGLE_CLIENT_SECRET in production, apart from the rule tying it to the client id', () => {
+    const source = { ...testEnvSource(productionOverrides), GOOGLE_CLIENT_SECRET: undefined };
+    expect(() => parseEnv(source)).toThrow('GOOGLE_CLIENT_SECRET: required in production');
+  });
+
+  it.each(['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'])(
+    'does not let a whitespace-only %s satisfy production',
+    (name) => {
+      expect(parseProduction({ [name]: ' \t ' })).toThrow(new RegExp(`${name}: `));
+    },
+  );
+
+  it('rejects a whitespace-only GOOGLE_CLIENT_ID outside production', () => {
+    expect(() =>
+      parseEnv(testEnvSource({ GOOGLE_CLIENT_ID: '   ', GOOGLE_CLIENT_SECRET: 'local-secret' })),
+    ).toThrow(/GOOGLE_CLIENT_ID/);
+  });
+
+  it('trims GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET', () => {
+    const env = parseEnv(
+      testEnvSource({ GOOGLE_CLIENT_ID: ' local-client ', GOOGLE_CLIENT_SECRET: 'local-secret\n' }),
+    );
+
+    expect(env.GOOGLE_CLIENT_ID).toBe('local-client');
+    expect(env.GOOGLE_CLIENT_SECRET).toBe('local-secret');
   });
 
   it('requires GOOGLE_CLIENT_SECRET whenever GOOGLE_CLIENT_ID is set', () => {

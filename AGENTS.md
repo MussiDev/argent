@@ -79,6 +79,16 @@ payments — usable offline at the moment of paying.
 - Validate every API input with the shared Zod schemas; never trust an unvalidated `req`.
 - Comments only when the *why* is not obvious from the code.
 
+## Testing
+
+- Commands: `pnpm test` (unit and integration, needs PostgreSQL via `TEST_DATABASE_URL`),
+  `pnpm test:coverage` (same suite with V8 coverage and thresholds), `pnpm test:perf` (latency
+  benchmarks), `pnpm e2e` (Playwright, needs PostgreSQL via `E2E_DATABASE_URL` and Mailpit).
+- **Coverage floor: 80% lines, 80% branches, 80% functions**, measured by Vitest over
+  `apps/api/src`, `apps/web/src` and `packages/shared/src` together. The web app counts too: its
+  containers and components need Vitest tests, not only Playwright flows.
+- Every acceptance criterion has at least one test; every input has at least one sad-path test.
+
 ## What NOT to do in this project
 
 - Do not store broker or bank credentials, and do not scrape third-party sites.

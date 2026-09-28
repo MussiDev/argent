@@ -80,8 +80,8 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Unit and integration tests
-        run: pnpm test
+      - name: Unit and integration tests with coverage floor
+        run: pnpm test:coverage
 
   perf:
     # Latency budgets (NFR-06) depend on the runner, so they are reported apart from `test`.

@@ -11,6 +11,7 @@
     "format": "prettier --write .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:perf": "pnpm --filter @argent/api test:perf",
     "e2e": "playwright test --pass-with-no-tests",
     "db:migrate": "pnpm --filter @argent/api db:migrate"
@@ -19,12 +20,13 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.6",
+    "@vitest/coverage-v8": "~5.0.1",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
     "prettier": "^3.9.9",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1",
     "vite": "^8.3.1",
-    "vitest": "^5.0.1"
+    "vitest": "~5.0.1"
   }
 }

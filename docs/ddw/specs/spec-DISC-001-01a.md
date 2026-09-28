@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01a.md |
 | Tier | FEATURE |
 | Date | 2026-09-26 |
-| Spec loops | 7 |
-| Loops since last human decision | 1 |
+| Spec loops | 8 |
+| Loops since last human decision | 2 |
 
 ## Summary
 First code in the repository. Block 1 lays the pnpm monorepo declared in `AGENTS.md` (Next.js 16
@@ -607,6 +607,9 @@ changes close the smaller gaps the Block 3 architecture review listed.
 **Data model**
 - `email_outbox.next_attempt_at timestamptz null` (no default; null means due now).
 - Index `email_outbox_pending_idx` on `email_outbox(created_at)` where `sent_at is null`, replacing the partial index on `sent_at`.
+
+**Input validation**
+- No user input reaches this block: the worker reads only outbox rows the API wrote; the idempotency key is built from a UUID and an integer attempt number; `next_attempt_at` is computed by the worker from its clock.
 
 **Error handling**
 - Transport failure or poison row — `attempts + 1` and `next_attempt_at` set in one statement, only while `sent_at is null`.

@@ -1,5 +1,5 @@
 ```
-/ddw-validate-spec docs/ddw/specs/spec-DISC-001-01a.md — FAILED (1 FAIL)
+/ddw-validate-spec docs/ddw/specs/spec-DISC-001-01a.md — PASSED
 ────────────────────────────────────────────────────────────────
   ✅ F-SPEC-01: all 11 FR from the PRD are referenced by a block
   ✅ F-SPEC-02: all 22 AC from the PRD are named by at least one test
@@ -10,16 +10,16 @@
   ✅ F-SPEC-06: every block lists at least one required test
   ✅ F-SPEC-07: every endpoint carries a complete contract
   ✅ F-SPEC-08: every schema declares its constraints
-  ❌ F-SPEC-09: input with no documented validation: Block 8 (Email outbox hardening)
+  ✅ F-SPEC-09: every block taking input documents its validation
   ✅ F-SPEC-10: every block documents its error handling
   ✅ F-SPEC-16: every documented error is named by a test
   ✅ F-SPEC-11: dependencies between blocks are declared
   ⚠️ W-SPEC-01: block referencing no FR — enabler or gold-plating?: Block 1 (Monorepo foundation)
-  ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (Monorepo foundation) (38 files, 781 words), Block 2 (Identity domain, ports and persistence) (25 files, 800 words), Block 3 (Registration, email verification and email outbox) (30 files, 1275 words), Block 4 (Sign-in, sessions and sign-out) (17 files, 787 words), Block 5 (Password reset) (13 files, 792 words), Block 6 (Access control) (9 files, 432 words), Block 7 (Web authentication screens) (15 files, 569 words), Block 8 (Email outbox hardening) (10 files, 1139 words)
+  ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (Monorepo foundation) (38 files, 781 words), Block 2 (Identity domain, ports and persistence) (25 files, 800 words), Block 3 (Registration, email verification and email outbox) (30 files, 1275 words), Block 4 (Sign-in, sessions and sign-out) (17 files, 787 words), Block 5 (Password reset) (13 files, 792 words), Block 6 (Access control) (9 files, 432 words), Block 7 (Web authentication screens) (15 files, 569 words), Block 8 (Email outbox hardening) (10 files, 1179 words)
   👁  F-SPEC-12 (contradicts the PRD) and F-SPEC-13 (terminology diverging from
       the PRD) are MANUAL: judge them and say so explicitly in your report.
-  ✅ F-SPEC-LOOP: 1 loop(s) since a human decided, under the ceiling of 3; 7 in total for this document
+  ✅ F-SPEC-LOOP: 2 loop(s) since a human decided, under the ceiling of 3; 8 in total for this document
 ────────────────────────────────────────────────────────────────
-Total: 12 passed, 1 failed, 2 warnings
-Result: FAILED (1 FAIL)
+Total: 13 passed, 0 failed, 2 warnings
+Result: PASSED
 ```

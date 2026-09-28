@@ -6,8 +6,8 @@
 | Tier | FIX |
 | RCA | docs/ddw/specs/rca-FIX-001.md |
 | Date | 2026-09-28 |
-| Spec loops | 1 |
-| Loops since last human decision | 1 |
+| Spec loops | 2 |
+| Loops since last human decision | 0 |
 
 ## Problem
 
@@ -35,7 +35,28 @@ Full chain of events in `docs/ddw/specs/rca-FIX-001.md`.
 | NFR-01 | No route, schema, migration or port signature changes (steps touch bodies and comments only) |
 | NFR-02 | New unit and integration tests below; `pnpm test:coverage` thresholds unchanged |
 
-## Solution — steps
+## Block 1 — Solution steps
+
+All eight steps form one block, verified as a unit (user decision 2026-09-28: the heading exists
+so `validate_verify.py` F-VER-02 can account for the fix-plan; content unchanged).
+
+**Files**
+- `apps/api/src/identity/application/refresh-session.ts` (modified) — steps 1–2
+- `apps/api/src/identity/application/ports/session-repository.ts` (modified) — step 3
+- `apps/api/src/identity/application/sign-in.ts` (modified) — steps 4–5
+- `apps/api/test/identity/refresh-session.test.ts` (modified) — step 6
+- `apps/api/test/identity/reset-session-races.test.ts` (modified) — step 7
+- `apps/api/test/identity/sign-in-use-case.test.ts` (modified) — step 8
+
+**Data model**
+- None: no table, column, index or migration changes (NFR-01). The fix only reads
+  `sessions.replaced_by`, which stays nullable (null for a session revoked without a successor).
+
+**Input validation**
+- None added: `/auth/refresh` and `/auth/sign-in` keep their shared Zod schemas; the fix only
+  changes how two use cases handle failure branches.
+
+**Logic**
 
 1. `apps/api/src/identity/application/refresh-session.ts:79-83` — in the `RotationAlreadyClaimed`
    catch, re-read the session with `this.deps.sessions.findById(current.id)` (outside the rolled

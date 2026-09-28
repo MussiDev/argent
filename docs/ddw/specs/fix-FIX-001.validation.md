@@ -13,10 +13,10 @@
   ✅ F-SPEC-11: dependencies between blocks are declared
   ✅ F-SPEC-14: the fix-plan declares a regression test
   ✅ F-SPEC-15: the fix-plan has a rollback plan
-  ⚠️ W-SPEC-02: large block, consider splitting: Fix-plan (8 files, 984 words)
+  ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (Solution steps) (6 files, 848 words)
   👁  F-SPEC-12 (contradicts the PRD) and F-SPEC-13 (terminology diverging from
       the PRD) are MANUAL: judge them and say so explicitly in your report.
-  ✅ F-SPEC-LOOP: 1 loop(s) since a human decided, under the ceiling of 3; 1 in total for this document
+  ✅ F-SPEC-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 2 in total for this document
 ────────────────────────────────────────────────────────────────
 Total: 11 passed, 0 failed, 1 warnings
 Result: PASSED

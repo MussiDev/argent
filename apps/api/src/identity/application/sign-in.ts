@@ -1,13 +1,10 @@
 import { Email } from '../domain/email';
 import { RateLimited } from '../domain/errors';
 import { UNKNOWN_IP } from './client-ip';
-import type { AccessTokenIssuer } from './ports/access-token-issuer';
 import type { AttemptLimiter, AttemptPolicy, AttemptResult } from './ports/attempt-limiter';
-import type { Clock } from './ports/clock';
 import type { PasswordHasher } from './ports/password-hasher';
-import type { SessionRepository } from './ports/session-repository';
-import type { TokenGenerator } from './ports/token-generator';
 import type { User, UserRepository } from './ports/user-repository';
+import type { SessionTokens, StartSession } from './start-session';
 
 const FIFTEEN_MINUTES = 15 * 60;
 
@@ -25,25 +22,13 @@ export const SIGN_IN_IP_POLICY: AttemptPolicy = {
   windowSeconds: FIFTEEN_MINUTES,
 };
 
-/** The secrets of a freshly started or rotated session; only ever sent to the client as cookies. */
-export interface SessionTokens {
-  sessionId: string;
-  accessToken: string;
-  refreshToken: string;
-  /** Lifetime of the access token, in seconds. */
-  accessTokenTtlSeconds: number;
-}
-
 export interface SignInDependencies {
   attemptLimiter: AttemptLimiter;
   users: UserRepository;
   passwordHasher: PasswordHasher;
   /** A real hash of an unknown password, verified for unknown emails so both paths cost the same. */
   dummyPasswordHash: string;
-  sessions: SessionRepository;
-  tokenGenerator: TokenGenerator;
-  accessTokens: AccessTokenIssuer;
-  clock: Clock;
+  startSession: StartSession;
   /**
    * Told when a refund fails, after a successful sign-in or a rate-limited refusal. The outcome is
    * unchanged (signed in, or 429): the leaked units only make the limiter stricter (fail safe).
@@ -116,30 +101,10 @@ export class SignIn {
       this.deps.reportRefundFailure(error);
     }
 
-    // Unverified users get a session too: they need one to resend the verification email.
-    const refreshToken = this.deps.tokenGenerator.generate();
-    const session = await this.deps.sessions.create({
-      userId: user.id,
-      refreshTokenHash: this.deps.tokenGenerator.hash(refreshToken),
-      lastUsedAt: this.deps.clock.now(),
-      // Read in the same row as the hash that was verified: if a reset commits meanwhile, this
-      // session is created stale and rejected on first use (AC-10).
-      credentialsVersion: user.credentialsVersion,
-    });
-    const accessToken = await this.deps.accessTokens.issue({
-      userId: user.id,
-      sessionId: session.id,
-    });
-    return {
-      outcome: 'signed_in',
-      user,
-      session: {
-        sessionId: session.id,
-        accessToken,
-        refreshToken,
-        accessTokenTtlSeconds: this.deps.accessTokens.ttlSeconds,
-      },
-    };
+    // Unverified users get a session too: they need one to resend the verification email. The
+    // credentials version comes from the same row as the hash that was verified (AC-10).
+    const session = await this.deps.startSession.execute(user);
+    return { outcome: 'signed_in', user, session };
   }
 
   /** Gives back exactly the reserved units, in the windows they were recorded in. */

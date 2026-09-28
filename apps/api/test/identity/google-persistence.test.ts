@@ -108,7 +108,7 @@ describe('DrizzleUserRepository for Google accounts', () => {
 });
 
 describe('DrizzleUserIdentityRepository', () => {
-  it('links a Google identity with its emailAuthoritative flag and finds its user (FR-02, FR-04)', async () => {
+  it('links a Google identity with its emailAuthoritative flag and finds its user, read with the link (FR-02, FR-04)', async () => {
     const ana = await users.create(newUser('ana@gmail.com'));
     const bob = await users.create(newUser('bob@example.com'));
 
@@ -125,9 +125,12 @@ describe('DrizzleUserIdentityRepository', () => {
       emailAuthoritative: false,
     });
 
-    expect(await identities.findUserIdByProviderSubject('google', 'sub-ana')).toBe(ana.id);
-    expect(await identities.findUserIdByProviderSubject('google', 'sub-bob')).toBe(bob.id);
-    expect(await identities.findUserIdByProviderSubject('google', 'sub-unknown')).toBeNull();
+    expect(await identities.findUserByProviderSubject('google', 'sub-ana')).toEqual(ana);
+    expect(await identities.findUserByProviderSubject('google', 'sub-bob')).toEqual(bob);
+    expect(await identities.findUserByProviderSubject('google', 'sub-unknown')).toBeNull();
+    const carl = await users.create(newUser('carl@gmail.com'));
+    expect(await identities.hasProviderIdentity(ana.id, 'google')).toBe(true);
+    expect(await identities.hasProviderIdentity(carl.id, 'google')).toBe(false);
     expect(await identityRows()).toEqual([
       { user_id: ana.id, provider: 'google', subject: 'sub-ana', email_authoritative: true },
       { user_id: bob.id, provider: 'google', subject: 'sub-bob', email_authoritative: false },

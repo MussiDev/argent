@@ -55,6 +55,8 @@ export interface ResponseFacade<TBody = unknown> {
   cookie(name: string, value: string, options: CookieOptions): ResponseFacade<TBody>;
   clearCookie(name: string, options?: CookieOptions): ResponseFacade<TBody>;
   setHeader(name: string, value: string): ResponseFacade<TBody>;
+  /** 302 Found to `url`, with an empty body. */
+  redirect(url: string): void;
   sendStatus(code: number): void;
   end(): void;
 }
@@ -84,6 +86,9 @@ function responseFacade<TBody>(
     setHeader(name, value) {
       res.setHeader(name, value);
       return facade;
+    },
+    redirect(url) {
+      res.status(302).location(url).end();
     },
     sendStatus(code) {
       res.sendStatus(code);

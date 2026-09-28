@@ -63,3 +63,27 @@ fake `/authorize`) land in a separate commit.
 | fake `/authorize` rejects unregistered `redirect_uri` and scope without `openid` | `apps/api/test/identity/fake-google-oidc.test.ts:54, 58, 70, 88` | `expected 200 to be 400` |
 
 21/25 red before (the rest: regression guards and pre-existing fixture paths); 25/25 after; full suite 581/581.
+
+## Block 3 — Google sign-in use cases and routes
+
+| Required test | File:line | Failure in the red run |
+|---|---|---|
+| start, callback outcomes AC-01..AC-09, sad paths, rate limit, query validation, no secrets in logs (25 tests) | `apps/api/test/identity/google-sign-in.test.ts:181–603` | 22× `expected 404 to be 302`, 2× `expected 404 to be 400`, 1× `toMatch() expects a string, got undefined` (no route yet) |
+| concurrent callbacks, retry, second identity (4 tests) | `apps/api/test/identity/google-sign-in-races.test.ts:100–190` | `Cannot find module '…/complete-google-sign-in'` |
+| password reset removes non-authoritative identities, keeps authoritative ones | `apps/api/test/identity/password-reset.test.ts:419` | `TypeError: Invalid URL` (start answered 404) |
+| `ResponseFacade.redirect` answers 302 with `Location` | `apps/api/test/foundation/validate.test.ts:176` (+ facade keys `:86`) | `expected 500 to be 302`; facade keys mismatch |
+| perf: callback p95 < 500 ms | `apps/api/test/perf/google-callback.perf.test.ts:94` | `expected { '404': 200 } to deeply equal { '302': 200 }` |
+| `StartSession` extraction keeps sign-in and reset-race behaviour | `sign-in-use-case.test.ts`, `reset-session-races.test.ts` | `Cannot find module '…/start-session'` |
+
+32/32 new tests red before; after: 612/612; `pnpm test:perf` 3/3, Google callback p95 191 ms.
+
+### Block 3 review round 2 (architecture FAIL: identity and user read in two statements)
+
+| Item | Test (file:line) | Failure in the red run |
+|---|---|---|
+| reset committing right after the identity lookup leaves no live session | `apps/api/test/identity/google-sign-in-races.test.ts:256` | `expected { …(2) } to be null` (a live session was issued) |
+| callback fault answers 500 and clears the binding cookie | `apps/api/test/identity/google-sign-in.test.ts:493` | `expected undefined to be ''` |
+| second Google identity refused with `another_identity_linked` | `google-sign-in.test.ts:490` | `expected [ 'conflict' ] to deeply equal [ 'another_identity_linked' ]` |
+| supersede returns null (verified meanwhile) → link | `google-sign-in-races.test.ts:289` | green from the start (branch existed); red by mutation (link replaced by refusal) |
+
+After: 615/615; `pnpm test:perf` 3/3, Google callback p95 191 ms.

@@ -5,6 +5,7 @@ import type { PasswordHasher } from '../../src/identity/application/ports/passwo
 import type { UnitOfWork } from '../../src/identity/application/ports/unit-of-work';
 import { RefreshSession } from '../../src/identity/application/refresh-session';
 import { SignIn } from '../../src/identity/application/sign-in';
+import { StartSession } from '../../src/identity/application/start-session';
 import { DUMMY_PASSWORD_HASH } from '../../src/identity/infrastructure/security/argon2id-password-hasher';
 import { JoseAccessTokenIssuer } from '../../src/identity/infrastructure/security/jose-access-token-issuer';
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
@@ -129,10 +130,12 @@ describe('credentials version (AC-10)', () => {
       users: infrastructure.users,
       passwordHasher: slowHasher,
       dummyPasswordHash: DUMMY_PASSWORD_HASH,
-      sessions: infrastructure.sessions,
-      tokenGenerator: infrastructure.tokenGenerator,
-      accessTokens,
-      clock: harness.clock,
+      startSession: new StartSession({
+        sessions: infrastructure.sessions,
+        tokenGenerator: infrastructure.tokenGenerator,
+        accessTokens,
+        clock: harness.clock,
+      }),
       reportRefundFailure: () => undefined,
     });
 

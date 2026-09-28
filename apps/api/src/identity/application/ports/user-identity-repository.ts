@@ -1,3 +1,5 @@
+import type { User } from './user-repository';
+
 export const IDENTITY_PROVIDERS = ['google'] as const;
 export type IdentityProvider = (typeof IDENTITY_PROVIDERS)[number];
 
@@ -15,7 +17,14 @@ export interface NewUserIdentity {
 
 /** Links between users and external sign-in identities: one per provider and user. */
 export interface UserIdentityRepository {
-  findUserIdByProviderSubject(provider: IdentityProvider, subject: string): Promise<string | null>;
+  /**
+   * The user linked to the external account, read in one statement with the link, so the user's
+   * credentials version is the one current while the link existed: a reset that removes the link
+   * afterwards leaves a session started from it stale (AC-10, threat R-37).
+   */
+  findUserByProviderSubject(provider: IdentityProvider, subject: string): Promise<User | null>;
+  /** Whether the user already has an identity of that provider (at most one per provider). */
+  hasProviderIdentity(userId: string, provider: IdentityProvider): Promise<boolean>;
   /**
    * Rejects with `IdentityAlreadyLinked` when the subject is already linked or the user already
    * has an identity of that provider.

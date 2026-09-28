@@ -3,6 +3,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PasswordCheckUnavailable } from '../../src/identity/domain/errors';
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
 import {
+  startFakeGoogleOidc,
+  type FakeGoogleIdentity,
+  type FakeGoogleOidc,
+} from '../fixtures/fake-google-oidc';
+import {
   createIdentityHarness,
   LINK_BASE_URL,
   logEntries,
@@ -13,6 +18,7 @@ import {
   currentSession,
   refresh,
   seedUser,
+  parseSetCookies,
   sessionFrom,
   signIn,
   type SessionCookies,
@@ -379,5 +385,55 @@ describe('email worker after a completed reset', () => {
     expect((await requestReset(harness, EMAIL, '198.51.100.3')).status).toBe(202);
     expect(await harness.worker.runOnce()).toEqual({ sent: 1, dropped: 0, failed: 0 });
     expect(harness.transport.sentTo(EMAIL)).toHaveLength(2);
+  });
+});
+
+describe('password reset and Google identities (FR-07, threat R-37)', () => {
+  let google: FakeGoogleOidc;
+
+  beforeAll(async () => {
+    google = await startFakeGoogleOidc();
+  });
+
+  afterAll(async () => {
+    await google.close();
+  });
+
+  async function googleCallback(harness: IdentityHarness, identity: FakeGoogleIdentity) {
+    const started = await request(harness.app).get('/auth/google/start').query({ language: 'es' });
+    const binding = parseSetCookies(started).get('__Secure-argent_oauth')?.value ?? '';
+    const { continueUrl } = await google.consent(started.headers.location as string, identity);
+    const target = new URL(continueUrl);
+    return request(harness.app)
+      .get(`${target.pathname}${target.search}`)
+      .set('Cookie', `__Secure-argent_oauth=${binding}`);
+  }
+
+  async function identitySubjects(): Promise<string[]> {
+    const result = await connection.pool.query<{ subject: string }>(
+      'select subject from user_identities order by subject',
+    );
+    return result.rows.map((row) => row.subject);
+  }
+
+  it('removes the non-authoritative Google identity and keeps an authoritative one', async () => {
+    const harness = harnessFor({ google });
+    const nonAuthoritative = { sub: 'sub-gil', email: 'gil@example.com', emailVerified: true };
+    const authoritative = { sub: 'sub-hal', email: 'hal@gmail.com', emailVerified: true };
+    const home = `${LINK_BASE_URL}/es`;
+    expect((await googleCallback(harness, nonAuthoritative)).headers.location).toBe(home);
+    expect((await googleCallback(harness, authoritative)).headers.location).toBe(home);
+    expect(await identitySubjects()).toEqual(['sub-gil', 'sub-hal']);
+
+    for (const email of ['gil@example.com', 'hal@gmail.com']) {
+      expect((await confirmReset(harness, await resetToken(harness, email))).status).toBe(200);
+    }
+
+    expect(await identitySubjects()).toEqual(['sub-hal']);
+    expect((await googleCallback(harness, nonAuthoritative)).headers.location).toBe(
+      `${LINK_BASE_URL}/es/sign-in?error=google_failed`,
+    );
+    expect((await googleCallback(harness, authoritative)).headers.location).toBe(home);
+    expect((await signIn(harness.app, 'gil@example.com', NEW_PASSWORD)).status).toBe(200);
   });
 });

@@ -5,7 +5,7 @@ import type { SessionRepository } from './ports/session-repository';
 import type { TokenGenerator } from './ports/token-generator';
 import type { UnitOfWork } from './ports/unit-of-work';
 import type { UserRepository } from './ports/user-repository';
-import type { SessionTokens } from './sign-in';
+import type { SessionTokens } from './start-session';
 
 export interface RefreshSessionDependencies {
   sessions: SessionRepository;

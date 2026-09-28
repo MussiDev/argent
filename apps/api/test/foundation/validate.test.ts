@@ -92,7 +92,16 @@ describe('validation middleware', () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       resHasReq: false,
-      resKeys: ['clearCookie', 'cookie', 'end', 'json', 'sendStatus', 'setHeader', 'status'],
+      resKeys: [
+        'clearCookie',
+        'cookie',
+        'end',
+        'json',
+        'redirect',
+        'sendStatus',
+        'setHeader',
+        'status',
+      ],
     });
   });
 
@@ -162,6 +171,27 @@ describe('validation middleware', () => {
     const mismatch = await request(app).post('/mismatch').set(trustedHeaders).send({});
     expect(mismatch.status).toBe(500);
     expect(mismatch.body).toEqual({ code: 'INTERNAL' });
+  });
+
+  it('redirects with 302 and the given Location', async () => {
+    const target = 'https://accounts.example.test/authorize?state=abc&scope=openid%20email';
+    const router = Router();
+    router.get(
+      '/go',
+      validate({}, (_input, { res }) => {
+        res.redirect(target);
+      }),
+    );
+    const app = createApp({
+      env: testEnv(),
+      logger: createLogger({ level: 'silent' }),
+      routers: [router],
+    });
+
+    const response = await request(app).get('/go');
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe(target);
   });
 
   it('returns 400 VALIDATION_FAILED for malformed JSON', async () => {

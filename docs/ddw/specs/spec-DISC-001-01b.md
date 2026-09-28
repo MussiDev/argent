@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01b.md |
 | Tier | FEATURE |
 | Date | 2026-09-28 |
-| Spec loops | 3 |
-| Loops since last human decision | 1 |
+| Spec loops | 4 |
+| Loops since last human decision | 2 |
 
 ## Summary
 Adds Google sign-in to the `identity` module built in DISC-001-01a. The API runs the OpenID Connect
@@ -53,7 +53,7 @@ endpoint is called with the platform `fetch`. The fake OIDC server for tests use
 - `apps/api/drizzle/0004_google_identity.sql` (new, generated), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0004_snapshot.json` (new, generated).
 - `apps/api/drizzle/rollback/0004_google_identity.down.sql` (new) — see Data model.
 - `apps/api/src/identity/application/ports/user-repository.ts` (modified) — `User.passwordHash: string | null`; `NewUser.passwordHash: string | null`; `NewUser.emailVerifiedAt?: Date`; new `supersedeUnverified(id, at): Promise<User | null>`.
-- `apps/api/src/identity/application/ports/user-identity-repository.ts` (new) — `findUserIdByProviderSubject(provider, subject)`, `link({ userId, provider, subject, emailAuthoritative })` (rejects with `IdentityAlreadyLinked` on either unique constraint), `deleteNonAuthoritativeForUser(userId)`.
+- `apps/api/src/identity/application/ports/user-identity-repository.ts` (new) — `findUserByProviderSubject(provider, subject): Promise<User | null>` (one statement joining `user_identities` and `users`, so the credentials version is read together with the identity), `hasProviderIdentity(userId, provider)`, `link({ userId, provider, subject, emailAuthoritative })` (rejects with `IdentityAlreadyLinked` on either unique constraint), `deleteNonAuthoritativeForUser(userId)`.
 - `apps/api/src/identity/application/ports/oauth-state-repository.ts` (new) — `create(state)`, `consume(stateHash, bindingHash, now): Promise<OAuthState | null>`.
 - `apps/api/src/identity/application/ports/oauth-state-purger.ts` (new) — `purgeExpired(now): Promise<number>`, mirroring `attempt-purger.ts`.
 - `apps/api/src/identity/application/ports/attempt-limiter.ts` (modified) — attempt kind `google_start_ip`.
@@ -92,7 +92,7 @@ endpoint is called with the platform `fetch`. The fake OIDC server for tests use
 
 **Required tests**
 - [ ] a user can be created without a password and with `emailVerifiedAt` set — validates FR-01, FR-03
-- [ ] `link` stores a Google identity with its `emailAuthoritative` flag and `findUserIdByProviderSubject` returns its user; a second link of the same subject or a second Google identity for the same user rejects with `IdentityAlreadyLinked` — validates FR-02, FR-04, sad path
+- [ ] `link` stores a Google identity with its `emailAuthoritative` flag and `findUserByProviderSubject` returns its user; a second link of the same subject or a second Google identity for the same user rejects with `IdentityAlreadyLinked` — validates FR-02, FR-04, sad path
 - [ ] `supersedeUnverified` clears the password, bumps the credentials version and marks the email verified; on an already verified user it returns null and changes nothing — validates FR-05, sad path
 - [ ] `deleteNonAuthoritativeForUser` deletes only identities with `email_authoritative = false` — validates FR-07
 - [ ] `consume` returns the state once; a second consume, a wrong binding hash and an expired row return null — sad path
@@ -185,7 +185,7 @@ All tests above pass without any request leaving the machine.
   3. `exchangeCode` → verified claims (NFR-02).
   4. `emailVerified = false` → failure, nothing written (AC-05, AC-08, FR-06).
   5. One `unitOfWork.run`:
-     - identity `(google, sub)` exists → that user (AC-03);
+     - identity `(google, sub)` exists → that user, read with `findUserByProviderSubject` in the same statement as the identity (AC-03);
      - else a user with the claim email exists:
        - `isGoogleAuthoritative(email, hostedDomain)` is false → failure, nothing written (AC-09, FR-07);
        - user verified → `link` (AC-06, FR-04);
@@ -193,7 +193,7 @@ All tests above pass without any request leaving the machine.
      - else create the user without a password, with the state's time zone and language and `emailVerifiedAt = now` (AC-01, AC-04), then `link` with `emailAuthoritative = isGoogleAuthoritative(email, hostedDomain)`.
   6. `StartSession` for the user, with the credentials version read after step 5.
 - A `DuplicateEmail` or `IdentityAlreadyLinked` from a concurrent callback aborts the PostgreSQL transaction; step 5 is retried once as a **new** `unitOfWork.run`; a second conflict is a failure.
-- A user who already has another Google identity linked and signs in with a second Google account carrying the same email → `IdentityAlreadyLinked` → failure (one Google identity per account).
+- A user who already has another Google identity linked and signs in with a second Google account carrying the same email → `hasProviderIdentity` is checked before linking → failure with internal reason `another_identity_linked` (one Google identity per account); the unique constraint still backs it up.
 - Password reset: `ConfirmPasswordReset` deletes the user's non-authoritative Google identities in its transaction. A reset proves current control of the mailbox, which outranks a Google claim that is not authoritative for that email, so whoever held that Google account loses access (threat R-37).
 - Expected failures (steps 1–5) are an outcome of the use case, not exceptions, and become the failure redirect, logged at `warn` with the internal reason. Unexpected errors (database or network faults outside the provider) are not caught: they reach the error middleware, are logged at `error` and answer 500.
 
@@ -236,6 +236,8 @@ All tests above pass without any request leaving the machine.
 - [ ] callback whose ID token fails verification (fake server wrong audience) redirects with `error=google_failed` and creates nothing — validates NFR-02, sad path
 - [ ] a Google account whose email matches a user already linked to another Google subject is refused — sad path
 - [ ] two concurrent callbacks for the same new Google subject create exactly one user and one identity — sad path
+- [ ] a password reset that commits right after the identity lookup leaves no live session for the evicted non-authoritative identity — sad path, validates FR-07
+- [ ] a callback whose use case throws answers 500 and still clears the binding cookie — sad path
 - [ ] the 21st start from one IP within 15 minutes redirects with `error=google_failed` and stores no state — sad path
 - [ ] a start query value over its length limit answers 400 `VALIDATION_FAILED`; an unknown time zone or language is stored as the default — sad path
 - [ ] a callback with an empty `hd=` or `state=` value is handled as missing (redirect, not 400) — sad path
@@ -317,3 +319,4 @@ All e2e tests pass in CI with the fake OIDC server; both screens render the butt
 - 2026-09-28: Architecture review and impact scan applied: `@argent/shared` root export instead of a nonexistent `/auth` subpath; flat web test paths; `apps/api/test/identity/migration.test.ts`; type-level fakes, `EmailWorker` construction sites and `test-env.ts` production overrides listed; `OAuthStatePurger` port; `TokenGenerator.hash` for every hash; S256 challenge computed in the adapter; `ResponseFacade.redirect`; retry as a new transaction; array query values as failures; redirect to the account's language; destructive rollback stated; fake OIDC server on `127.0.0.1` for a real cross-site redirect in e2e; perf test seeds states directly.
 - 2026-09-28: Architecture review round 2 (PASSED) applied: FR-07 authority rule moved to the domain (`isGoogleAuthoritative`, provider returns `hostedDomain`); empty query values count as missing and arrays are capped; start query reuses the registration length constants; `createEmailWorker` wiring listed; the fake consent page makes e2e prove the `SameSite=Lax` binding cookie.
 - 2026-09-28: Block 2 review follow-ups: `maxTokenAge: '1h'` makes `iat` required and rejects an `iat` in the future (beyond the 60 s tolerance); `GOOGLE_CLIENT_SECRET` is required whenever `GOOGLE_CLIENT_ID` is set, in any environment; the JWKS fetch times out after 2 s; the token-endpoint body is read with a 16 KB limit before JSON parsing.
+- 2026-09-28: Block 3 architecture review (FAIL fixed): the existing-identity path read the identity and the user in two statements, so a password reset committing in between could leave a live session to the Google identity it removed (R-37). Block 1's port changes from `findUserIdByProviderSubject` to `findUserByProviderSubject` (one joined statement) plus `hasProviderIdentity`; the binding cookie is cleared before the use case runs, so a 500 clears it too.

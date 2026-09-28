@@ -9,6 +9,7 @@ import type {
 } from '../../src/identity/application/ports/session-repository';
 import type { User, UserRepository } from '../../src/identity/application/ports/user-repository';
 import { SignIn } from '../../src/identity/application/sign-in';
+import { StartSession } from '../../src/identity/application/start-session';
 import { RateLimited } from '../../src/identity/domain/errors';
 import { PostgresAttemptLimiter } from '../../src/identity/infrastructure/db/postgres-attempt-limiter';
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
@@ -98,10 +99,12 @@ function buildSignIn(options: {
     users,
     passwordHasher,
     dummyPasswordHash: 'dummy-hash',
-    sessions,
-    tokenGenerator: { generate: () => 'refresh-token', hash: (token) => `hash:${token}` },
-    accessTokens,
-    clock: options.clock,
+    startSession: new StartSession({
+      sessions,
+      tokenGenerator: { generate: () => 'refresh-token', hash: (token) => `hash:${token}` },
+      accessTokens,
+      clock: options.clock,
+    }),
     reportRefundFailure: options.reportRefundFailure ?? (() => undefined),
   });
 }

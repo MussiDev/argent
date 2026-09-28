@@ -131,12 +131,15 @@ export const emailOutbox = pgTable(
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     sentAt: timestamptz('sent_at'),
     attempts: integer('attempts').notNull().default(0),
+    /** When a failed row may be tried again; null means due now. Shared by every worker. */
+    nextAttemptAt: timestamptz('next_attempt_at'),
   },
   (table) => [
     check('email_outbox_kind_check', oneOf(table.kind, OUTBOX_EMAIL_KINDS)),
     check('email_outbox_language_check', oneOf(table.language, LANGUAGES)),
+    // Workers poll pending rows oldest first.
     index('email_outbox_pending_idx')
-      .on(table.sentAt)
+      .on(table.createdAt)
       .where(sql`${table.sentAt} is null`),
   ],
 );

@@ -2,7 +2,8 @@ import { pino, type DestinationStream, type Logger } from 'pino';
 
 export type { Logger };
 
-// Email addresses are PII: never logged, whatever key they travel under.
+// Email addresses are PII: never logged under the keys that carry them. A bare `to` is only an
+// address inside an email message; elsewhere (e.g. a transfer's destination) it is kept.
 const SECRET_KEYS = [
   'password',
   'newPassword',
@@ -10,9 +11,9 @@ const SECRET_KEYS = [
   'cookies',
   'authorization',
   'email',
-  'to',
   'toEmail',
   'to_email',
+  'message.to',
 ];
 
 /**

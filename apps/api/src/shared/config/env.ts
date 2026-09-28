@@ -81,6 +81,15 @@ const envSchema = z
         message: 'required when EMAIL_PROVIDER=resend',
       });
     }
+    // Outside production the Resend SDK prints raw provider errors (which can echo the recipient
+    // address) to the console, bypassing the logger's redaction.
+    if (env.EMAIL_PROVIDER === 'resend' && env.NODE_ENV !== 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['EMAIL_PROVIDER'],
+        message: 'resend requires NODE_ENV=production',
+      });
+    }
     if (env.NODE_ENV === 'production') {
       for (const issue of productionIssues(env)) ctx.addIssue({ code: 'custom', ...issue });
     }

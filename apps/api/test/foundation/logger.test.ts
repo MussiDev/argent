@@ -47,7 +47,7 @@ describe('logger redaction (NFR-01)', () => {
 });
 
 describe('logger redaction of email addresses (PII)', () => {
-  it('removes email, to, toEmail and to_email at the top level and nested', () => {
+  it('removes email, toEmail, to_email and message.to at the top level and nested', () => {
     const lines: string[] = [];
     const logger = createLogger({
       level: 'info',
@@ -55,7 +55,7 @@ describe('logger redaction of email addresses (PII)', () => {
     });
 
     logger.info(
-      { email: 'a1@example.com', to: 'a2@example.com', toEmail: 'a3@example.com' },
+      { email: 'a1@example.com', to_email: 'a2@example.com', toEmail: 'a3@example.com' },
       'top level',
     );
     logger.info(
@@ -70,6 +70,34 @@ describe('logger redaction of email addresses (PII)', () => {
     const output = lines.join('\n');
     expect(output).not.toMatch(/a\d@example\.com/);
     expect(output).toContain('[REDACTED]');
+  });
+});
+
+describe('logger redaction scope', () => {
+  it('keeps an unrelated field named to, while toEmail, to_email and message.to are redacted', () => {
+    const lines: string[] = [];
+    const logger = createLogger({
+      level: 'info',
+      destination: { write: (line: string) => lines.push(line) },
+    });
+
+    logger.info(
+      {
+        transfer: { from: 'account-ars', to: 'account-usd' },
+        message: { to: 'b1@example.com', subject: 'Hola' },
+        toEmail: 'b2@example.com',
+        row: { to_email: 'b3@example.com' },
+      },
+      'mixed',
+    );
+
+    const [line] = lines;
+    const entry = JSON.parse(line ?? '{}') as Record<string, unknown>;
+    expect(entry.transfer).toEqual({ from: 'account-ars', to: 'account-usd' });
+    expect(entry.message).toEqual({ to: '[REDACTED]', subject: 'Hola' });
+    expect(entry.toEmail).toBe('[REDACTED]');
+    expect(entry.row).toEqual({ to_email: '[REDACTED]' });
+    expect(line).not.toMatch(/b\d@example\.com/);
   });
 });
 

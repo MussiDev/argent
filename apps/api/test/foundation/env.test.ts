@@ -59,12 +59,30 @@ describe('environment production rules', () => {
   });
 
   it('requires EMAIL_FROM when EMAIL_PROVIDER=resend', () => {
-    const resend = { EMAIL_PROVIDER: 'resend', RESEND_API_KEY: 're_test' };
-    expect(() => parseEnv(testEnvSource(resend))).toThrow(/EMAIL_FROM/);
+    const source = testEnvSource(productionOverrides);
+    delete source.EMAIL_FROM;
+    expect(() => parseEnv(source)).toThrow(/EMAIL_FROM/);
     expect(
-      parseEnv(testEnvSource({ ...resend, EMAIL_FROM: 'Argent <no-reply@argent.app>' })).EMAIL_FROM,
+      parseEnv(
+        testEnvSource({ ...productionOverrides, EMAIL_FROM: 'Argent <no-reply@argent.app>' }),
+      ).EMAIL_FROM,
     ).toBe('Argent <no-reply@argent.app>');
   });
+
+  it.each(['development', 'test'])(
+    'refuses EMAIL_PROVIDER=resend with NODE_ENV=%s (the SDK prints raw provider errors there)',
+    (nodeEnv) => {
+      const resend = {
+        NODE_ENV: nodeEnv,
+        EMAIL_PROVIDER: 'resend',
+        RESEND_API_KEY: 're_test',
+        EMAIL_FROM: 'Argent <no-reply@argent.app>',
+      };
+      expect(() => parseEnv(testEnvSource(resend))).toThrow(
+        /EMAIL_PROVIDER: resend requires NODE_ENV=production/,
+      );
+    },
+  );
 
   it('gives console and mailpit a local sender when EMAIL_FROM is unset', () => {
     for (const provider of ['console', 'mailpit']) {

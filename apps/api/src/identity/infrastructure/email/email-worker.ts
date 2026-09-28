@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNotNull, isNull, lt, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, isNotNull, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { Logger } from '../../../shared/logging/logger';
 import { issueEmailToken } from '../../application/issue-email-token';
 import type { AttemptPurger } from '../../application/ports/attempt-purger';
@@ -75,21 +75,21 @@ function retryDelayMs(attempts: number): number {
   return EMAIL_RETRY_BASE_DELAY_MS * (2 ** attempts - 1);
 }
 
+/** What a failure update did: the row's new attempt count, or nothing when no pending row matched. */
+type FailureRecord = { attempts: number; permanent: boolean } | undefined;
+
 /**
  * Delivers the PostgreSQL email outbox. Each row is handled in its own transaction holding the
  * row lock (`FOR UPDATE SKIP LOCKED`), so any number of workers can run without sending a row
  * twice (NFR-09). For token emails the token is issued inside that transaction, at send time, and
  * exists in plaintext only in this process's memory (threat R-05, user decision 2026-09-26 A).
  *
- * When the next retry of a failed row is due lives in this process's memory, not in the table: a
- * restarted worker (or another worker) may retry a row earlier than the backoff says, which is
- * acceptable. This is worker state, not API state, so the stateless API rule (NFR-09) holds.
+ * The retry schedule lives in the table (`next_attempt_at`), not in worker memory, so every worker
+ * and every restart sees the same backoff and a row cannot burn its attempts in seconds.
  */
 export class EmailWorker {
   private readonly pollIntervalMs: number;
   private readonly batchSize: number;
-  /** Outbox row id → epoch ms before which the row is not retried. */
-  private readonly retryAt = new Map<string, number>();
   private lastPurgeAt: number | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private running: Promise<void> | undefined;
@@ -109,15 +109,12 @@ export class EmailWorker {
     await this.purgeIfDue();
     const run: EmailWorkerRun = { sent: 0, dropped: 0, failed: 0 };
 
-    const now = this.deps.clock.now().getTime();
-    for (const [id, at] of this.retryAt) if (at <= now) this.retryAt.delete(id);
-    // Rows waiting for their backoff, plus every row handled in this pass.
-    const skip = [...this.retryAt.keys()];
-
+    // A row handled in this pass is not picked again: it ends sent, deleted, failed for good, or
+    // scheduled after now by its failure update.
     for (let i = 0; i < this.batchSize && !this.stopRequested; i += 1) {
       let outcome: RowOutcome;
       try {
-        outcome = await this.handleNext(skip);
+        outcome = await this.handleNext();
       } catch (error) {
         if (!(error instanceof RowFailure)) throw error;
         await this.recordRowFailure(error);
@@ -184,7 +181,8 @@ export class EmailWorker {
     return result.rowCount ?? 0;
   }
 
-  private handleNext(skip: string[]): Promise<RowOutcome> {
+  private handleNext(): Promise<RowOutcome> {
+    const now = this.deps.clock.now();
     return this.deps.db.transaction(async (tx) => {
       const [row] = await tx
         .select()
@@ -193,14 +191,13 @@ export class EmailWorker {
           and(
             isNull(emailOutbox.sentAt),
             lt(emailOutbox.attempts, EMAIL_MAX_ATTEMPTS),
-            skip.length > 0 ? notInArray(emailOutbox.id, skip) : undefined,
+            or(isNull(emailOutbox.nextAttemptAt), lte(emailOutbox.nextAttemptAt, now)),
           ),
         )
         .orderBy(asc(emailOutbox.createdAt))
         .limit(1)
         .for('update', { skipLocked: true });
       if (!row) return 'idle';
-      skip.push(row.id);
       try {
         return await this.handleRow(tx, row);
       } catch (error) {
@@ -257,7 +254,14 @@ export class EmailWorker {
         });
         let sent: SendResult;
         try {
-          sent = await this.deps.transport.send({ to, ...rendered });
+          // One key per attempt: each attempt carries a new token (a different body), and a
+          // provider rejects a reused key with a different payload (Resend: 409).
+          const attempt = row.attempts + 1;
+          sent = await this.deps.transport.send({
+            idempotencyKey: `${row.id}:${attempt}`,
+            to,
+            ...rendered,
+          });
         } catch (error) {
           throw new TransportFailure(error);
         }
@@ -272,45 +276,62 @@ export class EmailWorker {
       return 'sent';
     } catch (error) {
       if (!(error instanceof TransportFailure)) throw error;
-      const attempts = row.attempts + 1;
-      const permanent = attempts >= EMAIL_MAX_ATTEMPTS;
-      await tx
-        .update(emailOutbox)
-        .set(permanent ? { attempts, toEmail: null } : { attempts })
-        .where(eq(emailOutbox.id, row.id));
-      const details = { ...log, userId, attempts, err: error.cause };
-      if (permanent) {
+      // The row lock is held here, so the update always matches; the guard matters for poison rows.
+      const recorded = await this.recordFailure(tx, row.id);
+      if (!recorded) {
+        this.deps.logger.debug(log, 'outbox row already handled');
+        return 'failed';
+      }
+      const details = { ...log, userId, attempts: recorded.attempts, err: error.cause };
+      if (recorded.permanent) {
         this.deps.logger.error(details, 'email delivery failed permanently');
       } else {
-        this.retryAt.set(row.id, now.getTime() + retryDelayMs(attempts));
         this.deps.logger.warn(details, 'email delivery failed; will retry');
       }
       return 'failed';
     }
   }
 
-  /** Counts the failed attempt of a row whose transaction rolled back, in a short transaction. */
-  private async recordRowFailure(failure: RowFailure): Promise<void> {
-    const [updated] = await this.deps.db
+  /**
+   * Counts one failed attempt and schedules the next one in a single statement, so `attempts` and
+   * `next_attempt_at` never disagree. Only a still-pending row matches: one that another worker
+   * sent (or dropped) in the meantime is left alone and nothing is scheduled.
+   */
+  private async recordFailure(db: IdentityDb, outboxId: string): Promise<FailureRecord> {
+    const now = this.deps.clock.now().getTime();
+    const nextAttempts = sql`${emailOutbox.attempts} + 1`;
+    const schedule: SQL[] = [];
+    for (let attempts = 1; attempts < EMAIL_MAX_ATTEMPTS; attempts += 1) {
+      const at = new Date(now + retryDelayMs(attempts)).toISOString();
+      schedule.push(sql`when ${attempts} then ${at}::timestamptz`);
+    }
+    const [updated] = await db
       .update(emailOutbox)
       .set({
-        attempts: sql`${emailOutbox.attempts} + 1`,
-        toEmail: sql`case when ${emailOutbox.attempts} + 1 >= ${EMAIL_MAX_ATTEMPTS} then null else ${emailOutbox.toEmail} end`,
+        attempts: nextAttempts,
+        // Null once failed for good; such a row is never picked again (attempts at the maximum).
+        nextAttemptAt: sql`case ${nextAttempts} ${sql.join(schedule, sql` `)} else null end`,
+        toEmail: sql`case when ${nextAttempts} >= ${EMAIL_MAX_ATTEMPTS} then null else ${emailOutbox.toEmail} end`,
       })
-      .where(eq(emailOutbox.id, failure.outboxId))
+      .where(and(eq(emailOutbox.id, outboxId), isNull(emailOutbox.sentAt)))
       .returning({ attempts: emailOutbox.attempts });
-    const attempts = updated?.attempts ?? 0;
-    const details = {
-      outboxId: failure.outboxId,
-      kind: failure.kind,
-      attempts,
-      err: failure.cause,
-    };
-    if (attempts >= EMAIL_MAX_ATTEMPTS) {
+    if (!updated) return undefined;
+    return { attempts: updated.attempts, permanent: updated.attempts >= EMAIL_MAX_ATTEMPTS };
+  }
+
+  /** Counts the failed attempt of a row whose transaction rolled back, in a short transaction. */
+  private async recordRowFailure(failure: RowFailure): Promise<void> {
+    const log = { outboxId: failure.outboxId, kind: failure.kind };
+    const recorded = await this.recordFailure(this.deps.db, failure.outboxId);
+    if (!recorded) {
+      // Another worker sent or dropped the row after this one rolled back: nothing to schedule.
+      this.deps.logger.debug(log, 'outbox row already handled');
+      return;
+    }
+    const details = { ...log, attempts: recorded.attempts, err: failure.cause };
+    if (recorded.permanent) {
       this.deps.logger.error(details, 'outbox row failed permanently');
     } else {
-      const now = this.deps.clock.now().getTime();
-      this.retryAt.set(failure.outboxId, now + retryDelayMs(attempts));
       this.deps.logger.warn(details, 'outbox row failed');
     }
   }

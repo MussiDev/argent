@@ -10,7 +10,9 @@ import {
 } from '../../src/identity/infrastructure/email/transports/resend-transport';
 import { createLogger } from '../../src/shared/logging/logger';
 
+const IDEMPOTENCY_KEY = '0b7c6f1e-5d4a-4c3b-9a8f-7e6d5c4b3a21:1';
 const MESSAGE = {
+  idempotencyKey: IDEMPOTENCY_KEY,
   to: 'ana@example.com',
   subject: 'Confirmá tu email',
   text: 'Abrí este enlace: https://app.argent.test/es/verify-email?token=abc',
@@ -162,8 +164,8 @@ describe('ResendTransport', () => {
     const calls: unknown[] = [];
     const client: ResendClient = {
       emails: {
-        send: (payload) => {
-          calls.push(payload);
+        send: (payload, options) => {
+          calls.push(payload, { idempotencyKey: options.idempotencyKey });
           return Promise.resolve({ data: { id: 're_123' }, error: null });
         },
       },
@@ -180,6 +182,7 @@ describe('ResendTransport', () => {
         text: MESSAGE.text,
         html: MESSAGE.html,
       },
+      { idempotencyKey: IDEMPOTENCY_KEY },
     ]);
   });
 
@@ -233,6 +236,48 @@ describe('ResendTransport failures', () => {
     const startedAt = performance.now();
     await expect(transport.send(MESSAGE)).rejects.toThrow(/timed out/);
     expect(performance.now() - startedAt).toBeLessThan(1000);
+  });
+});
+
+describe('ResendTransport timeout', () => {
+  it('aborts a call that exceeds the timeout through its signal and passes the idempotency key through', async () => {
+    let received: { idempotencyKey: string; signal: AbortSignal } | undefined;
+    const client: ResendClient = {
+      emails: {
+        // Like fetch: pending until the signal aborts, then rejected with the abort reason.
+        send: (_payload, options) => {
+          received = options;
+          return new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => {
+              reject(options.signal.reason as Error);
+            });
+          });
+        },
+      },
+    };
+    const transport = new ResendTransport({ client, from: FROM, timeoutMs: 50 });
+
+    await expect(transport.send(MESSAGE)).rejects.toThrow(/timed out/);
+
+    expect(received?.idempotencyKey).toBe(IDEMPOTENCY_KEY);
+    expect(received?.signal.aborted).toBe(true);
+  });
+
+  it('does not abort a call that answers in time', async () => {
+    let signal: AbortSignal | undefined;
+    const client: ResendClient = {
+      emails: {
+        send: (_payload, options) => {
+          signal = options.signal;
+          return Promise.resolve({ data: { id: 're_1' }, error: null });
+        },
+      },
+    };
+
+    await new ResendTransport({ client, from: FROM, timeoutMs: 50 }).send(MESSAGE);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(signal?.aborted).toBe(false);
   });
 });
 

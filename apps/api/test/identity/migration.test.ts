@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrationsFolder, runMigrations } from '../../src/shared/db/migrate';
 import { ensureTestDatabase, testDatabaseUrl } from '../helpers/test-database';
 
+const ALL_MIGRATIONS = 4;
 const IDENTITY_TABLES = ['auth_attempts', 'email_outbox', 'one_time_tokens', 'sessions', 'users'];
 
 /** A throwaway database next to the test database, so the migration runs on a truly empty one. */
@@ -13,37 +14,33 @@ const emptyDatabaseUrl = (() => {
   return url.toString();
 })();
 
-async function withAdmin<T>(run: (client: pg.Client) => Promise<T>): Promise<T> {
-  const adminUrl = new URL(testDatabaseUrl);
-  adminUrl.pathname = '/postgres';
-  const client = new pg.Client({ connectionString: adminUrl.toString() });
-  await client.connect();
-  try {
-    return await run(client);
-  } finally {
-    await client.end();
-  }
+/**
+ * Empties the throwaway database by dropping its schemas instead of the database itself: in
+ * PostgreSQL 16 `drop database` waits for a checkpoint, which after a full test run flushes many
+ * dirty buffers and could exceed the hook timeout (the flake this replaced).
+ */
+async function emptyTheDatabase(target: pg.Client): Promise<void> {
+  await target.query('drop schema if exists drizzle cascade');
+  await target.query('drop schema if exists public cascade');
+  await target.query('create schema public');
 }
 
-async function dropEmptyDatabase(): Promise<void> {
-  await withAdmin((client) =>
-    client.query('drop database if exists argent_migration_test with (force)'),
-  );
-}
+/** Schema resets take milliseconds; the explicit timeout only guards a slow shared server. */
+const HOOK_TIMEOUT_MS = 30_000;
 
 let client: pg.Client;
 
 beforeAll(async () => {
-  await dropEmptyDatabase();
   await ensureTestDatabase(emptyDatabaseUrl);
   client = new pg.Client({ connectionString: emptyDatabaseUrl });
   await client.connect();
-});
+  await emptyTheDatabase(client);
+}, HOOK_TIMEOUT_MS);
 
 afterAll(async () => {
+  await emptyTheDatabase(client);
   await client.end();
-  await dropEmptyDatabase();
-});
+}, HOOK_TIMEOUT_MS);
 
 async function publicTables(): Promise<string[]> {
   const result = await client.query<{ tablename: string }>(
@@ -169,13 +166,14 @@ describe('0000_identity migration', () => {
           /UNIQUE INDEX \S+ ON public\.auth_attempts USING btree \(kind, key, window_start\)/,
         ),
         expect.stringMatching(
-          /INDEX \S+ ON public\.email_outbox USING btree \(sent_at\) WHERE \(sent_at IS NULL\)/,
+          /INDEX \S+ ON public\.email_outbox USING btree \(created_at\) WHERE \(sent_at IS NULL\)/,
         ),
       ]),
     );
   });
 
   it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
+    await client.query(await rollback('0003_outbox_retry'));
     await client.query(await rollback('0002_credentials_version'));
     await client.query(await rollback('0001_outbox_hardening'));
     await client.query(await rollback('0000_identity'));
@@ -202,12 +200,13 @@ describe('0001_outbox_hardening migration', () => {
         "insert into email_outbox (id, kind, language, payload) values (gen_random_uuid(), 'discard', 'en', '{\"userId\": null}')",
       ),
     ).toBeUndefined();
-    expect(await appliedMigrations()).toBe(3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
   });
 
   it('is reverted by its rollback script (after the newer ones), leaving 0000 in place, and re-applies', async () => {
     await client.query('delete from email_outbox');
     // Newest first: drizzle only applies migrations newer than the last one recorded.
+    await client.query(await rollback('0003_outbox_retry'));
     await client.query(await rollback('0002_credentials_version'));
     await client.query(await rollback('0001_outbox_hardening'));
 
@@ -223,7 +222,7 @@ describe('0001_outbox_hardening migration', () => {
     await client.query('delete from email_outbox');
     await runMigrations(emptyDatabaseUrl);
     expect(await indexDefinition('auth_attempts_window_start_idx')).toBeDefined();
-    expect(await appliedMigrations()).toBe(3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
   });
 });
 
@@ -285,7 +284,8 @@ describe('0002_credentials_version migration', () => {
     expect(session.rows).toEqual([{ credentials_version: 0 }]);
   });
 
-  it('is reverted by its rollback script alone, keeping the data of the older columns, and re-applies', async () => {
+  it('is reverted by its rollback script (after the newer one), keeping the data of the older columns, and re-applies', async () => {
+    await client.query(await rollback('0003_outbox_retry'));
     await client.query(await rollback('0002_credentials_version'));
 
     expect(await credentialsColumns()).toEqual([]);
@@ -296,6 +296,62 @@ describe('0002_credentials_version migration', () => {
 
     await runMigrations(emptyDatabaseUrl);
     expect(await credentialsColumns()).toHaveLength(3);
-    expect(await appliedMigrations()).toBe(3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+  });
+});
+
+async function nextAttemptColumn(): Promise<ColumnInfo[]> {
+  const result = await client.query<ColumnInfo>(
+    `select table_name, column_name, data_type, is_nullable, column_default
+       from information_schema.columns
+      where table_schema = 'public' and column_name = 'next_attempt_at'`,
+  );
+  return result.rows;
+}
+
+async function outboxIndexes(): Promise<string[]> {
+  const result = await client.query<{ indexdef: string }>(
+    "select indexdef from pg_indexes where schemaname = 'public' and tablename = 'email_outbox' and indexname <> 'email_outbox_pkey' order by indexname",
+  );
+  return result.rows.map((row) => row.indexdef);
+}
+
+const PENDING_BY_CREATED_AT =
+  'CREATE INDEX email_outbox_pending_idx ON public.email_outbox USING btree (created_at) WHERE (sent_at IS NULL)';
+const PENDING_BY_SENT_AT =
+  'CREATE INDEX email_outbox_pending_idx ON public.email_outbox USING btree (sent_at) WHERE (sent_at IS NULL)';
+
+describe('0003_outbox_retry migration', () => {
+  it('adds a nullable email_outbox.next_attempt_at without default and indexes pending rows by created_at', async () => {
+    expect(await nextAttemptColumn()).toEqual([
+      {
+        table_name: 'email_outbox',
+        column_name: 'next_attempt_at',
+        data_type: 'timestamp with time zone',
+        is_nullable: 'YES',
+        column_default: null,
+      },
+    ]);
+    expect(await outboxIndexes()).toEqual([PENDING_BY_CREATED_AT]);
+    const inserted = await client.query<{ next_attempt_at: Date | null }>(
+      "insert into email_outbox (id, kind, language, payload) values (gen_random_uuid(), 'discard', 'es', '{\"userId\": null}') returning next_attempt_at",
+    );
+    expect(inserted.rows).toEqual([{ next_attempt_at: null }]);
+  });
+
+  it('is reverted by its rollback script alone, restoring the previous index and keeping the rows, and re-applies', async () => {
+    await client.query(await rollback('0003_outbox_retry'));
+
+    expect(await nextAttemptColumn()).toEqual([]);
+    expect(await outboxIndexes()).toEqual([PENDING_BY_SENT_AT]);
+    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    const kept = await client.query("select 1 from email_outbox where kind = 'discard'");
+    expect(kept.rowCount).toBe(1);
+
+    await runMigrations(emptyDatabaseUrl);
+    expect(await nextAttemptColumn()).toHaveLength(1);
+    expect(await outboxIndexes()).toEqual([PENDING_BY_CREATED_AT]);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
   });
 });

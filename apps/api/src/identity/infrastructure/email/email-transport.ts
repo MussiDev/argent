@@ -6,6 +6,8 @@ import { MailpitTransport } from './transports/mailpit-transport';
 import { ResendTransport } from './transports/resend-transport';
 
 export interface EmailMessage {
+  /** `<outbox row id>:<attempt>`: unique per attempt, since each attempt carries a new token. */
+  idempotencyKey: string;
   to: string;
   subject: string;
   text: string;

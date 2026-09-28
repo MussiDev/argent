@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01b.md |
 | Tier | FEATURE |
 | Date | 2026-09-28 |
-| Spec loops | 2 |
-| Loops since last human decision | 0 |
+| Spec loops | 3 |
+| Loops since last human decision | 1 |
 
 ## Summary
 Adds Google sign-in to the `identity` module built in DISC-001-01a. The API runs the OpenID Connect
@@ -61,6 +61,7 @@ endpoint is called with the platform `fetch`. The fake OIDC server for tests use
 - `apps/api/src/identity/domain/errors.ts` (modified) — `IdentityAlreadyLinked extends Error` (no HTTP code, like `DuplicateEmail`; a leak becomes 500).
 - `apps/api/src/identity/infrastructure/db/drizzle-user-repository.ts` (modified), `drizzle-user-identity-repository.ts` (new), `drizzle-oauth-state-repository.ts` (new, implements both OAuth-state ports), `drizzle-unit-of-work.ts` (modified) — all under `apps/api/src/identity/infrastructure/db/`.
 - `apps/api/src/identity/infrastructure/email/email-worker.ts` (modified) — the retention purge also calls `OAuthStatePurger.purgeExpired`.
+- `createEmailWorker` in `apps/api/src/identity/index.ts` (modified) — builds the worker from `db`, so it wires the Drizzle `OAuthStatePurger` there; its callers (`apps/api/src/worker.ts`, `apps/api/test/helpers/identity-harness.ts`, `apps/api/test/identity/email-worker-retry.test.ts`) keep their signature.
 - `apps/api/src/identity/index.ts` (modified) — `IdentityInfrastructure` gains `identities`, `oauthStates`, `oauthStatePurger`; exports the new ports.
 - Type-level fakes that must follow the port changes: `apps/api/test/identity/sign-in-use-case.test.ts` (`UserRepository` literal), `apps/api/test/identity/register-user.test.ts` (`UserRepository` literal and `work({...})` without `identities`), `apps/api/test/identity/refresh-session.test.ts`, `apps/api/test/identity/password-reset-use-cases.test.ts` (`work({...})`).
 - `EmailWorker` construction sites: `apps/api/test/identity/email-worker.test.ts` (retention-purge tests), `apps/api/test/identity/email-worker-resilience.test.ts`.
@@ -105,12 +106,13 @@ All tests above pass; `drizzle-kit check` is clean; the existing DISC-001-01a su
 ## Block 2 — Google OpenID Connect adapter
 
 **Files**
-- `apps/api/src/identity/application/ports/google-identity-provider.ts` (new) — `authorizationUrl({ state, nonce, codeVerifier }): string` (the adapter derives the S256 challenge, since the application layer cannot import `node:crypto`); `exchangeCode({ code, codeVerifier, expectedNonceHash }): Promise<GoogleClaims>` with `GoogleClaims = { subject, email, emailVerified, emailAuthoritative }`; `GoogleSignInFailed extends Error` (carries an internal `reason` for logs only) lives in this port file because its reasons are transport-level.
+- `apps/api/src/identity/application/ports/google-identity-provider.ts` (new) — `authorizationUrl({ state, nonce, codeVerifier }): string` (the adapter derives the S256 challenge, since the application layer cannot import `node:crypto`); `exchangeCode({ code, codeVerifier, expectedNonceHash }): Promise<GoogleClaims>` with `GoogleClaims = { subject, email, emailVerified, hostedDomain: string | null }`; `GoogleSignInFailed extends Error` (carries an internal `reason` for logs only) lives in this port file because its reasons are transport-level.
+- `apps/api/src/identity/domain/google-authority.ts` (new) — pure `isGoogleAuthoritative(email, hostedDomain)`: true for a `gmail.com` address or a non-null `hostedDomain` (PRD FR-07); `apps/api/test/identity/google-authority.test.ts` (new).
 - `apps/api/src/identity/infrastructure/security/google-oidc-identity-provider.ts` (new) — the adapter.
 - `apps/api/src/identity/infrastructure/security/unconfigured-google-identity-provider.ts` (new) — every call fails with `GoogleSignInFailed('not_configured')`.
 - `apps/api/src/shared/config/env.ts` (modified) — `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional outside production, required in production), `GOOGLE_AUTHORIZATION_URL`, `GOOGLE_TOKEN_URL`, `GOOGLE_JWKS_URL`, `GOOGLE_ISSUER` (default to Google's values; production rejects any other value).
 - `apps/api/test/helpers/test-env.ts` (modified) — `productionOverrides` gains `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, so every existing production parse keeps passing.
-- `apps/api/test/fixtures/fake-google-oidc.ts` (new) — local OIDC server on `node:http`: `/authorize` redirects back with a code for the identity given in `login_hint` (`sub`, `email`, `email_verified`, optional `hd`) or with `error=access_denied` when `login_hint=cancel`; `/token` checks the PKCE verifier and client credentials and returns an ID token signed with its own RS256 key (optionally with a wrong audience, issuer, nonce or expiry, and an optional delay); `/jwks` serves the public key.
+- `apps/api/test/fixtures/fake-google-oidc.ts` (new) — local OIDC server on `node:http`: `/authorize` serves a consent page with a "Continue" link back to the callback carrying a code for the identity given in `login_hint` (`sub`, `email`, `email_verified`, optional `hd`) and a "Cancel" link carrying `error=access_denied`; integration tests follow the link's URL directly; `/token` checks the PKCE verifier and client credentials and returns an ID token signed with its own RS256 key (optionally with a wrong audience, issuer, nonce or expiry, and an optional delay); `/jwks` serves the public key.
 - `apps/api/test/fake-google-oidc-server.ts` (new) — runnable entry for Playwright (like `test/e2e-database.ts`), listening on `127.0.0.1`.
 - `apps/api/test/identity/google-oidc-identity-provider.test.ts` (new), `apps/api/test/foundation/env.test.ts` (modified).
 - `.env.example` (modified by the user; the agent has no access) — the six `GOOGLE_*` variables with comments.
@@ -118,12 +120,12 @@ All tests above pass; `drizzle-kit check` is clean; the existing DISC-001-01a su
 **Logic**
 - `authorizationUrl`: `GOOGLE_AUTHORIZATION_URL` with `client_id`, `redirect_uri` = `${API_ORIGIN}/auth/google/callback`, `response_type=code`, `scope=openid email`, `state`, `nonce`, `code_challenge` = base64url(SHA-256(`codeVerifier`)), `code_challenge_method=S256`, `prompt=select_account`.
 - `exchangeCode`: POST form to `GOOGLE_TOKEN_URL` with a 2 s `AbortSignal` timeout; take `id_token`; `jwtVerify` with `createRemoteJWKSet(GOOGLE_JWKS_URL)`, `algorithms: ['RS256']`, `audience`, the issuer set above, `clockTolerance: 60`; when `aud` is an array require `azp` = client id; parse the claims; compare `TokenGenerator.hash(nonce)` with `expectedNonceHash` in constant time; lower-case the email and parse it with the domain `Email`.
-- `emailAuthoritative` = the email ends with `@gmail.com`, or the token carries an `hd` claim (Google Workspace). Google documents `email_verified` as authoritative only for those two cases (PRD FR-07).
+- The adapter returns the `hd` claim as `hostedDomain` (null when absent); it applies no business rule. The FR-07 authority rule is the domain function `isGoogleAuthoritative`, used by `CompleteGoogleSignIn`, so use-case tests with a fake provider exercise it. Google documents `email_verified` as authoritative only for `gmail.com` and Workspace (`hd`) accounts.
 - The JWKS key cache lives in process memory; see the decision log for this exception to "no cache state in process memory".
 - When `GOOGLE_CLIENT_ID` is unset outside production, the composition root uses `UnconfiguredGoogleIdentityProvider`.
 
 **API contract**
-No endpoint of ours; this block is the enabler of FR-01, FR-02, FR-04 and FR-07 (every Google claim
+No endpoint of ours; this block is the enabler of FR-01, FR-02, FR-04 and FR-07 (with the domain rule above) (every Google claim
 they use comes from here). Outbound calls:
 - Method + path: `POST GOOGLE_TOKEN_URL` (`https://oauth2.googleapis.com/token`)
 - Request: `application/x-www-form-urlencoded` `{ grant_type: "authorization_code", code, code_verifier, redirect_uri, client_id, client_secret }`
@@ -144,7 +146,8 @@ they use comes from here). Outbound calls:
 - Timeout, non-2xx, malformed JSON, missing `id_token`, bad signature, wrong `aud`/`azp`/`iss`, expired token, nonce mismatch, missing claims — all `GoogleSignInFailed` with a distinct internal reason; never logs the code, the tokens or the verifier.
 
 **Required tests**
-- [ ] a valid code from the fake server returns the subject, lower-cased email, `emailVerified` and `emailAuthoritative` (true for `gmail.com` and for an `hd` claim, false otherwise) — validates NFR-02, FR-07
+- [ ] a valid code from the fake server returns the subject, lower-cased email, `emailVerified` and `hostedDomain` (the `hd` claim, or null) — validates NFR-02
+- [ ] `isGoogleAuthoritative` is true for a `gmail.com` address and for any email with a hosted domain, false for another domain without one — validates FR-07
 - [ ] an ID token signed with another key is rejected — sad path, validates NFR-02
 - [ ] wrong audience, wrong issuer, an array `aud` with a foreign `azp` and an expired ID token are each rejected — sad path, validates NFR-02
 - [ ] a nonce that does not match the stored hash is rejected — sad path, validates NFR-02
@@ -184,10 +187,10 @@ All tests above pass without any request leaving the machine.
   5. One `unitOfWork.run`:
      - identity `(google, sub)` exists → that user (AC-03);
      - else a user with the claim email exists:
-       - `emailAuthoritative = false` → failure, nothing written (AC-09, FR-07);
+       - `isGoogleAuthoritative(email, hostedDomain)` is false → failure, nothing written (AC-09, FR-07);
        - user verified → `link` (AC-06, FR-04);
        - user unverified → `supersedeUnverified`, `sessions.revokeAllForUser`, `link` (AC-07, FR-05); if `supersedeUnverified` returns null the user was verified meanwhile → `link`;
-     - else create the user without a password, with the state's time zone and language and `emailVerifiedAt = now` (AC-01, AC-04), then `link` with the claim's `emailAuthoritative`.
+     - else create the user without a password, with the state's time zone and language and `emailVerifiedAt = now` (AC-01, AC-04), then `link` with `emailAuthoritative = isGoogleAuthoritative(email, hostedDomain)`.
   6. `StartSession` for the user, with the credentials version read after step 5.
 - A `DuplicateEmail` or `IdentityAlreadyLinked` from a concurrent callback aborts the PostgreSQL transaction; step 5 is retried once as a **new** `unitOfWork.run`; a second conflict is a failure.
 - A user who already has another Google identity linked and signs in with a second Google account carrying the same email → `IdentityAlreadyLinked` → failure (one Google identity per account).
@@ -196,22 +199,22 @@ All tests above pass without any request leaving the machine.
 
 **API contract**
 - Method + path: `GET /auth/google/start`
-- Request: query `{ timeZone?: string (≤ 64), language?: string (≤ 35) }`, the same bounds as registration.
+- Request: query `{ timeZone?: string, language?: string }` bounded by `TIME_ZONE_INPUT_MAX_LENGTH` and `LANGUAGE_INPUT_MAX_LENGTH` (the registration constants); an empty value counts as missing.
 - Response: 302 `Location: <Google authorization URL>`; sets `__Secure-argent_oauth` = binding (`HttpOnly; Secure; SameSite=Lax; Path=/auth/google; Max-Age=600`).
-- Error codes: 400 `VALIDATION_FAILED` (a value over its length limit); 302 to `${WEB_BASE_URL}/{language}/sign-in?error=google_failed` when rate-limited or Google sign-in is not configured.
+- Error codes: 400 `VALIDATION_FAILED` for a value over its length limit or a repeated parameter (the web app never sends either); 302 to `${WEB_BASE_URL}/{language}/sign-in?error=google_failed` when rate-limited or Google sign-in is not configured.
 - Auth: public; safe method, so the `Origin` guard does not apply; reached by top-level navigation from the web app.
 
 - Method + path: `GET /auth/google/callback`
-- Request: query `{ code?, state?, error?, error_description?, scope?, authuser?, prompt?, hd?, iss? }`, each a string of 1–2048 chars or an array of such strings (an array is treated as a failure, never as a 400); cookie `__Secure-argent_oauth`.
+- Request: query `{ code?, state?, error?, error_description?, scope?, authuser?, prompt?, hd?, iss? }`, each a string of at most 2048 chars (an empty value counts as missing) or an array of at most 5 such strings (an array is treated as a failure, never as a 400); cookie `__Secure-argent_oauth`.
 - Response: success → 302 `${WEB_BASE_URL}/{user.language}`, sets the DISC-001-01a session cookies and clears `__Secure-argent_oauth`. Failure → 302 `${WEB_BASE_URL}/{language}/sign-in?error=google_failed`, where `{language}` is the consumed state's language, else `es`; clears `__Secure-argent_oauth` and sets no session cookie.
-- Error codes: 400 `VALIDATION_FAILED` only for a value over the length limit; 500 `INTERNAL` for an unexpected fault; every expected failure is the redirect above.
+- Error codes: 400 `VALIDATION_FAILED` only for a string over 2048 chars or an array of more than 5 values (neither is sent by Google); 500 `INTERNAL` for an unexpected fault; every expected failure is the redirect above.
 - Auth: public; the binding cookie is `SameSite=Lax` because Google's redirect is a cross-site top-level navigation that does not carry `Strict` cookies.
 
 **Data model**
 - No schema change beyond Block 1; this block reads and writes `users`, `user_identities`, `oauth_states`, `sessions` and `auth_attempts` (kind `google_start_ip`, whose check constraint Block 1 widens).
 
 **Input validation**
-- `googleStartQuerySchema`: `timeZone` ≤ 64 chars and `language` ≤ 35 chars, as `registerRequestSchema`; values are resolved by `newAccountDefaults`, so only valid values are stored. `googleCallbackQuerySchema`: the fields above as `string | string[]` with 1–2048 chars per string; unknown parameters are stripped, never rejected, because Google may add parameters. `state` is only compared through its hash; the code is only forwarded to the token endpoint.
+- `googleStartQuerySchema`: `timeZone` and `language` bounded by `TIME_ZONE_INPUT_MAX_LENGTH` and `LANGUAGE_INPUT_MAX_LENGTH` imported from `register.ts`, so the two schemas cannot drift; values are resolved by `newAccountDefaults`, so only valid values are stored. `googleCallbackQuerySchema`: the fields above as `string | string[]` with at most 2048 chars per string and at most 5 array items, empty strings treated as missing; unknown parameters are stripped, never rejected, because Google may add parameters. `state` is only compared through its hash; the code is only forwarded to the token endpoint.
 
 **Error handling**
 - Missing, reused, expired or foreign state; missing binding cookie; array query values; Google `error`; exchange or verification failure; unverified Google email; non-authoritative email matching an account; a second Google identity for one account; repeated conflict — all redirect to sign-in with `error=google_failed` (AC-02, AC-05, AC-08, AC-09) and create or link nothing.
@@ -235,6 +238,7 @@ All tests above pass without any request leaving the machine.
 - [ ] two concurrent callbacks for the same new Google subject create exactly one user and one identity — sad path
 - [ ] the 21st start from one IP within 15 minutes redirects with `error=google_failed` and stores no state — sad path
 - [ ] a start query value over its length limit answers 400 `VALIDATION_FAILED`; an unknown time zone or language is stored as the default — sad path
+- [ ] a callback with an empty `hd=` or `state=` value is handled as missing (redirect, not 400) — sad path
 - [ ] `ResponseFacade.redirect` answers 302 with the given `Location`
 - [ ] no log line of a full flow contains the code, ID token, state, binding, verifier or email
 - [ ] perf: callback p95 < 500 ms over 200 requests with 150 ms simulated token-endpoint latency — validates NFR-01
@@ -261,7 +265,7 @@ passes after the `StartSession` extraction.
 - The button is a top-level navigation to the API; no Google script is loaded in the web app, so the CSP stays as in DISC-001-01a.
 - After the callback the browser lands on `/{language}`; the authenticated shell calls `GET /auth/session` as today.
 - `?error=google_failed` shows `errors.googleFailed` in the sign-in form alert; the parameter is removed from the URL with `history.replaceState` so a reload does not repeat it.
-- The fake OIDC server listens on `127.0.0.1` while web and API use `localhost`, so Google's redirect back is a genuinely cross-site navigation in e2e and the `SameSite=Lax` binding cookie is exercised as in production.
+- The fake OIDC server listens on `127.0.0.1` while web and API use `localhost`, and its consent page makes the test click a link, so the navigation back to the callback is initiated from another site, as with Google. A `Strict` binding cookie would not be sent on that navigation, so the e2e fails if the cookie is not `Lax` (an automatic redirect chain would not prove this, because Chromium does not apply SameSite to the redirect chain by default).
 
 **API contract**
 - No new endpoint. The button is a link to `GET /auth/google/start` (Block 3); the callback is Google → API.
@@ -279,6 +283,7 @@ passes after the `StartSession` extraction.
 **Required tests**
 - [ ] e2e: new Google user (verified `gmail.com`) → lands in the app signed in → sign-out — validates AC-01, AC-04
 - [ ] e2e: cancelling at the fake Google screen returns to sign-in with the Google error message — validates AC-02, sad path
+- [ ] e2e: the callback navigation starts from the fake consent page on `127.0.0.1` and completes the sign-in, proving the binding cookie crosses sites as `SameSite=Lax`
 - [ ] e2e: the same Google user signing in again reaches the same account — validates AC-03
 - [ ] e2e: a Google user with an unverified email sees the Google error and no account is created — validates AC-05, sad path
 - [ ] e2e: verified password account then Google with the same `gmail.com` email → same account, password still works — validates AC-06
@@ -310,3 +315,4 @@ All e2e tests pass in CI with the fake OIDC server; both screens render the butt
 - 2026-09-28: A password reset removes non-authoritative Google identities (FR-07 applied to the reset path): for those emails a Google claim is weaker than control of the mailbox, so a previous owner of the address keeps no Google access.
 - 2026-09-28: PRD corrective loops (user decisions): a Google-verified email supersedes an unverified password account (AC-07); an unverified Google email never creates or links (AC-05, AC-08); linking and superseding require an authoritative email (AC-09).
 - 2026-09-28: Architecture review and impact scan applied: `@argent/shared` root export instead of a nonexistent `/auth` subpath; flat web test paths; `apps/api/test/identity/migration.test.ts`; type-level fakes, `EmailWorker` construction sites and `test-env.ts` production overrides listed; `OAuthStatePurger` port; `TokenGenerator.hash` for every hash; S256 challenge computed in the adapter; `ResponseFacade.redirect`; retry as a new transaction; array query values as failures; redirect to the account's language; destructive rollback stated; fake OIDC server on `127.0.0.1` for a real cross-site redirect in e2e; perf test seeds states directly.
+- 2026-09-28: Architecture review round 2 (PASSED) applied: FR-07 authority rule moved to the domain (`isGoogleAuthoritative`, provider returns `hostedDomain`); empty query values count as missing and arrays are capped; start query reuses the registration length constants; `createEmailWorker` wiring listed; the fake consent page makes e2e prove the `SameSite=Lax` binding cookie.

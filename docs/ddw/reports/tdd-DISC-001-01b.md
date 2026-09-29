@@ -105,3 +105,21 @@ After: 615/615; `pnpm test:perf` 3/3, Google callback p95 191 ms.
 After: 639 unit tests, 39 e2e (25 + 14), coverage 95.65% lines / 92.23% branches / 92.29% functions.
 
 Block verifier: PASSED (0 FAIL, 3 WARN). Architecture auditor: PASSED (0 FAIL, 3 WARN).
+
+## SAST fix M-1 (password-less sign-in) and I-2 (log redaction)
+
+| Required test | File:line | Failure in the red run |
+|---|---|---|
+| a password-less user with a hasher stub returning true gets `invalid_credentials`, no session | `apps/api/test/identity/sign-in-use-case.test.ts:235` | result was `{ outcome: 'signed_in', session: … }` (a session was issued) |
+| OAuth keys removed from logs at every depth | `apps/api/test/foundation/logger.test.ts:129` | output still matched `/oauth-\w+-\w+-secret/` |
+| authorization code removed from query or body | `logger.test.ts:146` | output still matched `/oauth-\w+-code-secret/` |
+
+After: 643/643.
+
+## Note on line numbers
+
+Line numbers above are those reported at each block's red run. Later rounds added tests above
+some of them (for example, in `google-oidc-identity-provider.test.ts`, `authorizationUrl` is now at
+`:462` and the unconfigured provider at `:498`), and Block 1's `findUserIdByProviderSubject` was
+replaced by `findUserByProviderSubject` in the Block 3 review. The module verifier matched every
+cited test on disk by name.

@@ -30,7 +30,7 @@
 - **Repudiation:** `user_identities.created_at` records when a Google account was linked; supersede sets `password_changed_at`.
 - **Information Disclosure:** state, binding and nonce are stored only as SHA-256 hashes; the PKCE verifier is stored for at most 10 minutes and grants nothing without the code and client secret (R-31); no Google token is stored.
 - **Denial of Service:** `oauth_states` rows are capped by the start rate limit and purged by the worker after expiry (R-33); lookups are by primary key.
-- **Elevation of Privilege:** a password-less user cannot be signed into with any password: sign-in verifies the dummy hash and fails (R-34).
+- **Elevation of Privilege:** a password-less user cannot be signed into with any password: sign-in verifies the dummy hash for timing only and refuses a null hash explicitly (R-34).
 
 ### `apps/api/src/identity/infrastructure/security/google-oidc-identity-provider.ts`
 - **Spoofing:** the ID token is accepted only with a valid RS256 signature from Google's JWKS, the right audience and issuer, an unexpired `exp`, and the nonce issued with this state (R-25, R-28).
@@ -88,7 +88,7 @@
 | R-31 | database dump exposes OAuth secrets | I | L | M | hashes for state, binding and nonce; verifier short-lived and useless alone; no tokens stored |
 | R-32 | client secret sent to a non-Google endpoint through configuration | I | L | H | production rejects any `GOOGLE_*` endpoint other than Google's |
 | R-33 | flooding starts or callbacks to fill `oauth_states` or hammer Google | D | M | L | 20 starts per IP per 15 min; rows purged after expiry; JWKS cached; 2 s token timeout |
-| R-34 | password sign-in against a password-less account | S | L | H | null hash → dummy hash verified → `INVALID_CREDENTIALS` |
+| R-34 | password sign-in against a password-less account (including with the dummy hash's preimage) | S | L | H | the dummy hash is verified only for equal timing; a null hash is refused explicitly with `INVALID_CREDENTIALS` whatever the result (SAST M-1) |
 | R-35 | race creating two users or two identities for one Google account | T | L | M | unique constraints; one retry, then fail closed |
 | R-36 | third-party script in the web app reads session context | I | L | H | no Google script; top-level redirect flow; CSP unchanged |
 | R-37 | a Google account whose verified email is not authoritative (for example, created while someone else controlled the mailbox) takes over or keeps access to the account of the current mailbox owner | E | L | H | linking and superseding only for `gmail.com` or `hd` accounts (PRD AC-09); non-authoritative identities flagged at link time and deleted by a password reset, which proves current control of the mailbox |

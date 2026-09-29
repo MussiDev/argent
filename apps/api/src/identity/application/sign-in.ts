@@ -86,13 +86,17 @@ export class SignIn {
     }
 
     const user = await this.deps.users.findByEmail(email);
-    // Unknown emails verify the dummy hash, so both paths do the same work (NFR-08).
+    // Unknown emails and password-less (Google-created) users verify the dummy hash, so every path
+    // does the same work (NFR-08).
     const matches = await this.deps.passwordHasher.verify(
       user?.passwordHash ?? this.deps.dummyPasswordHash,
       input.password,
     );
+    // A password-less user never signs in with a password, even if the dummy preimage matches.
     // A failure keeps its reserved units.
-    if (!user || !matches) return { outcome: 'invalid_credentials', userId: user?.id ?? null };
+    if (!user || user.passwordHash === null || !matches) {
+      return { outcome: 'invalid_credentials', userId: user?.id ?? null };
+    }
     // Only failures count: a successful sign-in gives its units back. A failed refund must not
     // turn a correct password into an error; it is reported and the sign-in goes on.
     try {

@@ -53,18 +53,24 @@ function buildSignIn(options: {
   reportRefundFailure?: (error: unknown) => void;
   /** Receives every session the sign-in asks to create. */
   created?: NewSession[];
+  /** The account found for the email; defaults to a user with a password. */
+  account?: User;
+  /** Receives every hash the sign-in verifies against. */
+  verifiedHashes?: string[];
 }) {
+  const account = options.account ?? user;
   const users: UserRepository = {
     create: () => Promise.reject(new Error('unused')),
-    findById: () => Promise.resolve(user),
-    findByEmail: () => Promise.resolve(user),
+    findById: () => Promise.resolve(account),
+    findByEmail: () => Promise.resolve(account),
     markEmailVerified: () => Promise.resolve(),
     changePassword: () => Promise.resolve(),
     supersedeUnverified: () => Promise.reject(new Error('unused')),
   };
   const passwordHasher: PasswordHasher = {
     hash: () => Promise.reject(new Error('unused')),
-    verify: () => {
+    verify: (passwordHash) => {
+      options.verifiedHashes?.push(passwordHash);
       options.duringHash?.();
       return Promise.resolve(true);
     },
@@ -224,5 +230,25 @@ describe('SignIn limiter reservations', () => {
 
     expect(result.outcome).toBe('signed_in');
     expect(created).toEqual([expect.objectContaining({ userId: user.id, credentialsVersion: 4 })]);
+  });
+
+  it('refuses a password-less (Google-created) user even when the dummy hash matches, keeping the reserved units (SAST M-1)', async () => {
+    const created: NewSession[] = [];
+    const verifiedHashes: string[] = [];
+    const signIn = buildSignIn({
+      clock: new MutableClock(new Date('2026-09-26T16:00:00.000Z')),
+      account: { ...user, passwordHash: null },
+      created,
+      verifiedHashes,
+    });
+
+    const result = await signIn.execute({ email: EMAIL, password: 'dummy preimage', ip: IP });
+
+    expect(result).toEqual({ outcome: 'invalid_credentials', userId: user.id });
+    expect(created).toEqual([]);
+    // The dummy hash is still verified, so the refusal costs the same as a wrong password.
+    expect(verifiedHashes).toEqual(['dummy-hash']);
+    // A failure keeps its reserved units (FIX-001).
+    expect((await attemptRows()).map((row) => row.count)).toEqual([1, 1]);
   });
 });

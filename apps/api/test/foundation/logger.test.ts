@@ -101,6 +101,71 @@ describe('logger redaction scope', () => {
   });
 });
 
+describe('logger redaction of OAuth secrets (SAST I-2)', () => {
+  const OAUTH_KEYS = [
+    'state',
+    'id_token',
+    'idToken',
+    'code_verifier',
+    'codeVerifier',
+    'client_secret',
+    'clientSecret',
+    'binding',
+    'nonce',
+  ];
+
+  function capture() {
+    const lines: string[] = [];
+    const logger = createLogger({
+      level: 'info',
+      destination: { write: (line: string) => lines.push(line) },
+    });
+    return { lines, logger };
+  }
+
+  const secrets = (where: string, keys: string[]) =>
+    Object.fromEntries(keys.map((key) => [key, `oauth-${where}-${key}-secret`]));
+
+  it('removes every OAuth key at the top level, one level and two levels deep', () => {
+    const { lines, logger } = capture();
+
+    logger.info(secrets('top', OAUTH_KEYS), 'top level');
+    logger.info({ callback: secrets('one', OAUTH_KEYS) }, 'one level');
+    logger.info({ req: { callback: secrets('two', OAUTH_KEYS) } }, 'two levels');
+
+    const output = lines.join('\n');
+    expect(lines).toHaveLength(3);
+    expect(output).not.toMatch(/oauth-\w+-\w+-secret/);
+    const [top] = lines;
+    const entry = JSON.parse(top ?? '{}') as Record<string, unknown>;
+    for (const key of OAUTH_KEYS) {
+      expect(entry[key]).toBe('[REDACTED]');
+    }
+  });
+
+  it('removes the authorization code from a query or body, at one and two levels deep', () => {
+    const { lines, logger } = capture();
+
+    logger.info({ query: secrets('query', ['code']) }, 'query');
+    logger.info({ body: secrets('body', ['code']) }, 'body');
+    logger.info({ req: { query: secrets('reqquery', ['code']) } }, 'request query');
+    logger.info({ req: { body: secrets('reqbody', ['code']) } }, 'request body');
+
+    expect(lines).toHaveLength(4);
+    expect(lines.join('\n')).not.toMatch(/oauth-\w+-code-secret/);
+  });
+
+  it('keeps a bare code, which is an error code (HTTP body code, err.code)', () => {
+    const { lines, logger } = capture();
+
+    logger.error({ code: 'INTERNAL', err: Object.assign(new Error('x'), { code: 'ECONNRESET' }) });
+
+    const [line] = lines;
+    expect(line).toContain('"code":"INTERNAL"');
+    expect(line).toContain('"code":"ECONNRESET"');
+  });
+});
+
 describe('logger error serialization (NFR-01)', () => {
   function pgUniqueViolation(): Error {
     return Object.assign(

@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { RegisterContainer } from '../src/features/auth/containers/register-container';
-import { CATALOGS, renderApp, stubApi } from './support/render-app';
+import { API_ORIGIN, CATALOGS, renderApp, stubApi } from './support/render-app';
 
 const { es, en } = CATALOGS;
 
@@ -80,5 +80,19 @@ describe('RegisterContainer', () => {
     await user.click(screen.getByRole('button', { name: en.auth.register.submit }));
 
     expect(await screen.findByText(en.errors.network)).toBeDefined();
+  });
+
+  it('offers Google registration, starting in the device time zone and the screen language (FR-01)', () => {
+    stubApi({});
+    renderApp(<RegisterContainer />);
+
+    const link = screen.getByRole('link', { name: es.auth.google.continue });
+    const url = new URL(link.getAttribute('href') ?? '');
+    expect(`${url.origin}${url.pathname}`).toBe(`${API_ORIGIN}/auth/google/start`);
+    expect(url.searchParams.get('language')).toBe('es');
+    expect(url.searchParams.get('timeZone')).toBe(
+      new Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+    expect(screen.getByText(es.auth.or)).toBeDefined();
   });
 });

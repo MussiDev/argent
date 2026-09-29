@@ -18,6 +18,10 @@
       "newPassword": "Nueva contraseña"
     },
     "passwordHint": "Usa al menos 10 caracteres.",
+    "or": "o",
+    "google": {
+      "continue": "Continuar con Google"
+    },
     "register": {
       "title": "Crea tu cuenta",
       "description": "Administra tus pesos y dólares en un solo lugar.",
@@ -90,6 +94,7 @@
     "unexpected": "Algo salió mal. Vuelve a intentarlo.",
     "unauthenticated": "Tu sesión terminó. Vuelve a iniciar sesión.",
     "emailNotVerified": "Verifica tu correo para continuar.",
-    "validationFailed": "Revisa los datos ingresados y vuelve a intentarlo."
+    "validationFailed": "Revisa los datos ingresados y vuelve a intentarlo.",
+    "googleFailed": "No pudimos iniciar sesión con Google. Vuelve a intentarlo."
   }
 }

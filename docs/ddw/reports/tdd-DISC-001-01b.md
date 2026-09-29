@@ -87,3 +87,21 @@ fake `/authorize`) land in a separate commit.
 | supersede returns null (verified meanwhile) → link | `google-sign-in-races.test.ts:289` | green from the start (branch existed); red by mutation (link replaced by refusal) |
 
 After: 615/615; `pnpm test:perf` 3/3, Google callback p95 191 ms.
+
+## Block 4 — Web Google sign-in
+
+| Required test | File:line | Failure in the red run |
+|---|---|---|
+| unit: start URL has the device time zone and the locale | `apps/web/test/google-start-url.test.ts:6, 26, 38` | `Cannot find module '../src/features/auth/google-start-url'` |
+| component: button renders the localized label and links to the start URL | `apps/web/test/google-sign-in-button.test.tsx:10, 20` | `Failed to resolve import ".../google-sign-in-button"` |
+| component: sign-in shows the Google error for `google_failed`, ignores unknown values | `apps/web/test/sign-in-container.test.tsx:107, 119, 132` | missing catalog key (`undefined was passed instead of a matcher`; `reading 'continue'`) |
+| sign-in and register offer Google | `sign-in-container.test.tsx:93`, `register-container.test.tsx:85` | `Cannot read properties of undefined (reading 'continue')` |
+| error message in both languages; divider only with a start URL | `apps/web/test/auth-error-messages.test.tsx:111, 131` | `expected '...' to include undefined` |
+| Google link named by its label, mark hidden | `apps/web/test/auth-form-accessibility.test.tsx:106` | `expected undefined to be 'http://api.argent.test/auth/google/st…'` |
+| `useApiOrigin` | `apps/web/test/api-client-provider.test.tsx:55, 65` | `TypeError: useApiOrigin is not a function` |
+| e2e AC-01/AC-04, AC-02, cross-site `Lax`, AC-03, AC-05, AC-06, AC-07, AC-08, AC-09, English flow | `apps/web/e2e/google.spec.ts:87, 114, 130, 164, 178, 189, 214, 236, 253, 274` | redirected to `/es/sign-in?error=google_failed` (API had no Google configuration) |
+| e2e: button on both screens in `/es` and `/en` | `google.spec.ts:292` | written after the UI (not red); the same behaviour was red first at unit level |
+
+After: 639 unit tests, 39 e2e (25 + 14), coverage 95.65% lines / 92.23% branches / 92.29% functions.
+
+Block verifier: PASSED (0 FAIL, 3 WARN). Architecture auditor: PASSED (0 FAIL, 3 WARN).

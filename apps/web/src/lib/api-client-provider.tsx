@@ -4,6 +4,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 import { createApiClient, type ApiClient } from './api-client';
 
 const ApiClientContext = createContext<ApiClient | null>(null);
+const ApiOriginContext = createContext<string | null>(null);
 
 /**
  * One API client per browser tab. The API origin comes from the server's `API_ORIGIN` at request
@@ -19,11 +20,22 @@ export function ApiClientProvider({
   // useState, not useMemo: React may drop memoized values, and a second client would lose the
   // in-tab refresh queue.
   const [client] = useState(() => createApiClient({ baseUrl: apiOrigin }));
-  return <ApiClientContext.Provider value={client}>{children}</ApiClientContext.Provider>;
+  return (
+    <ApiOriginContext.Provider value={apiOrigin}>
+      <ApiClientContext.Provider value={client}>{children}</ApiClientContext.Provider>
+    </ApiOriginContext.Provider>
+  );
 }
 
 export function useApiClient(): ApiClient {
   const client = useContext(ApiClientContext);
   if (!client) throw new Error('useApiClient must be used inside <ApiClientProvider>');
   return client;
+}
+
+/** The API's origin, for the few flows that reach it by top-level navigation (Google sign-in). */
+export function useApiOrigin(): string {
+  const apiOrigin = useContext(ApiOriginContext);
+  if (apiOrigin === null) throw new Error('useApiOrigin must be used inside <ApiClientProvider>');
+  return apiOrigin;
 }

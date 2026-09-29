@@ -2,7 +2,7 @@
 import { cleanup, render, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiClientProvider, useApiClient } from '../src/lib/api-client-provider';
+import { ApiClientProvider, useApiClient, useApiOrigin } from '../src/lib/api-client-provider';
 
 afterEach(() => {
   cleanup();
@@ -50,5 +50,23 @@ describe('ApiClientProvider', () => {
     );
 
     expect(getByText('inside')).toBeDefined();
+  });
+
+  it('exposes the configured API origin to consumers', () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <ApiClientProvider apiOrigin="https://api.argent.test">{children}</ApiClientProvider>
+    );
+
+    const { result } = renderHook(() => useApiOrigin(), { wrapper });
+
+    expect(result.current).toBe('https://api.argent.test');
+  });
+
+  it('refuses to hand out the API origin outside the provider', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    expect(() => renderHook(() => useApiOrigin())).toThrow(
+      'useApiOrigin must be used inside <ApiClientProvider>',
+    );
   });
 });

@@ -3,9 +3,9 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { SignInContainer } from '../src/features/auth/containers/sign-in-container';
-import { CATALOGS, renderApp, stubApi } from './support/render-app';
+import { API_ORIGIN, CATALOGS, renderApp, stubApi } from './support/render-app';
 
-const { es } = CATALOGS;
+const { es, en } = CATALOGS;
 
 function signedIn(emailVerified: boolean, language: 'es' | 'en') {
   return {
@@ -89,4 +89,55 @@ describe('SignInContainer', () => {
       screen.getByRole('link', { name: es.auth.signIn.registerLink }).getAttribute('href'),
     ).toBe('/es/register');
   });
+
+  it('offers Google sign-in, starting in the device time zone and the screen language', () => {
+    stubApi({});
+    renderApp(<SignInContainer />, { locale: 'en' });
+
+    const link = screen.getByRole('link', { name: en.auth.google.continue });
+    const url = new URL(link.getAttribute('href') ?? '');
+    expect(`${url.origin}${url.pathname}`).toBe(`${API_ORIGIN}/auth/google/start`);
+    expect(url.searchParams.get('language')).toBe('en');
+    expect(url.searchParams.get('timeZone')).toBe(
+      new Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+    expect(screen.getByText(en.auth.or)).toBeDefined();
+  });
+
+  it('shows the Google error for error=google_failed and removes it from the URL (AC-02)', async () => {
+    window.history.replaceState(null, '', '/es/sign-in?error=google_failed');
+    const { calls } = stubApi({});
+    renderApp(<SignInContainer />, { strict: true });
+
+    expect(await screen.findByText(es.errors.googleFailed)).toBeDefined();
+    expect(window.location.pathname).toBe('/es/sign-in');
+    // A reload must not show the error again.
+    expect(window.location.search).toBe('');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('clears the Google error once the user signs in with a password', async () => {
+    window.history.replaceState(null, '', '/es/sign-in?error=google_failed');
+    stubApi({ 'POST /auth/sign-in': { status: 401, body: { code: 'INVALID_CREDENTIALS' } } });
+    renderApp(<SignInContainer />);
+    expect(await screen.findByText(es.errors.googleFailed)).toBeDefined();
+
+    await signInAs('ana@example.com', 'wrong password');
+
+    expect(await screen.findByText(es.errors.invalidCredentials)).toBeDefined();
+    expect(screen.queryByText(es.errors.googleFailed)).toBeNull();
+  });
+
+  it.each(['something_else', 'GOOGLE_FAILED', ''])(
+    'ignores an unknown error value (%j) (sad path)',
+    async (value) => {
+      window.history.replaceState(null, '', `/es/sign-in?error=${value}`);
+      stubApi({});
+      renderApp(<SignInContainer />);
+
+      await screen.findByRole('link', { name: es.auth.google.continue });
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByText(es.errors.googleFailed)).toBeNull();
+    },
+  );
 });

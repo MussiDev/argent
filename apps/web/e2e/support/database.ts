@@ -54,3 +54,39 @@ export async function liveSessionCount(email: string): Promise<number> {
   );
   return Number(rows[0]?.live ?? 0);
 }
+
+export interface AccountRecord {
+  users: number;
+  googleIdentities: number;
+  hasPassword: boolean;
+  emailVerified: boolean;
+  /** Verification emails ever queued for the address. */
+  verificationEmails: number;
+}
+
+/** What the database holds for `email`: whether an account exists, and how Google is linked. */
+export async function accountRecord(email: string): Promise<AccountRecord> {
+  const { rows } = await withE2eDatabase((client) =>
+    client.query(
+      `select (select count(*)::int from users where email = $1) as users,
+              (select count(*)::int
+                 from user_identities i join users u on u.id = i.user_id
+                where u.email = $1 and i.provider = 'google') as google_identities,
+              coalesce((select password_hash is not null from users where email = $1), false)
+                as has_password,
+              coalesce((select email_verified_at is not null from users where email = $1), false)
+                as email_verified,
+              (select count(*)::int from email_outbox
+                where to_email = $1 and kind = 'verification') as verification_emails`,
+      [email],
+    ),
+  );
+  const row = rows[0] ?? {};
+  return {
+    users: Number(row.users ?? 0),
+    googleIdentities: Number(row.google_identities ?? 0),
+    hasPassword: row.has_password === true,
+    emailVerified: row.email_verified === true,
+    verificationEmails: Number(row.verification_emails ?? 0),
+  };
+}

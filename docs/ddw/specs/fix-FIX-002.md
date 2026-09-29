@@ -6,8 +6,8 @@
 | Tier | FIX |
 | RCA | docs/ddw/specs/rca-FIX-002.md |
 | Date | 2026-09-28 |
-| Spec loops | 1 |
-| Loops since last human decision | 1 |
+| Spec loops | 2 |
+| Loops since last human decision | 0 |
 
 ## Problem
 The Railway deployment of `main` fails at build: `ERR_PNPM_NO_SCRIPT Missing script: build`. The
@@ -34,7 +34,24 @@ web start hardcodes port 3000; no start command caps the V8 heap.
 | NFR-03 | Strategy: `--max-old-space-size=320` for API and web, `192` for the worker, asserted by the config test |
 | NFR-04 | Strategy: `esbuild` is a devDependency; the bundle externalizes every runtime package already declared |
 
-## Solution — steps
+## Block 1 — Solution steps
+
+All steps form one block, verified as a unit (user decision 2026-09-28: the heading exists so
+`validate_verify.py` F-VER-02 can account for the fix-plan).
+
+**Files**
+- `apps/api/scripts/build.mjs` (new) — step 1
+- `apps/api/package.json` (modified) — step 2
+- `pnpm-lock.yaml` (modified) — step 3
+- `apps/web/package.json` (modified) — step 4
+- `apps/api/railway.json` (new) — step 5
+- `apps/api/railway.worker.json` (new) — step 6
+- `apps/web/railway.json` (new) — step 7
+- `AGENTS.md` (modified) — step 8
+- `CHANGELOG.md` (modified) — step 9
+- `apps/api/test/deploy/build-output.test.ts`, `apps/api/test/deploy/railway-config.test.ts`,
+  `apps/web/test/start-script.test.ts` (new) — tests below
+
 1. `apps/api/scripts/build.mjs` (new) — esbuild JS API build: entry points `src/server.ts`,
    `src/worker.ts`, `src/shared/db/migrate.ts`; `outbase: 'src'`, `outdir: 'dist'`,
    `bundle: true`, `platform: 'node'`, `format: 'esm'`, `target: 'node24'`, `sourcemap: true`, no
@@ -61,8 +78,11 @@ web start hardcodes port 3000; no start command caps the V8 heap.
    policy; no pre-deploy command (the API service owns migrations). No `variables`.
 7. `apps/web/railway.json` (new) — `build.buildCommand: pnpm --filter @argent/web build`,
    `build.watchPatterns: ["apps/web/**", "packages/shared/**", "pnpm-lock.yaml"]`,
-   `deploy.startCommand: NODE_OPTIONS=--max-old-space-size=320 pnpm --filter @argent/web start`;
-   same restart policy. No `variables`.
+   `deploy.startCommand: node --max-old-space-size=320 apps/web/node_modules/next/dist/bin/next start apps/web`;
+   same restart policy. No `variables`. Next.js runs as the only process of the container (no pnpm
+   parent kept resident, SIGTERM reaches Next.js directly); the `apps/web` directory argument points
+   Next.js at the built app from the repository root, and next-intl checks its config paths only
+   during `dev` and `build`. User decision 2026-09-28, after the first verification round.
 8. `AGENTS.md` — add a `Build` row to the Stack table:
    `pnpm --filter @argent/api build`, `pnpm --filter @argent/web build`.
 9. `CHANGELOG.md` — `### Fixed` entry for FIX-002 (written at CLOSEOUT).
@@ -119,6 +139,8 @@ tests. Steps 4 to 8 are independent. Step 9 happens at CLOSEOUT.
       (API, web) and 192 (worker); build commands carry none; restart policy is `ON_FAILURE` with
       at most 10 retries — validates AC-07.
 - [ ] `railway-config.test.ts`: no config has a `variables` key — threat R-01.
+- [ ] `railway-config.test.ts`: the web start command runs the Next.js binary with `node` and the
+      `apps/web` directory, with no `pnpm` in it — validates AC-07 for the web (one process).
 - [ ] `apps/web/test/start-script.test.ts`: the web `start` script passes no `--port`/`-p` flag,
       so Next.js listens on `PORT` — validates AC-06.
 

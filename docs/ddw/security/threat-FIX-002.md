@@ -68,8 +68,9 @@
 - **Information Disclosure:** commands only, no secrets; covered by the same test (R-01).
 - **Denial of Service:** the heap cap can restart Next.js under load, bounded by the restart policy
   (R-03).
-- **Elevation of Privilege:** `NODE_OPTIONS` is set in the start command only, so the build is not
-  constrained and no flag reaches other processes.
+- **Elevation of Privilege:** the heap flag is passed to `node` in the start command only, so the
+  build is not constrained and no `NODE_OPTIONS` reaches other processes; Next.js runs directly
+  under `node` with no pnpm parent.
 
 ### `apps/web/package.json`
 - **Spoofing:** listening on `PORT` does not change who can reach the server; the edge routes to it.

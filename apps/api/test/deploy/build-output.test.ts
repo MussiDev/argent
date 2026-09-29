@@ -15,7 +15,15 @@ const builtMigration = path.join(distDir, 'shared', 'db', 'migrate.js');
 /** Set while building; the bundle must never carry it, because nothing inlines environment values. */
 const BUILD_CANARY = 'build-canary-4f1c9e27d8';
 
-const IDENTITY_TABLES = ['auth_attempts', 'email_outbox', 'one_time_tokens', 'sessions', 'users'];
+const IDENTITY_TABLES = [
+  'auth_attempts',
+  'email_outbox',
+  'oauth_states',
+  'one_time_tokens',
+  'sessions',
+  'user_identities',
+  'users',
+];
 
 /** A throwaway database, so the built migration runs on a truly empty one. */
 const emptyDatabaseUrl = (() => {

@@ -43,6 +43,13 @@ describe.each(services)('Railway config for $name', ({ name, file, pkg, heapMb }
     expect(config.deploy?.restartPolicyMaxRetries).toBeLessThanOrEqual(10);
   });
 
+  it.runIf(name === 'web')('starts Next.js with node directly, with no pnpm parent process', () => {
+    expect(start).toBe(
+      'node --max-old-space-size=320 apps/web/node_modules/next/dist/bin/next start apps/web',
+    );
+    expect(start).not.toMatch(/\bpnpm\b|NODE_OPTIONS/);
+  });
+
   it('holds no variables, so no secret can live in the repository', () => {
     expect(config).not.toHaveProperty('variables');
   });

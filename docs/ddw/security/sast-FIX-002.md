@@ -4,16 +4,16 @@
 |---|---|
 | Ticket | FIX-002 |
 | Tier | FIX |
-| Date | 2026-09-28 |
+| Date | 2026-09-28 (re-run after the corrective loop, 2026-09-29) |
 | Scope | diff of `fix/FIX-002-railway-deploy` against `main`: `apps/api/scripts/build.mjs`, `apps/api/railway.json`, `apps/api/railway.worker.json`, `apps/web/railway.json`, `apps/api/package.json`, `apps/web/package.json`, `pnpm-lock.yaml`, `AGENTS.md`, `apps/api/test/deploy/*.test.ts`, `apps/web/test/start-script.test.ts`, `docs/ddw/**` |
 | Method | Manual review of the diff against catalog §4, plus `pnpm audit --prod --audit-level high` |
 | Result | PASSED — 0 Critical, 0 High, 0 Medium open; 0 Low |
 
 ## Findings by rule
 
-- ✅ F-SAST-01 Hardcoded secrets (CWE-798): the three `railway*.json` files hold commands only and no `variables` key (asserted by `apps/api/test/deploy/railway-config.test.ts:46-47`); `build.mjs` defines no `process.env` substitution, and `apps/api/test/deploy/build-output.test.ts:86` asserts a canary environment value never reaches the bundles. The test database URL in `docs/ddw/reports/tests-FIX-002.md:6` and the unreachable URL in `build-output.test.ts:110` carry the local Docker credentials already public in `docker-compose.yml:8-9` (false positive, never used in production). `.env*` stays ignored (`.gitignore:12`).
+- ✅ F-SAST-01 Hardcoded secrets (CWE-798): the three `railway*.json` files hold commands only and no `variables` key (asserted by `apps/api/test/deploy/railway-config.test.ts:53-54`); `build.mjs` defines no `process.env` substitution, and `apps/api/test/deploy/build-output.test.ts:86` asserts a canary environment value never reaches the bundles. The test database URL in `docs/ddw/reports/tests-FIX-002.md:6` and the unreachable URL in `build-output.test.ts:110` carry the local Docker credentials already public in `docker-compose.yml:8-9` (false positive, never used in production). `.env*` stays ignored (`.gitignore:12`).
 - ✅ F-SAST-02 SQL injection (CWE-89): no application query added; the test's schema resets are constant statements (`build-output.test.ts:39-43`).
-- ✅ F-SAST-03 OS command injection (CWE-78): the tests spawn `process.execPath` with fixed argument arrays and no shell (`build-output.test.ts:35-37`); `build.mjs` spawns nothing. The Railway start commands are static strings from the repository.
+- ✅ F-SAST-03 OS command injection (CWE-78): the tests spawn `process.execPath` with fixed argument arrays and no shell (`build-output.test.ts:35-37`); `build.mjs` spawns nothing. The Railway start commands are static strings from the repository; the web one runs the locked Next.js binary directly (`apps/web/railway.json:10`) with no shell expansion of runtime input.
 - ✅ F-SAST-04 Insecure deserialization (CWE-502): `JSON.parse` only reads repository files in tests (`railway-config.test.ts:18`, `start-script.test.ts:4`).
 - ✅ F-SAST-05 Path traversal (CWE-22): `build.mjs` takes `--outdir` and entry points from its own command line at build time (`apps/api/scripts/build.mjs:25-36`), set by the repository's scripts, never by a user request.
 - ✅ F-SAST-06 XSS (CWE-79): no HTML output in the diff.

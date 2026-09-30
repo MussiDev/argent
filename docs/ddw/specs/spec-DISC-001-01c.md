@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01c.md |
 | Tier | FEATURE |
 | Date | 2026-09-30 |
-| Spec loops | 1 |
-| Loops since last human decision | 0 |
+| Spec loops | 2 |
+| Loops since last human decision | 1 |
 
 ## Summary
 Adds an optional TOTP second factor to the `identity` module. A signed-in user with a verified email
@@ -31,10 +31,10 @@ sign-in; Block 4 the web screens.
 | FR-03 | Block 1, Block 2, Block 4 |
 | FR-04 | Block 1, Block 3, Block 4 |
 | FR-05 | Block 1, Block 2, Block 4 |
-| NFR-01 | Strategy: every failed TOTP or recovery code (in verify and in disable) records one unit in the existing `sign_in_account` policy keyed by `Email.parse(user.email).value`, the same key password sign-in uses, and keeps it; a success gives it back. The second step does not refuse on that counter (NFR-04 does the limiting), so the codes count toward the sign-in limit without letting wrong passwords block the second step (Block 3, Block 2). Test: after 3 wrong codes, 2 wrong passwords make the next password attempt answer 429. |
+| NFR-01 | Strategy: every failed TOTP or recovery code (in verify and in disable) records one unit in the existing `sign_in_account` policy keyed by `Email.parse(user.email).value`, the same key password sign-in uses, after the transaction commits; successes record nothing. A failure to record it is reported and the answer stays 401 (fail safe, as the FIX-001 refund). The second step does not refuse on that counter (NFR-04 does the limiting), so the codes count toward the sign-in limit without letting wrong passwords block the second step (Block 3, Block 2). Test: after 3 wrong codes, 2 wrong passwords make the next password attempt answer 429. |
 | NFR-02 | Strategy: recovery codes (50 random bits each) are hashed with the existing `Argon2idPasswordHasher` before any transaction opens and stored only as hashes in `recovery_codes`; the plaintext exists only in the enable response, sent with `Cache-Control: no-store` (Block 1, Block 2). A test reads the table after enabling and finds no code in plain text. |
 | NFR-03 | Strategy: a pure RFC 6238 implementation in `apps/api/src/identity/infrastructure/security/totp.ts` (HMAC-SHA1 via `node:crypto`, 6 digits, 30 s step, window of ±1 step, constant-time comparison), tested against the RFC 6238 Appendix B vectors and at the window edges; the last accepted step is stored per user and a code is accepted only for a later step (atomic conditional update), so a code cannot be replayed (Block 1). |
-| NFR-04 | Strategy: two new attempt policies keyed by user id, `second_factor_user_15m` (5 per 15 minutes) and `second_factor_user_24h` (20 per 24 hours), recorded with the reserve-then-refund pattern of DISC-001-01a and FIX-001 before any code is checked: a refusal gives its units back and answers 429 (a failed refund is reported and does not turn the 429 into a 500), a failure keeps them, a success gives them back. Password failures touch only `sign_in_account`, so they never block the second step. Each challenge also allows at most 5 attempts (Block 3). Tests: 5 wrong passwords do not block a valid second factor; the 6th wrong code within 15 minutes and the 21st within 24 hours answer 429. |
+| NFR-04 | Strategy: two new attempt policies keyed by user id, `second_factor_user_15m` (5 per 15 minutes) and `second_factor_user_24h` (20 per 24 hours), recorded with the reserve-then-refund pattern of DISC-001-01a and FIX-001 before any code is checked: a refusal gives its units back and answers 429 (a failed refund is reported and does not turn the 429 into a 500), a failure keeps them, a success gives them back. Only failed code guesses keep units; expired, version-changed, 2FA-off and over-attempted outcomes give them back. Password failures touch only `sign_in_account`, so they never block the second step, and disabling uses its own policy `two_factor_disable_user` (5 per 15 minutes per user), so a stolen session cannot exhaust the sign-in second step. Each challenge also allows at most 5 attempts (Block 3). Tests: 5 wrong passwords do not block a valid second factor; the 6th wrong code within 15 minutes and the 21st within 24 hours answer 429. |
 
 ## Dependencies between blocks
 Block 1 → Block 2 → Block 3 → Block 4. Block 2 and Block 3 use Block 1's engine and repositories;
@@ -60,21 +60,22 @@ Block 4 uses the routes of Blocks 2 and 3. Execution order: 1, 2, 3, 4.
   - `sign-in-challenge-repository.ts` — `create(challenge)`, `lockLive(tokenHash, now)` (`select … for update` inside a unit of work), `recordAttempt(tokenHash): Promise<number>`, `consume(tokenHash)`, `deleteForUser(userId)`.
   - `sign-in-challenge-purger.ts` — `purgeExpired(now): Promise<number>`, mirroring `oauth-state-purger.ts`.
 - `apps/api/src/identity/application/ports/unit-of-work.ts` (modified) — `TransactionalRepositories` gains `twoFactor`, `recoveryCodes`, `signInChallenges`.
-- `apps/api/src/identity/application/ports/session-repository.ts` (modified) — `revokeAllForUserExcept(userId, sessionId, at)`.
-- `apps/api/src/identity/application/ports/attempt-limiter.ts` (modified) — attempt kinds `second_factor_user_15m`, `second_factor_user_24h`.
+- `apps/api/src/identity/application/ports/user-repository.ts` (modified) — `bumpCredentialsVersion(userId): Promise<number>` (returns the new version).
+- `apps/api/src/identity/application/ports/attempt-limiter.ts` (modified) — attempt kinds `second_factor_user_15m`, `second_factor_user_24h`, `two_factor_disable_user`.
 - `apps/api/src/identity/application/ports/email-sender.ts` (modified) — outbox kinds `two_factor_enabled`, `two_factor_disabled`.
 - `apps/api/src/identity/domain/recovery-code.ts` (new) — pure formatting and normalization: 10 Crockford base32 characters shown as `xxxxx-xxxxx`; input upper-cased, spaces and dashes removed, `I`/`L` read as `1` and `O` as `0`.
 - Adapters in `apps/api/src/identity/infrastructure/security/` (new):
   - `totp.ts` — `RfcTotpEngine`; the URI is `otpauth://totp/Pesly:${encodeURIComponent(email)}?secret=…&issuer=Pesly&algorithm=SHA1&digits=6&period=30`.
   - `aes-gcm-secret-box.ts` — AES-256-GCM with a random 96-bit IV per seal, the user id as additional authenticated data, format `v1.<keyId>.<iv>.<ciphertext>.<tag>` (base64url; `keyId` = first 8 hex characters of SHA-256 of the key). Also `UnavailableSecretBox`, used when the key is unset outside production.
   - `crypto-recovery-code-generator.ts` — 50 random bits per code from `randomBytes`.
-- `apps/api/src/shared/config/env.ts` (modified) — `TOTP_ENCRYPTION_KEY` (base64 of exactly 32 bytes); required in production, optional elsewhere.
+- `apps/api/src/shared/config/env.ts` (modified) — `TOTP_ENCRYPTION_KEY` (base64 of exactly 32 bytes); required in production, optional elsewhere. The email worker parses the same env, so the key must be set on the worker service too; `.env.example` gains the variable (edited by the user).
 - `apps/api/test/helpers/test-env.ts` (modified) — a test key, also in `productionOverrides`; `playwright.config.ts` (modified) — `TOTP_ENCRYPTION_KEY` in `API_ENV`.
 - `apps/api/src/identity/infrastructure/db/schema.ts` (modified) — tables `user_two_factor`, `recovery_codes`, `sign_in_challenges`; widened `auth_attempts` and `email_outbox` kind checks.
 - `apps/api/drizzle/0005_two_factor.sql` (new, generated), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0005_snapshot.json` (new, generated), `apps/api/drizzle/rollback/0005_two_factor.down.sql` (new; destructive, see Data model).
-- Repositories in `apps/api/src/identity/infrastructure/db/`: `drizzle-two-factor-repository.ts`, `drizzle-recovery-code-repository.ts`, `drizzle-sign-in-challenge-repository.ts` (new; the challenge repository implements the purger port); `drizzle-unit-of-work.ts`, `drizzle-session-repository.ts` (modified).
+- Repositories in `apps/api/src/identity/infrastructure/db/`: `drizzle-two-factor-repository.ts`, `drizzle-recovery-code-repository.ts`, `drizzle-sign-in-challenge-repository.ts` (new; the challenge repository implements the purger port); `drizzle-unit-of-work.ts`, `drizzle-user-repository.ts` (modified).
 - `apps/api/src/identity/infrastructure/email/email-worker.ts` (modified) — the retention purge also calls `SignInChallengePurger.purgeExpired`. Each purge runs in its own `try`, so a failed purge does not skip the others. `createEmailWorker` in `apps/api/src/identity/index.ts` wires it.
-- `apps/api/src/identity/infrastructure/email/render-email.ts` and `apps/api/src/identity/infrastructure/email/messages/{es,en}.json` (modified) — the two notice emails, which carry no link or token.
+- `apps/api/src/identity/infrastructure/email/email-worker.ts` (modified, notices) — `handleRow` gains a notice branch for `two_factor_enabled` and `two_factor_disabled`: no token issuance and no savepoint; the row is dropped when the user no longer exists; retries and idempotency keys work as for other kinds.
+- `apps/api/src/identity/infrastructure/email/render-email.ts` and `apps/api/src/identity/infrastructure/email/messages/{es,en}.json` (modified) — a `NoticeEmailKind` alongside `TokenEmailKind` and a `renderNotice(kind, language)` that renders subject and body without any link; the catalog gains the two notices.
 - `apps/api/src/identity/index.ts` (modified) — wires the adapters. `IdentityInfrastructureDependencies.env` and `IdentityModuleDependencies.env` gain `TOTP_ENCRYPTION_KEY`, and the new ports are exported.
 - Tests updated for the port changes (all in `apps/api/test/identity/` unless noted):
   - Type-level fakes and construction sites: `password-reset-use-cases.test.ts:172`, `register-user.test.ts:83`, `refresh-session.test.ts:110-116` (`work({...})` literals).
@@ -94,7 +95,7 @@ Block 4 uses the routes of Blocks 2 and 3. Execution order: 1, 2, 3, 4.
 - `user_two_factor`: `user_id uuid pk` fk `users` on delete cascade, `secret_sealed text not null`, `enabled_at timestamptz null` (null = pending setup), `last_used_step bigint not null default 0`, `created_at timestamptz not null default now()`.
 - `recovery_codes`: `id uuid pk default random`, `user_id uuid not null` fk `users` on delete cascade, `code_hash text not null`, `used_at timestamptz null`, `created_at timestamptz not null default now()`; index on `user_id`.
 - `sign_in_challenges`: `token_hash text pk`, `user_id uuid not null` fk `users` on delete cascade, `credentials_version integer not null`, `via text not null` check in (`password`, `google`), `language text not null` check in `LANGUAGES`, `attempts integer not null default 0`, `expires_at timestamptz not null`, `created_at timestamptz not null default now()`; index on `expires_at`; index on `user_id`.
-- `auth_attempts_kind_check` gains `second_factor_user_15m` and `second_factor_user_24h`; `email_outbox_kind_check` gains `two_factor_enabled` and `two_factor_disabled`.
+- `auth_attempts_kind_check` gains `second_factor_user_15m`, `second_factor_user_24h` and `two_factor_disable_user`; `email_outbox_kind_check` gains `two_factor_enabled` and `two_factor_disabled`.
 - Migration `0005_two_factor` only adds tables and widens checks (non-destructive). Its rollback is destructive and says so in its header, which also asks for the API and worker to be stopped first. It deletes the rows of the new kinds, restores the checks, and drops the three tables. Dropping `user_two_factor` turns 2FA off for every user.
 
 **Input validation**
@@ -114,9 +115,10 @@ Block 4 uses the routes of Blocks 2 and 3. Execution order: 1, 2, 3, 4.
 - [ ] recovery codes: 10 distinct codes of the documented format; input with spaces, dashes, lower case, `I`, `L` or `O` normalizes to the stored form — validates FR-03
 - [ ] `replaceAll` stores only Argon2id hashes (no plaintext in the table), and `markUsed` succeeds once per code — validates NFR-02, sad path
 - [ ] `savePending` refuses when 2FA is enabled, and `activate` refuses when the pending secret changed — sad path
-- [ ] `revokeAllForUserExcept` revokes every other session of the user and keeps the given one — validates FR-05
+- [ ] `bumpCredentialsVersion` increments the version atomically and returns it — validates FR-05
 - [ ] a sign-in challenge is found while live, `consume` succeeds once, and an expired or consumed challenge is not found — sad path
 - [ ] the retention purge deletes expired challenges, and a failing earlier purge does not skip it
+- [ ] the worker delivers `two_factor_enabled` and `two_factor_disabled` rows through the transport without issuing a token, and drops them when the user was deleted — validates FR-05
 - [ ] migration `0005` applies on `0004`, and its rollback restores `0004`
 
 **Completion criterion**
@@ -143,21 +145,16 @@ All tests above pass; `drizzle-kit check` is clean; the existing suite still pas
   4. In one transaction:
      - `activate` with the verified sealed value (false → 409 `TWO_FACTOR_SETUP_REQUIRED`);
      - `recoveryCodes.replaceAll`;
-     - `sessions.revokeAllForUserExcept(current session)`;
+     - `users.bumpCredentialsVersion` and `sessions.revokeAllForUser` (every session, including the caller's, and any session created by a racing sign-in or refresh, dies on its next use through the version check);
      - enqueue a `two_factor_enabled` outbox row.
-  5. Returns the 10 plaintext codes once (AC-01, AC-02, AC-07).
+  5. After commit, start a new session for the caller with the new version (`StartSession`) and set its cookies, so the caller stays signed in while every other session ends. Returns the 10 plaintext codes once (AC-01, AC-02, AC-07).
 - **Disable:**
   1. Requires 2FA enabled.
-  2. Reserves the NFR-04 units, then checks the code (TOTP not replayed, or an unused recovery code) and records the NFR-01 unit on failure.
-  3. On success, in one transaction:
-     - delete `user_two_factor`, all recovery codes and the user's pending challenges;
-     - `revokeAllForUserExcept(current session)`;
-     - enqueue a `two_factor_disabled` outbox row;
-
-     then give the units back (AC-03, AC-07).
-  4. On failure keep them. When the limits refuse, give them back and answer 429; a failed refund is reported, never a 500.
+  2. Reserves one `two_factor_disable_user` unit (refused → give it back, answer 429; a failed refund is reported, never a 500), then checks the code (TOTP not replayed, or an unused recovery code).
+  3. On success, in one transaction: delete `user_two_factor`, all recovery codes and the user's pending challenges; `users.bumpCredentialsVersion`; `sessions.revokeAllForUser`; enqueue a `two_factor_disabled` outbox row. After commit, start a new session for the caller and set its cookies, and give the unit back (AC-03, AC-07).
+  4. On failure keep the unit and record the NFR-01 unit after the answer is decided.
 - All four routes require a session and a verified email (`requireSession`, `requireVerifiedEmail`).
-- Setup and enable answer with `Cache-Control: no-store`. No log line contains a code, secret, sealed value or recovery code.
+- Setup and enable answer with `Cache-Control: no-store`. No log line contains a code, secret, sealed value or recovery code; the logger's redaction list gains `secret`, `otpauthUri`, `recoveryCodes` and `code` at body level as defence in depth (`apps/api/src/shared/logging/logger.ts`, modified).
 
 **API contract**
 - Method + path: `GET /auth/2fa`
@@ -174,18 +171,18 @@ All tests above pass; `drizzle-kit check` is clean; the existing suite still pas
 
 - Method + path: `POST /auth/2fa/enable`
 - Request: `{ code: string }`
-- Response: 200 `{ recoveryCodes: string[] }` (exactly 10), `Cache-Control: no-store`
+- Response: 200 `{ recoveryCodes: string[] }` (exactly 10), `Cache-Control: no-store`, new session cookies
 - Error codes: 400 `VALIDATION_FAILED`, 400 `TOTP_INVALID`, 401 `UNAUTHENTICATED`, 403 `EMAIL_NOT_VERIFIED`, 409 `TWO_FACTOR_ALREADY_ENABLED`, 409 `TWO_FACTOR_SETUP_REQUIRED`, 503 `TWO_FACTOR_UNAVAILABLE`
 - Auth: session cookie; verified email; `Origin` guard
 
 - Method + path: `POST /auth/2fa/disable`
 - Request: `{ code: string }` (a TOTP code or a recovery code)
-- Response: 204
+- Response: 204, new session cookies
 - Error codes: 400 `VALIDATION_FAILED`, 400 `TOTP_INVALID`, 401 `UNAUTHENTICATED`, 403 `EMAIL_NOT_VERIFIED`, 409 `TWO_FACTOR_NOT_ENABLED`, 429 `RATE_LIMITED`, 503 `TWO_FACTOR_UNAVAILABLE`
 - Auth: session cookie; verified email; `Origin` guard
 
 **Input validation**
-- Enable `code`: exactly 6 ASCII digits after trimming spaces. Disable `code`: 6 digits, or a recovery code of 10 Crockford base32 characters with optional spaces and one dash (≤ 16 characters before normalization).
+- Enable `code`: exactly 6 ASCII digits after trimming spaces. Disable `code`: 6 digits, or a recovery code of 10 characters from the Crockford alphabet plus `I`, `L`, `O` in either case, with optional spaces and one dash (≤ 16 characters before normalization), so the domain normalization can run.
 
 **Error handling**
 - A wrong or replayed code, or an unknown or used recovery code → 400 `TOTP_INVALID`; nothing changes.
@@ -195,12 +192,13 @@ All tests above pass; `drizzle-kit check` is clean; the existing suite still pas
 **Required tests**
 - [ ] setup returns an `otpauth://` URI and a secret with `Cache-Control: no-store`; enable with a valid code activates 2FA — validates AC-01
 - [ ] enable returns 10 recovery codes once; the status afterwards returns only `recoveryCodesRemaining: 10`, and no endpoint returns the codes again — validates AC-02
-- [ ] enabling ends every other session of the user (401 on their next use), keeps the current one, and enqueues a `two_factor_enabled` email — validates AC-07
+- [ ] enabling ends every other session of the user (401 on their next use), keeps the caller signed in with new cookies, and enqueues a `two_factor_enabled` email — validates AC-07
+- [ ] a password sign-in that reads the user before enable commits and creates its session after gets a session rejected with 401 on first use — sad path, validates AC-07
 - [ ] a setup running between an enable's verify and activate makes that enable answer 409, and 2FA stays off — sad path
 - [ ] enable with a wrong code, a replayed code, or without setup is refused and 2FA stays off — sad path
 - [ ] disable with a valid TOTP code turns 2FA off, deletes every recovery code, ends other sessions and enqueues a `two_factor_disabled` email — validates AC-03, AC-07
 - [ ] disable with an unused recovery code turns 2FA off — validates AC-03
-- [ ] disable with a wrong code is refused and counted; the 6th wrong code within 15 minutes answers 429 — sad path, validates NFR-04
+- [ ] disable with a wrong code is refused and counted; the 6th wrong disable within 15 minutes answers 429, and it does not consume the sign-in second-factor units — sad path, validates NFR-04
 - [ ] setup or enable when already enabled answers 409 — sad path
 - [ ] a malformed code answers 400 `VALIDATION_FAILED` — sad path
 - [ ] every route answers 401 without a session and 403 for an unverified email — sad path
@@ -218,7 +216,7 @@ All tests above pass; enrollment works end to end against PostgreSQL.
 - `apps/api/src/identity/application/create-sign-in-challenge.ts`, `verify-second-factor.ts` (new).
 - `apps/api/src/identity/infrastructure/http/session-routes.ts`, `google-routes.ts`, `two-factor-routes.ts`, `session-cookies.ts` (modified) — the last one adds `SIGN_IN_CHALLENGE_COOKIE`.
 - `packages/shared/src/auth/sign-in.ts` (modified) — the sign-in response becomes a union: `{ status: "signed_in", user }` or `{ status: "second_factor_required" }`.
-- `packages/shared/src/auth/google.ts` (modified) — `GOOGLE_SIGN_IN_ERRORS` becomes `SIGN_IN_ERRORS` with `google_failed` and `second_factor_expired`.
+- `packages/shared/src/auth/sign-in.ts` (modified) — `SIGN_IN_ERRORS` (`google_failed`, `second_factor_expired`) moves here from `auth/google.ts`, which re-exports `GOOGLE_SIGN_IN_ERRORS` for the Google routes; `apps/web/src/features/auth/containers/sign-in-container.tsx` renames `GoogleSignInError`/`isGoogleSignInError` to `SignInError`/`isSignInError`.
 - Tests that break on the response union or on the new dependencies:
   - `apps/api/test/identity/auth-schemas.test.ts:114-115`
   - `apps/api/test/identity/sign-in.test.ts:57-59`
@@ -231,13 +229,12 @@ All tests above pass; enrollment works end to end against PostgreSQL.
   - Password: answer 200 `{ status: "second_factor_required" }`.
   - Google: answer 302 to `${WEB_BASE_URL}/{language}/sign-in/second-factor`. The cookie is set on the callback response, as the session cookies already are. Any Google link written before the challenge stays in place (see threat R-50).
 - **Verify**, in this order:
-  1. Reserve the NFR-04 units for the challenge's user. If refused, give them back and answer 429.
-  2. In one unit of work, lock the live challenge. If it is missing or expired → 401 `SECOND_FACTOR_EXPIRED`.
-  3. Increment its attempts. More than 5 → consume it and answer `SECOND_FACTOR_EXPIRED`.
-  4. Check that the user's credentials version still equals the challenge's and that 2FA is still enabled. Otherwise consume it and answer `SECOND_FACTOR_EXPIRED`.
-  5. Check the code: TOTP with the step advanced, or a recovery code marked used.
-  6. On success: consume the challenge and start the session with `StartSession` for `{ id, credentialsVersion: challenge.credentialsVersion }`. After commit, give the NFR-04 units back, clear the challenge cookie and answer 200 `{ status: "signed_in", user }`.
-  7. On failure: record the NFR-01 unit and answer 401 `SECOND_FACTOR_INVALID` (AC-05).
+  1. Read the live challenge without a lock (missing or expired → 401 `SECOND_FACTOR_EXPIRED`) to learn its user.
+  2. Outside any transaction, reserve the NFR-04 units for that user. If refused, give them back and answer 429.
+  3. Nothing expensive runs under the lock except the recovery-code checks, bounded to the user's unused codes (at most 10, sequential).
+  4. In one unit of work that **returns an outcome and never throws for an expected result**: lock the challenge (`select … for update`); increment its attempts; if more than 5, consume it → outcome `expired`; if the user's credentials version differs from the challenge's or 2FA is off, consume it → outcome `expired`; check the code (TOTP with the step advanced, or a recovery code marked used); on success consume the challenge → outcome `ok`; on a wrong code keep the challenge (attempts persisted) → outcome `invalid`. The transaction commits in every case, so the attempt count and consumes persist.
+  5. After commit: `ok` → start the session with `StartSession` for `{ id, credentialsVersion: challenge.credentialsVersion }` on the pool (the challenge lock is released), give the NFR-04 units back, clear the challenge cookie and answer 200 `{ status: "signed_in", user }`; `expired` → give the units back and answer 401 `SECOND_FACTOR_EXPIRED`; `invalid` → keep the units, record the NFR-01 unit and answer 401 `SECOND_FACTOR_INVALID` (AC-05).
+  No pool connection is requested while the challenge lock is held.
 - A password reset does not disable 2FA. It invalidates pending challenges through the credentials version, and the next sign-in still asks for the second factor.
 
 **API contract**
@@ -276,12 +273,13 @@ All tests above pass; enrollment works end to end against PostgreSQL.
 - [ ] 5 wrong passwords (account locked for passwords) do not block a valid second factor on an existing challenge — validates NFR-04
 - [ ] the 6th wrong code within 15 minutes and the 21st within 24 hours answer 429, and a refused attempt gives its units back — sad path, validates NFR-04
 - [ ] a TOTP code already used for a sign-in is refused on the next challenge — sad path, validates NFR-03
-- [ ] verify without the cookie, with an expired challenge, after 5 attempts on one challenge, or with a consumed challenge answers `SECOND_FACTOR_EXPIRED` — sad path
+- [ ] verify without the cookie, with an expired challenge, after 5 attempts on one challenge (the attempt count persists across requests), or with a consumed challenge answers `SECOND_FACTOR_EXPIRED` — sad path
+- [ ] 12 concurrent verifies against a pool of 10 connections all complete (no pool deadlock) — sad path
 - [ ] a password reset between the first and second factor, or 2FA disabled meanwhile, makes verify answer `SECOND_FACTOR_EXPIRED` without spending the code — sad path
 - [ ] two concurrent verifies with the same valid code, or one with a TOTP code and one with a recovery code, start exactly one session and spend at most one code — sad path
 - [ ] users without 2FA still sign in in one step with password and with Google — regression
 - [ ] a code that is neither 6 digits nor a recovery code answers 400 `VALIDATION_FAILED` — sad path
-- [ ] perf: verify with a recovery code (10 unused codes) p95 < 1000 ms over 50 requests — validates NFR-02 cost budget
+- [ ] perf: verify with a valid recovery code that matches the last of 10 unused codes (the worst successful case) p95 < 1000 ms over 50 requests, each on its own user so NFR-04 never refuses — validates the NFR-02 hashing cost stays bounded
 
 **Completion criterion**
 All tests above pass; the DISC-001-01a and DISC-001-01b suites pass with the new sign-in response.
@@ -364,3 +362,4 @@ All e2e tests pass in CI; the coverage floor holds with the new components.
 - 2026-09-30: The sign-in challenge lives in PostgreSQL behind a `SameSite=Strict` cookie scoped to `/auth/2fa`, so any API instance can finish a sign-in and the challenge is single-use (stateless API, DISC-001-01a NFR-09).
 - 2026-09-30: A password reset does not turn 2FA off: resetting proves control of the email, which is the first factor, not the second. It still invalidates pending challenges.
 - 2026-09-30: Architecture review and impact scan applied: conditional `savePending`/`activate` against the setup race; verify ordered and locked in one unit of work; the session uses the challenge's credentials version; recovery-code hashing outside transactions and sequential checks; a `RecoveryCodeGenerator` port and a `SignInChallengePurger` port; domain error classes; `no-store` on secret-bearing responses; client refresh flags; `SIGN_IN_ERRORS`; every breaking test and construction site listed.
+- 2026-09-30: Architecture review round 2 applied: the verify unit of work returns an outcome and commits in every case, so attempt counts and consumes persist; limiter calls and the session start run outside the challenge lock (no pool deadlock); the worker gains a token-less notice path; enable and disable bump the credentials version and re-issue the caller's session, closing the race with a concurrent sign-in or refresh; disable has its own per-user limit so a stolen session cannot exhaust the sign-in second step; logger redaction extended; `SIGN_IN_ERRORS` moved to `auth/sign-in.ts`; the recovery-code schema accepts what the domain normalizes; the key is required on the worker too.

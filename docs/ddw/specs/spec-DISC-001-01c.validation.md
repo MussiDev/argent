@@ -14,10 +14,10 @@
   ✅ F-SPEC-10: every block documents its error handling
   ✅ F-SPEC-16: every documented error is named by a test
   ✅ F-SPEC-11: dependencies between blocks are declared
-  ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (TOTP engine, secret encryption and persistence) (31 files, 1210 words), Block 2 (Enrollment, disabling and notices) (7 files, 865 words), Block 3 (Second step of sign-in) (12 files, 955 words), Block 4 (Web: security settings and second-factor screen) (18 files, 943 words)
+  ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (TOTP engine, secret encryption and persistence) (32 files, 1315 words), Block 2 (Enrollment, disabling and notices) (7 files, 1015 words), Block 3 (Second step of sign-in) (12 files, 1114 words), Block 4 (Web: security settings and second-factor screen) (18 files, 1050 words)
   👁  F-SPEC-12 (contradicts the PRD) and F-SPEC-13 (terminology diverging from
       the PRD) are MANUAL: judge them and say so explicitly in your report.
-  ✅ F-SPEC-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 1 in total for this document
+  ✅ F-SPEC-LOOP: 1 loop(s) since a human decided, under the ceiling of 3; 2 in total for this document
 ────────────────────────────────────────────────────────────────
 Total: 13 passed, 0 failed, 1 warnings
 Result: PASSED

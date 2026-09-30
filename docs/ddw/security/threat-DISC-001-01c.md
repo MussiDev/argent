@@ -52,7 +52,7 @@
 - **Tampering:** the challenge stores the credentials version from the first factor; a password reset in between invalidates it (R-44).
 - **Repudiation:** each failed and successful second factor is logged with user id and `via`.
 - **Information Disclosure:** `second_factor_required` reveals that the password was right; this is inherent to 2FA and the attempt was already counted against the account limit (R-48).
-- **Denial of Service:** per-user second-factor limits that wrong passwords cannot exhaust (R-51) and 5 attempts per challenge; recovery-code checks cost at most 10 sequential Argon2id verifications, behind the same limits and a perf budget (R-45).
+- **Denial of Service:** per-user second-factor limits that wrong passwords cannot exhaust (R-51) and 5 attempts per challenge; recovery-code checks cost at most 10 sequential Argon2id verifications, behind the per-user limits and a perf budget (R-45).
 - **Elevation of Privilege:** a TOTP code and a recovery code are each single-use; concurrent verifies of one code start at most one session (R-41, R-44).
 
 ### `apps/web/src/features/two-factor/` + `apps/web/src/app/[locale]/(auth)/sign-in/second-factor/`
@@ -74,12 +74,12 @@
 ## Risks and mitigations
 | ID | Risk | STRIDE | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|---|
-| R-40 | brute force of 6-digit codes by someone holding the password | S | M | H | per-user second-factor limit of 5 per 15 min and 20 per 24 h (NFR-04), 5 attempts per challenge, and every failure also recorded on the shared sign-in counter (NFR-01): at most 20 guesses a day at 3 accepted codes per guess, about 0.006% a day (about 2% a year of continuous attempts) |
+| R-40 | brute force of 6-digit codes by someone holding the password | S | M | H | per-user second-factor limit of 5 per 15 min and 20 per 24 h (NFR-04), the same caps on disable under separate keys, 5 attempts per challenge, and every failure also recorded on the shared sign-in counter (NFR-01): at most 20 guesses a day at 3 accepted codes per guess, about 0.006% a day (about 2% a year of continuous attempts) |
 | R-41 | replay of an observed TOTP code or recovery code | S | M | H | last accepted step stored per user; recovery codes marked used atomically |
 | R-42 | database dump exposes TOTP secrets, or a sealed secret is copied to another user's row | I | L | C | secrets sealed with AES-256-GCM with the user id as authenticated data; key outside the database |
 | R-43 | sign-in challenge stolen or fixed by another site | S | L | H | random 256-bit token stored hashed, `SameSite=Strict` cookie scoped to `/auth/2fa`, 5-minute expiry, single use |
 | R-44 | race between verify, reset and concurrent verifies | T | L | M | atomic consume and step advance; credentials version checked before the session starts |
-| R-45 | CPU exhaustion through recovery-code Argon2id checks | D | L | M | at most 10 verifications per attempt, behind the per-account limit |
+| R-45 | CPU exhaustion through recovery-code Argon2id checks | D | L | M | at most 10 sequential verifications per attempt, behind the per-user second-factor and disable limits |
 | R-46 | stolen session turns 2FA off, or enrolls the attacker's authenticator | E | M | H | disable requires a valid code and has its own limit; enable and disable bump the credentials version (every earlier session dies, including ones created by a racing sign-in or refresh), re-issue the caller's session, and email the owner (FR-05) |
 | R-47 | rollback of `0005` silently disables 2FA | E | L | H | rollback marked destructive; explicit plan required (AGENTS.md) |
 | R-48 | `second_factor_required` confirms a correct password | I | M | L | inherent to 2FA; the password attempt is already counted; accepted by design |

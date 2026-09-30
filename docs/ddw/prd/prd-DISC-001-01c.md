@@ -5,7 +5,7 @@
 | Ticket | DISC-001-01c |
 | Tracker | none |
 | Date | 2026-09-26 |
-| PRD loops | 1 |
+| PRD loops | 2 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -24,7 +24,7 @@ authenticator app, and need a way back in if they lose their phone. Split from `
 - FR-02: The system must allow a user with 2FA enabled to disable it.
 - FR-03: The system must issue 10 one-time recovery codes when a user enables 2FA.
 - FR-04: The system must ask users with 2FA enabled for a valid TOTP code or an unused recovery
-  code after the first factor, before starting the session.
+  code after any first factor (password or Google sign-in), before starting the session.
 
 ## Non-Functional Requirements
 - NFR-01: Every invalid TOTP or recovery code must count toward the sign-in rate limit of
@@ -44,6 +44,8 @@ authenticator app, and need a way back in if they lose their phone. Split from `
   a TOTP code or recovery code before starting the session.
 - AC-05 (FR-04): IF a user enters an invalid TOTP code or an already used recovery code, THEN
   THE system SHALL reject it and count it as a failed sign-in attempt.
+- AC-06 (FR-04): WHEN a user with 2FA enabled completes Google sign-in, THE system SHALL request
+  a TOTP code or recovery code before starting the session.
 
 ## Out of Scope
 - SMS or email second factors; passkeys / WebAuthn.
@@ -58,9 +60,13 @@ authenticator app, and need a way back in if they lose their phone. Split from `
 
 ## Dependencies
 - DISC-001-01a (Email & Password Authentication) — sign-in flow, sessions, rate limiting.
+- DISC-001-01b (Google Sign-In) — the second first factor that FR-04 also covers.
 
 ## Decision Log
 - 2026-09-26: Split from DISC-001-01 (user decision).
 - 2026-09-26: NFR-02 (hashed recovery codes) and NFR-03 (RFC 6238 parameters) made explicit when
   splitting; confirmed by the user.
 - 2026-09-26: User approved this sub-PRD and the non-functional requirements added when splitting.
+- 2026-09-30: Google sign-in (DISC-001-01b) shipped after this PRD was split, and FR-04 did not say
+  whether it is a first factor. User decision: 2FA applies after any first factor, password or
+  Google (FR-04 reworded, AC-06 added), so a stolen Google account does not bypass 2FA.

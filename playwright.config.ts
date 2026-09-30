@@ -34,6 +34,8 @@ const API_ENV = {
   WEB_ORIGIN: WEB_URL,
   API_ORIGIN: API_URL,
   BREACH_CHECKER: 'fake',
+  // Base64 of 32 bytes, for e2e runs only: seals the TOTP secrets enrolled by the 2FA flows.
+  TOTP_ENCRYPTION_KEY: 'ZTJlLW9ubHktdG90cC1lbmNyeXB0aW9uLWtleS0zMmI=',
   ...FAKE_GOOGLE_CLIENT,
   GOOGLE_AUTHORIZATION_URL: `${FAKE_GOOGLE_ORIGIN}/authorize`,
   GOOGLE_TOKEN_URL: `${FAKE_GOOGLE_ORIGIN}/token`,

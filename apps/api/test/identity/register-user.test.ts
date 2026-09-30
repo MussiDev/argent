@@ -4,7 +4,10 @@ import type {
   AttemptPolicy,
 } from '../../src/identity/application/ports/attempt-limiter';
 import type { PasswordHasher } from '../../src/identity/application/ports/password-hasher';
-import type { UnitOfWork } from '../../src/identity/application/ports/unit-of-work';
+import type {
+  TransactionalRepositories,
+  UnitOfWork,
+} from '../../src/identity/application/ports/unit-of-work';
 import type {
   NewUser,
   User,
@@ -77,6 +80,7 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
     markEmailVerified: () => Promise.resolve(),
     changePassword: () => Promise.resolve(),
     supersedeUnverified: () => Promise.reject(new Error('unused')),
+    bumpCredentialsVersion: () => Promise.reject(new Error('unused')),
   };
   const unitOfWork: UnitOfWork = {
     run: (work) =>
@@ -86,6 +90,9 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
         oneTimeTokens: {} as OneTimeTokenRepository,
         sessions: {} as SessionRepository,
         identities: {} as UserIdentityRepository,
+        twoFactor: {} as TransactionalRepositories['twoFactor'],
+        recoveryCodes: {} as TransactionalRepositories['recoveryCodes'],
+        signInChallenges: {} as TransactionalRepositories['signInChallenges'],
       }),
   };
   const registerUser = new RegisterUser({

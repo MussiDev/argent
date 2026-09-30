@@ -12,5 +12,15 @@
     "action": "Choose a new password",
     "expiry": "The link expires in 60 minutes and works only once.",
     "ignore": "If you did not ask for it, ignore this message: your password stays the same."
+  },
+  "two_factor_enabled": {
+    "subject": "Two-factor authentication is on for your Argent account",
+    "body": "Hi. Two-factor authentication was turned on for your Argent account, and every other session was signed out.",
+    "advice": "If you did not do this, reset your password right away: someone else may have access to your account."
+  },
+  "two_factor_disabled": {
+    "subject": "Two-factor authentication is off for your Argent account",
+    "body": "Hi. Two-factor authentication was turned off for your Argent account, and every other session was signed out.",
+    "advice": "If you did not do this, reset your password and turn two-factor authentication on again right away: someone else may have access to your account."
   }
 }

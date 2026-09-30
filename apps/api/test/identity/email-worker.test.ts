@@ -4,6 +4,7 @@ import { createEmailWorker } from '../../src/identity';
 import type { AttemptPurger } from '../../src/identity/application/ports/attempt-purger';
 import { Email } from '../../src/identity/domain/email';
 import { DrizzleOAuthStateRepository } from '../../src/identity/infrastructure/db/drizzle-oauth-state-repository';
+import { DrizzleSignInChallengeRepository } from '../../src/identity/infrastructure/db/drizzle-sign-in-challenge-repository';
 import { DrizzleUserRepository } from '../../src/identity/infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from '../../src/identity/infrastructure/db/postgres-attempt-limiter';
 import {
@@ -183,6 +184,7 @@ describe('EmailWorker', () => {
       tokenGenerator: new CryptoTokenGenerator(),
       attemptPurger: purger,
       oauthStatePurger: { purgeExpired: () => Promise.resolve(0) },
+      signInChallengePurger: { purgeExpired: () => Promise.resolve(0) },
       clock,
       logger: silent,
       webBaseUrl: LINK_BASE_URL,
@@ -242,6 +244,153 @@ describe('EmailWorker', () => {
       'select state_hash from oauth_states order by state_hash',
     );
     expect(left.rows.map((row) => row.state_hash)).toEqual(['live']);
+  });
+
+  it('purges expired sign_in_challenges rows and keeps live ones', async () => {
+    const clock = new MutableClock(new Date('2026-09-30T12:00:00.000Z'));
+    const challenges = new DrizzleSignInChallengeRepository(connection.db);
+    const userId = await createUser('ana@example.com');
+    const at = (minutes: number) => new Date(clock.now().getTime() + minutes * 60 * 1000);
+    for (const [tokenHash, expiresAt] of [
+      ['expired', at(-1)],
+      ['expiring-now', at(0)],
+      ['live', at(1)],
+    ] as const) {
+      await challenges.create({
+        tokenHash,
+        userId,
+        credentialsVersion: 0,
+        via: 'password',
+        language: 'es',
+        expiresAt,
+      });
+    }
+    const worker = createEmailWorker({
+      db: connection.db,
+      env: { WEB_BASE_URL: LINK_BASE_URL },
+      logger: silent,
+      transport: new CapturingTransport(),
+      clock,
+    });
+
+    await worker.runOnce();
+
+    const left = await connection.pool.query<{ token_hash: string }>(
+      'select token_hash from sign_in_challenges order by token_hash',
+    );
+    expect(left.rows.map((row) => row.token_hash)).toEqual(['live']);
+  });
+
+  it('runs every purge even when an earlier one fails, and logs each failure', async () => {
+    const clock = new MutableClock(new Date('2026-09-30T12:00:00.000Z'));
+    const purged: string[] = [];
+    const lines: string[] = [];
+    const logger = createLogger({
+      level: 'debug',
+      destination: { write: (line: string) => lines.push(line) },
+    });
+    const worker = new EmailWorker({
+      db: connection.db,
+      transport: new CapturingTransport(),
+      tokenGenerator: new CryptoTokenGenerator(),
+      attemptPurger: { purgeOlderThan: () => Promise.reject(new Error('attempts exploded')) },
+      oauthStatePurger: { purgeExpired: () => Promise.reject(new Error('states exploded')) },
+      signInChallengePurger: {
+        purgeExpired: (now) => {
+          purged.push(now.toISOString());
+          return Promise.resolve(0);
+        },
+      },
+      clock,
+      logger,
+      webBaseUrl: LINK_BASE_URL,
+    });
+
+    await worker.runOnce();
+
+    expect(purged).toEqual(['2026-09-30T12:00:00.000Z']);
+    const failures = logEntries(lines).filter((entry) => entry.msg === 'retention purge failed');
+    expect(failures.map((entry) => entry.purge)).toEqual(['attempts', 'oauthStates']);
+  });
+
+  it('delivers two_factor_enabled and two_factor_disabled notices through the transport without issuing a token (FR-05)', async () => {
+    const clock = new MutableClock();
+    const outbox = new OutboxEmailSender(connection.db, clock);
+    const ana = await createUser('ana@example.com');
+    const bob = await createUser('bob@example.com');
+    await outbox.enqueue({
+      kind: 'two_factor_enabled',
+      userId: ana,
+      toEmail: 'ana@example.com',
+      language: 'es',
+    });
+    await outbox.enqueue({
+      kind: 'two_factor_disabled',
+      userId: bob,
+      toEmail: 'bob@example.com',
+      language: 'en',
+    });
+    const transport = new CapturingTransport();
+    transport.failNext(1);
+    const worker = createEmailWorker({
+      db: connection.db,
+      env: { WEB_BASE_URL: LINK_BASE_URL },
+      logger: silent,
+      transport,
+      clock,
+    });
+
+    // The first send fails and is retried with its own idempotency key, as for token emails.
+    expect(await worker.runOnce()).toEqual({ sent: 1, dropped: 0, failed: 1 });
+    clock.advance(EMAIL_RETRY_BASE_DELAY_MS);
+    expect(await worker.runOnce()).toEqual({ sent: 1, dropped: 0, failed: 0 });
+
+    expect(transport.sent.map((sent) => sent.to).sort()).toEqual([
+      'ana@example.com',
+      'bob@example.com',
+    ]);
+    for (const sent of transport.sent) {
+      expect(sent.token).toBeUndefined();
+      expect(sent.text).not.toMatch(/https?:\/\//);
+      expect(sent.html).not.toContain('href');
+      expect(sent.subject.length).toBeGreaterThan(0);
+    }
+    const [anaEmail] = transport.sentTo('ana@example.com');
+    const [bobEmail] = transport.sentTo('bob@example.com');
+    expect(anaEmail?.subject).not.toBe(bobEmail?.subject);
+    const keys = transport.sent.map((sent) => sent.idempotencyKey);
+    expect(keys.some((key) => key.endsWith(':2'))).toBe(true);
+    expect(await count('select count(*) as n from one_time_tokens')).toBe(0);
+    expect(
+      await count(
+        'select count(*) as n from email_outbox where sent_at is not null and to_email is null',
+      ),
+    ).toBe(2);
+  });
+
+  it('drops a two-factor notice whose user was deleted, without sending', async () => {
+    const clock = new MutableClock();
+    const userId = await createUser('ana@example.com');
+    await new OutboxEmailSender(connection.db, clock).enqueue({
+      kind: 'two_factor_disabled',
+      userId,
+      toEmail: 'ana@example.com',
+      language: 'es',
+    });
+    await connection.pool.query('delete from users where id = $1', [userId]);
+    const transport = new CapturingTransport();
+    const worker = createEmailWorker({
+      db: connection.db,
+      env: { WEB_BASE_URL: LINK_BASE_URL },
+      logger: silent,
+      transport,
+      clock,
+    });
+
+    expect(await worker.runOnce()).toEqual({ sent: 0, dropped: 1, failed: 0 });
+
+    expect(transport.attempts).toBe(0);
+    expect(await count('select count(*) as n from email_outbox')).toBe(0);
   });
 
   it('drops a verification row whose user is already verified, without sending', async () => {

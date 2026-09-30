@@ -12,5 +12,15 @@
     "action": "Elegir una contraseña nueva",
     "expiry": "El enlace vence en 60 minutos y sirve una sola vez.",
     "ignore": "Si no lo pediste, ignorá este mensaje: tu contraseña no cambia."
+  },
+  "two_factor_enabled": {
+    "subject": "Se activó la verificación en dos pasos en tu cuenta de Argent",
+    "body": "Hola. Se activó la verificación en dos pasos en tu cuenta de Argent y se cerraron todas las demás sesiones.",
+    "advice": "Si no fuiste vos, restablecé tu contraseña ya mismo: otra persona podría tener acceso a tu cuenta."
+  },
+  "two_factor_disabled": {
+    "subject": "Se desactivó la verificación en dos pasos en tu cuenta de Argent",
+    "body": "Hola. Se desactivó la verificación en dos pasos en tu cuenta de Argent y se cerraron todas las demás sesiones.",
+    "advice": "Si no fuiste vos, restablecé tu contraseña y volvé a activar la verificación en dos pasos ya mismo: otra persona podría tener acceso a tu cuenta."
   }
 }

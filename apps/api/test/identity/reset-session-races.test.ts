@@ -20,7 +20,7 @@ import {
   signOut,
 } from '../helpers/session-client';
 import { testDatabaseUrl } from '../helpers/test-database';
-import { testEnv, trustedHeaders } from '../helpers/test-env';
+import { TEST_TOTP_ENCRYPTION_KEY, testEnv, trustedHeaders } from '../helpers/test-env';
 
 let connection: DatabaseConnection;
 
@@ -53,7 +53,7 @@ function latch(): Latch {
 function adaptersFor(harness: IdentityHarness) {
   const infrastructure = createIdentityInfrastructure({
     db: connection.db,
-    env: { BREACH_CHECKER: 'fake' },
+    env: { BREACH_CHECKER: 'fake', TOTP_ENCRYPTION_KEY: TEST_TOTP_ENCRYPTION_KEY },
     logger: createLogger({ level: 'silent' }),
     clock: harness.clock,
   });

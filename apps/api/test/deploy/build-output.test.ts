@@ -20,8 +20,11 @@ const IDENTITY_TABLES = [
   'email_outbox',
   'oauth_states',
   'one_time_tokens',
+  'recovery_codes',
   'sessions',
+  'sign_in_challenges',
   'user_identities',
+  'user_two_factor',
   'users',
 ];
 

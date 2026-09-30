@@ -25,14 +25,24 @@ import type { OAuthStatePurger } from './application/ports/oauth-state-purger';
 import type { OAuthStateRepository } from './application/ports/oauth-state-repository';
 import type { OneTimeTokenRepository } from './application/ports/one-time-token-repository';
 import type { PasswordHasher } from './application/ports/password-hasher';
+import type { RecoveryCodeGenerator } from './application/ports/recovery-code-generator';
+import type { RecoveryCodeRepository } from './application/ports/recovery-code-repository';
+import type { SecretBox } from './application/ports/secret-box';
 import type { SessionRepository } from './application/ports/session-repository';
+import type { SignInChallengePurger } from './application/ports/sign-in-challenge-purger';
+import type { SignInChallengeRepository } from './application/ports/sign-in-challenge-repository';
 import type { TokenGenerator } from './application/ports/token-generator';
+import type { TotpEngine } from './application/ports/totp';
+import type { TwoFactorRepository } from './application/ports/two-factor-repository';
 import type { UnitOfWork } from './application/ports/unit-of-work';
 import type { UserIdentityRepository } from './application/ports/user-identity-repository';
 import type { UserRepository } from './application/ports/user-repository';
 import { DrizzleOAuthStateRepository } from './infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from './infrastructure/db/drizzle-one-time-token-repository';
+import { DrizzleRecoveryCodeRepository } from './infrastructure/db/drizzle-recovery-code-repository';
 import { DrizzleSessionRepository } from './infrastructure/db/drizzle-session-repository';
+import { DrizzleSignInChallengeRepository } from './infrastructure/db/drizzle-sign-in-challenge-repository';
+import { DrizzleTwoFactorRepository } from './infrastructure/db/drizzle-two-factor-repository';
 import { DrizzleUnitOfWork } from './infrastructure/db/drizzle-unit-of-work';
 import { DrizzleUserIdentityRepository } from './infrastructure/db/drizzle-user-identity-repository';
 import { DrizzleUserRepository } from './infrastructure/db/drizzle-user-repository';
@@ -47,14 +57,20 @@ import { createRegistrationRoutes } from './infrastructure/http/registration-rou
 import { ACCESS_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
 import { createSessionRoutes } from './infrastructure/http/session-routes';
 import {
+  AesGcmSecretBox,
+  UnavailableSecretBox,
+} from './infrastructure/security/aes-gcm-secret-box';
+import {
   Argon2idPasswordHasher,
   DUMMY_PASSWORD_HASH,
 } from './infrastructure/security/argon2id-password-hasher';
+import { CryptoRecoveryCodeGenerator } from './infrastructure/security/crypto-recovery-code-generator';
 import { CryptoTokenGenerator } from './infrastructure/security/crypto-token-generator';
 import { FakeBreachedPasswordChecker } from './infrastructure/security/fake-breached-password-checker';
 import { GoogleOidcIdentityProvider } from './infrastructure/security/google-oidc-identity-provider';
 import { HibpBreachedPasswordChecker } from './infrastructure/security/hibp-breached-password-checker';
 import { JoseAccessTokenIssuer } from './infrastructure/security/jose-access-token-issuer';
+import { RfcTotpEngine } from './infrastructure/security/totp';
 import { UnconfiguredGoogleIdentityProvider } from './infrastructure/security/unconfigured-google-identity-provider';
 import { systemClock } from './infrastructure/system-clock';
 
@@ -62,6 +78,7 @@ export * from './domain/account-defaults';
 export * from './domain/email';
 export * from './domain/errors';
 export * from './domain/password-rules';
+export * from './domain/recovery-code';
 export * from './application/ports/access-token-issuer';
 export * from './application/ports/attempt-limiter';
 export * from './application/ports/attempt-purger';
@@ -73,8 +90,15 @@ export * from './application/ports/oauth-state-purger';
 export * from './application/ports/oauth-state-repository';
 export * from './application/ports/one-time-token-repository';
 export * from './application/ports/password-hasher';
+export * from './application/ports/recovery-code-generator';
+export * from './application/ports/recovery-code-repository';
+export * from './application/ports/secret-box';
 export * from './application/ports/session-repository';
+export * from './application/ports/sign-in-challenge-purger';
+export * from './application/ports/sign-in-challenge-repository';
 export * from './application/ports/token-generator';
+export * from './application/ports/totp';
+export * from './application/ports/two-factor-repository';
 export * from './application/ports/unit-of-work';
 export * from './application/ports/user-identity-repository';
 export * from './application/ports/user-repository';
@@ -88,7 +112,7 @@ export type { EmailWorker } from './infrastructure/email/email-worker';
 export interface IdentityInfrastructureDependencies {
   /** The application database; a transaction is accepted too. */
   db: IdentityDb;
-  env: Pick<Env, 'BREACH_CHECKER'>;
+  env: Pick<Env, 'BREACH_CHECKER' | 'TOTP_ENCRYPTION_KEY'>;
   logger: Logger;
   clock?: Clock;
 }
@@ -108,6 +132,14 @@ export interface IdentityInfrastructure {
   tokenGenerator: TokenGenerator;
   emailSender: EmailSender;
   unitOfWork: UnitOfWork;
+  twoFactor: TwoFactorRepository;
+  recoveryCodes: RecoveryCodeRepository;
+  signInChallenges: SignInChallengeRepository;
+  signInChallengePurger: SignInChallengePurger;
+  totp: TotpEngine;
+  /** Seals TOTP secrets; unavailable (every call throws) when no key is configured. */
+  secretBox: SecretBox;
+  recoveryCodeGenerator: RecoveryCodeGenerator;
 }
 
 /** Composition root of the identity module's adapters. */
@@ -119,6 +151,7 @@ export function createIdentityInfrastructure({
 }: IdentityInfrastructureDependencies): IdentityInfrastructure {
   const attemptLimiter = new PostgresAttemptLimiter(db, clock);
   const oauthStates = new DrizzleOAuthStateRepository(db);
+  const signInChallenges = new DrizzleSignInChallengeRepository(db);
   return {
     clock,
     users: new DrizzleUserRepository(db),
@@ -137,6 +170,15 @@ export function createIdentityInfrastructure({
     tokenGenerator: new CryptoTokenGenerator(),
     emailSender: new OutboxEmailSender(db, clock),
     unitOfWork: new DrizzleUnitOfWork(db, clock),
+    twoFactor: new DrizzleTwoFactorRepository(db),
+    recoveryCodes: new DrizzleRecoveryCodeRepository(db),
+    signInChallenges,
+    signInChallengePurger: signInChallenges,
+    totp: new RfcTotpEngine(),
+    secretBox: env.TOTP_ENCRYPTION_KEY
+      ? new AesGcmSecretBox(env.TOTP_ENCRYPTION_KEY)
+      : new UnavailableSecretBox(),
+    recoveryCodeGenerator: new CryptoRecoveryCodeGenerator(),
   };
 }
 
@@ -156,6 +198,7 @@ export interface IdentityModuleDependencies extends Omit<
     | 'GOOGLE_TOKEN_URL'
     | 'GOOGLE_JWKS_URL'
     | 'GOOGLE_ISSUER'
+    | 'TOTP_ENCRYPTION_KEY'
   >;
   /**
    * Test seam: replaces the real `requireSession` on the identity module's authenticated routes.
@@ -343,8 +386,8 @@ export interface EmailWorkerFactoryDependencies {
 }
 
 /**
- * The outbox worker, with the PostgreSQL attempt and OAuth-state purgers and the crypto token
- * generator.
+ * The outbox worker, with the PostgreSQL attempt, OAuth-state and sign-in challenge purgers and the
+ * crypto token generator.
  */
 export function createEmailWorker({
   db,
@@ -360,6 +403,7 @@ export function createEmailWorker({
     tokenGenerator: new CryptoTokenGenerator(),
     attemptPurger: new PostgresAttemptLimiter(db, clock),
     oauthStatePurger: new DrizzleOAuthStateRepository(db),
+    signInChallengePurger: new DrizzleSignInChallengeRepository(db),
     clock,
     logger,
     webBaseUrl: env.WEB_BASE_URL,

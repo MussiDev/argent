@@ -12,6 +12,9 @@ export const trustedHeaders = {
 
 export const PRODUCTION_WEB_ORIGIN = 'https://app.argent.test';
 
+/** Base64 of 32 bytes; only for tests. */
+export const TEST_TOTP_ENCRYPTION_KEY = Buffer.alloc(32, 0x5a).toString('base64');
+
 /** Overrides that satisfy every production rule of the environment schema. */
 export const productionOverrides: Record<string, string> = {
   NODE_ENV: 'production',
@@ -25,6 +28,7 @@ export const productionOverrides: Record<string, string> = {
   TRUST_PROXY: '1',
   GOOGLE_CLIENT_ID: 'argent-test.apps.googleusercontent.com',
   GOOGLE_CLIENT_SECRET: 'google-test-client-secret',
+  TOTP_ENCRYPTION_KEY: TEST_TOTP_ENCRYPTION_KEY,
 };
 
 export function testEnvSource(
@@ -41,6 +45,7 @@ export function testEnvSource(
     BREACH_CHECKER: 'fake',
     TRUST_PROXY: '0',
     LOG_LEVEL: 'silent',
+    TOTP_ENCRYPTION_KEY: TEST_TOTP_ENCRYPTION_KEY,
     ...overrides,
   };
 }

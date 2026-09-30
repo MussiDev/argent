@@ -75,4 +75,14 @@ export class DrizzleUserRepository implements UserRepository {
       .returning();
     return superseded ?? null;
   }
+
+  async bumpCredentialsVersion(userId: string): Promise<number> {
+    const [bumped] = await this.db
+      .update(users)
+      .set({ credentialsVersion: sql`${users.credentialsVersion} + 1` })
+      .where(eq(users.id, userId))
+      .returning({ credentialsVersion: users.credentialsVersion });
+    if (!bumped) throw new Error('User not found while bumping its credentials version');
+    return bumped.credentialsVersion;
+  }
 }

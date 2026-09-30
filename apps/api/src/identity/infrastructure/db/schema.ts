@@ -1,6 +1,7 @@
 import { RATE_TYPES } from '@argent/shared';
 import { sql, type SQL } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -20,6 +21,7 @@ import { DISPLAY_CURRENCIES, LANGUAGES } from '../../domain/account-defaults';
 import { ATTEMPT_KINDS } from '../../application/ports/attempt-limiter';
 import { OUTBOX_EMAIL_KINDS } from '../../application/ports/email-sender';
 import { ONE_TIME_TOKEN_PURPOSES } from '../../application/ports/one-time-token-repository';
+import { SIGN_IN_VIAS } from '../../application/ports/sign-in-challenge-repository';
 import { IDENTITY_PROVIDERS } from '../../application/ports/user-identity-repository';
 
 /** The database or an open transaction: repositories accept either so use cases can compose them. */
@@ -186,5 +188,56 @@ export const oauthStates = pgTable(
   (table) => [
     check('oauth_states_language_check', oneOf(table.language, LANGUAGES)),
     index('oauth_states_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+export const userTwoFactor = pgTable('user_two_factor', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  /** AES-256-GCM sealed with the user id as associated data (threat R-42); never in plaintext. */
+  secretSealed: text('secret_sealed').notNull(),
+  /** Null while the setup waits for its first code. */
+  enabledAt: timestamptz('enabled_at'),
+  /** A TOTP step (unix seconds / 30), far below 2^53, so it is read as a number. */
+  lastUsedStep: bigint('last_used_step', { mode: 'number' }).notNull().default(0),
+  createdAt: timestamptz('created_at').notNull().defaultNow(),
+});
+
+export const recoveryCodes = pgTable(
+  'recovery_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Argon2id hash of the normalized code (NFR-02). */
+    codeHash: text('code_hash').notNull(),
+    usedAt: timestamptz('used_at'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (table) => [index('recovery_codes_user_id_idx').on(table.userId)],
+);
+
+export const signInChallenges = pgTable(
+  'sign_in_challenges',
+  {
+    /** SHA-256 of the token in the challenge cookie; the token itself is never stored (R-43). */
+    tokenHash: text('token_hash').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    credentialsVersion: integer('credentials_version').notNull(),
+    via: text('via', { enum: SIGN_IN_VIAS }).notNull(),
+    language: text('language', { enum: LANGUAGES }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: timestamptz('expires_at').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check('sign_in_challenges_via_check', oneOf(table.via, SIGN_IN_VIAS)),
+    check('sign_in_challenges_language_check', oneOf(table.language, LANGUAGES)),
+    index('sign_in_challenges_expires_at_idx').on(table.expiresAt),
+    index('sign_in_challenges_user_id_idx').on(table.userId),
   ],
 );

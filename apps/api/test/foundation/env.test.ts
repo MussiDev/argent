@@ -183,4 +183,39 @@ describe('environment production rules', () => {
       /GOOGLE_JWKS_URL/,
     );
   });
+
+  it('requires TOTP_ENCRYPTION_KEY in production (sad path)', () => {
+    const source = { ...testEnvSource(productionOverrides), TOTP_ENCRYPTION_KEY: undefined };
+    expect(() => parseEnv(source)).toThrow('TOTP_ENCRYPTION_KEY: required in production');
+    expect(parseProduction({ TOTP_ENCRYPTION_KEY: '' })).toThrow(/TOTP_ENCRYPTION_KEY/);
+  });
+
+  it.each([
+    ['16 bytes', Buffer.alloc(16, 1).toString('base64')],
+    ['31 bytes', Buffer.alloc(31, 1).toString('base64')],
+    ['33 bytes', Buffer.alloc(33, 1).toString('base64')],
+    ['32 bytes of base64url', Buffer.alloc(32, 0xfb).toString('base64url')],
+    ['32 characters of text', 'a'.repeat(32)],
+    ['base64 with a stray character', `${Buffer.alloc(32, 1).toString('base64')}!`],
+  ])(
+    'rejects a TOTP_ENCRYPTION_KEY of %s, in production and outside it (sad path)',
+    (_label, key) => {
+      expect(parseProduction({ TOTP_ENCRYPTION_KEY: key })).toThrow(/TOTP_ENCRYPTION_KEY/);
+      expect(() => parseEnv(testEnvSource({ TOTP_ENCRYPTION_KEY: key }))).toThrow(
+        /TOTP_ENCRYPTION_KEY/,
+      );
+    },
+  );
+
+  it('accepts a base64 TOTP_ENCRYPTION_KEY of exactly 32 bytes, and leaves it optional outside production', () => {
+    const key = Buffer.alloc(32, 0xfb).toString('base64');
+
+    expect(parseProduction({ TOTP_ENCRYPTION_KEY: key })().TOTP_ENCRYPTION_KEY).toBe(key);
+    expect(
+      parseEnv(testEnvSource({ TOTP_ENCRYPTION_KEY: '' })).TOTP_ENCRYPTION_KEY,
+    ).toBeUndefined();
+    const withoutKey = testEnvSource();
+    delete withoutKey.TOTP_ENCRYPTION_KEY;
+    expect(parseEnv(withoutKey).TOTP_ENCRYPTION_KEY).toBeUndefined();
+  });
 });

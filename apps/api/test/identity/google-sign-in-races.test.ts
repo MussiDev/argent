@@ -201,6 +201,7 @@ describe('concurrent Google callbacks', () => {
             markEmailVerified: (id, at) => repositories.users.markEmailVerified(id, at),
             changePassword: (id, hash, at) => repositories.users.changePassword(id, hash, at),
             supersedeUnverified: (id, at) => repositories.users.supersedeUnverified(id, at),
+            bumpCredentialsVersion: (id) => repositories.users.bumpCredentialsVersion(id),
             create: async (user) => {
               const winner = await new DrizzleUserRepository(connection.db).create({
                 ...user,

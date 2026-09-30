@@ -28,13 +28,42 @@ function googleEndpoint(name: GoogleEndpoint) {
   );
 }
 
-interface RawEnv {
-  JWT_SECRET: string;
+type Issue = { path: string[]; message: string };
+
+/**
+ * The settings the email worker reads. The worker parses only these, so a setting the API alone
+ * needs (its JWT secret, the Google client) can neither stop the worker nor be handed to it.
+ */
+const workerFields = {
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  DATABASE_URL: z.url(),
+  WEB_BASE_URL: z.url(),
+  // No default: which provider delivers email must be a deliberate choice per environment.
+  EMAIL_PROVIDER: z.enum(['console', 'mailpit', 'resend']),
+  RESEND_API_KEY: z.string().optional(),
+  /** Sender of auth emails; required with Resend, whose sending domain must be verified. */
+  EMAIL_FROM: z
+    .string()
+    .min(3)
+    .max(254)
+    .regex(/^[^\r\n]+$/, 'must be a single line')
+    .optional(),
+};
+
+interface RawWorkerEnv {
+  NODE_ENV: string;
   EMAIL_PROVIDER: string;
+  RESEND_API_KEY?: string | undefined;
+  EMAIL_FROM?: string | undefined;
+  WEB_BASE_URL: string;
+}
+
+interface RawEnv extends RawWorkerEnv {
+  JWT_SECRET: string;
   BREACH_CHECKER: string;
   WEB_ORIGIN: string;
   API_ORIGIN: string;
-  WEB_BASE_URL: string;
   TRUST_PROXY: number;
   GOOGLE_CLIENT_ID?: string | undefined;
   GOOGLE_CLIENT_SECRET?: string | undefined;
@@ -44,22 +73,50 @@ interface RawEnv {
   GOOGLE_ISSUER: string;
 }
 
-/** Settings that are fine locally but unsafe in production: fakes, plain http, no proxy trust. */
-function productionIssues(env: RawEnv): { path: string[]; message: string }[] {
-  const issues: { path: string[]; message: string }[] = [];
-  if (env.JWT_SECRET.startsWith('change-me')) {
-    issues.push({ path: ['JWT_SECRET'], message: 'must not be the .env.example placeholder' });
+function httpsIssue(name: string, value: string): Issue[] {
+  return URL.canParse(value) && new URL(value).protocol === 'https:'
+    ? []
+    : [{ path: [name], message: 'must use https: in production' }];
+}
+
+/** Rules on the email settings, in every environment. */
+function emailIssues(env: RawWorkerEnv): Issue[] {
+  const issues: Issue[] = [];
+  if (env.EMAIL_PROVIDER === 'resend' && !env.RESEND_API_KEY) {
+    issues.push({ path: ['RESEND_API_KEY'], message: 'required when EMAIL_PROVIDER=resend' });
   }
+  if (env.EMAIL_PROVIDER === 'resend' && !env.EMAIL_FROM) {
+    issues.push({ path: ['EMAIL_FROM'], message: 'required when EMAIL_PROVIDER=resend' });
+  }
+  // Outside production the Resend SDK prints raw provider errors (which can echo the recipient
+  // address) to the console, bypassing the logger's redaction.
+  if (env.EMAIL_PROVIDER === 'resend' && env.NODE_ENV !== 'production') {
+    issues.push({ path: ['EMAIL_PROVIDER'], message: 'resend requires NODE_ENV=production' });
+  }
+  return issues;
+}
+
+/** Production rules on the settings the worker reads: a real provider and https links. */
+function workerProductionIssues(env: RawWorkerEnv): Issue[] {
+  const issues: Issue[] = [];
   if (env.EMAIL_PROVIDER !== 'resend') {
     issues.push({ path: ['EMAIL_PROVIDER'], message: 'must be resend in production' });
   }
+  return [...issues, ...httpsIssue('WEB_BASE_URL', env.WEB_BASE_URL)];
+}
+
+/** Settings that are fine locally but unsafe in production: fakes, plain http, no proxy trust. */
+function productionIssues(env: RawEnv): Issue[] {
+  const issues: Issue[] = [];
+  if (env.JWT_SECRET.startsWith('change-me')) {
+    issues.push({ path: ['JWT_SECRET'], message: 'must not be the .env.example placeholder' });
+  }
+  issues.push(...workerProductionIssues(env));
   if (env.BREACH_CHECKER !== 'hibp') {
     issues.push({ path: ['BREACH_CHECKER'], message: 'must be hibp in production' });
   }
-  for (const name of ['WEB_ORIGIN', 'API_ORIGIN', 'WEB_BASE_URL'] as const) {
-    if (!URL.canParse(env[name]) || new URL(env[name]).protocol !== 'https:') {
-      issues.push({ path: [name], message: 'must use https: in production' });
-    }
+  for (const name of ['WEB_ORIGIN', 'API_ORIGIN'] as const) {
+    issues.push(...httpsIssue(name, env[name]));
   }
   if (env.TRUST_PROXY < 1) {
     issues.push({
@@ -81,26 +138,11 @@ function productionIssues(env: RawEnv): { path: string[]; message: string }[] {
 
 const envSchema = z
   .object({
-    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    ...workerFields,
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-    LOG_LEVEL: z
-      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
-      .default('info'),
-    DATABASE_URL: z.url(),
     JWT_SECRET: jwtSecretSchema,
     WEB_ORIGIN: z.url(),
     API_ORIGIN: z.url(),
-    WEB_BASE_URL: z.url(),
-    // No default: which provider delivers email must be a deliberate choice per environment.
-    EMAIL_PROVIDER: z.enum(['console', 'mailpit', 'resend']),
-    RESEND_API_KEY: z.string().optional(),
-    /** Sender of auth emails; required with Resend, whose sending domain must be verified. */
-    EMAIL_FROM: z
-      .string()
-      .min(3)
-      .max(254)
-      .regex(/^[^\r\n]+$/, 'must be a single line')
-      .optional(),
     BREACH_CHECKER: z.enum(['hibp', 'fake']).default('hibp'),
     TRUST_PROXY: z.coerce.number().int().min(0).default(0),
     /** Unset outside production disables Google sign-in. */
@@ -112,29 +154,7 @@ const envSchema = z
     GOOGLE_ISSUER: googleEndpoint('GOOGLE_ISSUER'),
   })
   .superRefine((env, ctx) => {
-    if (env.EMAIL_PROVIDER === 'resend' && !env.RESEND_API_KEY) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['RESEND_API_KEY'],
-        message: 'required when EMAIL_PROVIDER=resend',
-      });
-    }
-    if (env.EMAIL_PROVIDER === 'resend' && !env.EMAIL_FROM) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['EMAIL_FROM'],
-        message: 'required when EMAIL_PROVIDER=resend',
-      });
-    }
-    // Outside production the Resend SDK prints raw provider errors (which can echo the recipient
-    // address) to the console, bypassing the logger's redaction.
-    if (env.EMAIL_PROVIDER === 'resend' && env.NODE_ENV !== 'production') {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['EMAIL_PROVIDER'],
-        message: 'resend requires NODE_ENV=production',
-      });
-    }
+    for (const issue of emailIssues(env)) ctx.addIssue({ code: 'custom', ...issue });
     if (env.GOOGLE_CLIENT_ID && !env.GOOGLE_CLIENT_SECRET) {
       ctx.addIssue({
         code: 'custom',
@@ -154,11 +174,26 @@ const envSchema = z
     API_ORIGIN: new URL(env.API_ORIGIN).origin,
   }));
 
-export type Env = z.infer<typeof envSchema>;
+const workerEnvSchema = z
+  .object(workerFields)
+  .superRefine((env, ctx) => {
+    for (const issue of emailIssues(env)) ctx.addIssue({ code: 'custom', ...issue });
+    if (env.NODE_ENV === 'production') {
+      for (const issue of workerProductionIssues(env)) ctx.addIssue({ code: 'custom', ...issue });
+    }
+  })
+  .transform((env) => ({
+    ...env,
+    // Only console and mailpit can get here without one (resend requires it above).
+    EMAIL_FROM: env.EMAIL_FROM ?? LOCAL_EMAIL_FROM,
+  }));
 
-/** Parses and validates the environment; throws listing the invalid variable names, never values. */
-export function parseEnv(source: Record<string, string | undefined>): Env {
-  const result = envSchema.safeParse(source);
+export type Env = z.infer<typeof envSchema>;
+export type WorkerEnv = z.infer<typeof workerEnvSchema>;
+
+/** Throws listing the invalid variable names and rules, never their values. */
+function parseWith<T>(schema: z.ZodType<T>, source: Record<string, string | undefined>): T {
+  const result = schema.safeParse(source);
   if (!result.success) {
     const details = result.error.issues
       .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
@@ -166,4 +201,14 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     throw new Error(`Invalid environment: ${details}`);
   }
   return result.data;
+}
+
+/** Parses and validates the API's environment. */
+export function parseEnv(source: Record<string, string | undefined>): Env {
+  return parseWith(envSchema, source);
+}
+
+/** Parses and validates the email worker's environment: only the settings it reads. */
+export function parseWorkerEnv(source: Record<string, string | undefined>): WorkerEnv {
+  return parseWith(workerEnvSchema, source);
 }

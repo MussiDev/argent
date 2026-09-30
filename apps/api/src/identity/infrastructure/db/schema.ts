@@ -1,6 +1,7 @@
 import { RATE_TYPES } from '@argent/shared';
 import { sql, type SQL } from 'drizzle-orm';
 import {
+  boolean,
   check,
   index,
   integer,
@@ -9,6 +10,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
   type AnyPgColumn,
   type PgDatabase,
@@ -18,6 +20,7 @@ import { DISPLAY_CURRENCIES, LANGUAGES } from '../../domain/account-defaults';
 import { ATTEMPT_KINDS } from '../../application/ports/attempt-limiter';
 import { OUTBOX_EMAIL_KINDS } from '../../application/ports/email-sender';
 import { ONE_TIME_TOKEN_PURPOSES } from '../../application/ports/one-time-token-repository';
+import { IDENTITY_PROVIDERS } from '../../application/ports/user-identity-repository';
 
 /** The database or an open transaction: repositories accept either so use cases can compose them. */
 export type IdentityDb = PgDatabase<NodePgQueryResultHKT>;
@@ -43,7 +46,8 @@ export const users = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     email: text('email').notNull().unique(),
-    passwordHash: text('password_hash').notNull(),
+    /** Null for accounts created through Google that never set a password. */
+    passwordHash: text('password_hash'),
     emailVerifiedAt: timestamptz('email_verified_at'),
     defaultRateType: text('default_rate_type', { enum: RATE_TYPES }).notNull().default('mep'),
     displayCurrency: text('display_currency', { enum: DISPLAY_CURRENCIES })
@@ -141,5 +145,46 @@ export const emailOutbox = pgTable(
     index('email_outbox_pending_idx')
       .on(table.createdAt)
       .where(sql`${table.sentAt} is null`),
+  ],
+);
+
+export const USER_IDENTITIES_PROVIDER_SUBJECT_UNIQUE = 'user_identities_provider_subject_unique';
+export const USER_IDENTITIES_USER_ID_PROVIDER_UNIQUE = 'user_identities_user_id_provider_unique';
+
+export const userIdentities = pgTable(
+  'user_identities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider', { enum: IDENTITY_PROVIDERS }).notNull(),
+    subject: text('subject').notNull(),
+    emailAuthoritative: boolean('email_authoritative').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    check('user_identities_provider_check', oneOf(table.provider, IDENTITY_PROVIDERS)),
+    unique(USER_IDENTITIES_PROVIDER_SUBJECT_UNIQUE).on(table.provider, table.subject),
+    unique(USER_IDENTITIES_USER_ID_PROVIDER_UNIQUE).on(table.userId, table.provider),
+  ],
+);
+
+export const oauthStates = pgTable(
+  'oauth_states',
+  {
+    stateHash: text('state_hash').primaryKey(),
+    bindingHash: text('binding_hash').notNull(),
+    nonceHash: text('nonce_hash').notNull(),
+    /** Plaintext: it must reach the token endpoint. Alone it grants nothing; the row lives 10 min. */
+    codeVerifier: text('code_verifier').notNull(),
+    timeZone: text('time_zone').notNull(),
+    language: text('language', { enum: LANGUAGES }).notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    expiresAt: timestamptz('expires_at').notNull(),
+  },
+  (table) => [
+    check('oauth_states_language_check', oneOf(table.language, LANGUAGES)),
+    index('oauth_states_expires_at_idx').on(table.expiresAt),
   ],
 );

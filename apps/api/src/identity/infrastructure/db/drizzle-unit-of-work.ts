@@ -3,6 +3,7 @@ import type { TransactionalRepositories, UnitOfWork } from '../../application/po
 import { OutboxEmailSender } from '../email/outbox-email-sender';
 import { DrizzleOneTimeTokenRepository } from './drizzle-one-time-token-repository';
 import { DrizzleSessionRepository } from './drizzle-session-repository';
+import { DrizzleUserIdentityRepository } from './drizzle-user-identity-repository';
 import { DrizzleUserRepository } from './drizzle-user-repository';
 import type { IdentityDb } from './schema';
 
@@ -19,6 +20,7 @@ export class DrizzleUnitOfWork implements UnitOfWork {
         users: new DrizzleUserRepository(tx),
         oneTimeTokens: new DrizzleOneTimeTokenRepository(tx),
         sessions: new DrizzleSessionRepository(tx),
+        identities: new DrizzleUserIdentityRepository(tx),
         emailSender: new OutboxEmailSender(tx, this.clock),
       }),
     );

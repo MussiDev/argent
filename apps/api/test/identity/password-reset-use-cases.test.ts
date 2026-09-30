@@ -10,6 +10,7 @@ import type {
 import type { OneTimeTokenRepository } from '../../src/identity/application/ports/one-time-token-repository';
 import type { SessionRepository } from '../../src/identity/application/ports/session-repository';
 import type { UnitOfWork } from '../../src/identity/application/ports/unit-of-work';
+import type { UserIdentityRepository } from '../../src/identity/application/ports/user-identity-repository';
 import type { User, UserRepository } from '../../src/identity/application/ports/user-repository';
 import {
   RequestPasswordReset,
@@ -159,6 +160,12 @@ function buildConfirm(options: { consumes?: boolean; breachCheck?: () => Promise
       return Promise.resolve();
     },
   } as unknown as SessionRepository;
+  const identities = {
+    deleteNonAuthoritativeForUser: (userId: string) => {
+      calls.push(`deleteNonAuthoritativeForUser:${userId}`);
+      return Promise.resolve();
+    },
+  } as unknown as UserIdentityRepository;
   const unitOfWork: UnitOfWork = {
     run: async (work) => {
       calls.push('begin');
@@ -166,6 +173,7 @@ function buildConfirm(options: { consumes?: boolean; breachCheck?: () => Promise
         users,
         oneTimeTokens,
         sessions,
+        identities,
         emailSender: new InMemoryEmailSender(),
       });
       committed = true;
@@ -199,7 +207,7 @@ function buildConfirm(options: { consumes?: boolean; breachCheck?: () => Promise
 const NEW_PASSWORD = 'a brand new passphrase';
 
 describe('ConfirmPasswordReset', () => {
-  it('consumes the token, checks and hashes the password, changes it (bumping the credentials version) and revokes every session in one unit of work', async () => {
+  it('consumes the token, checks and hashes the password, changes it (bumping the credentials version), revokes every session and removes non-authoritative Google identities in one unit of work', async () => {
     const { confirm, calls, isCommitted } = buildConfirm();
 
     expect(await confirm.execute({ token: 'tok', newPassword: NEW_PASSWORD })).toEqual({
@@ -212,6 +220,7 @@ describe('ConfirmPasswordReset', () => {
       'hash',
       `changePassword:user-1:$argon2id$${NEW_PASSWORD}:${NOW.toISOString()}`,
       'revokeAllForUser:user-1',
+      'deleteNonAuthoritativeForUser:user-1',
     ]);
     expect(isCommitted()).toBe(true);
   });

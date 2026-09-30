@@ -47,6 +47,8 @@ function errorResponse(status: number, code: string): Response {
 
 const noop = () => undefined;
 
+const GOOGLE_START_URL = 'http://api.argent.test/auth/google/start?language=es';
+
 describe('auth forms show API failures', () => {
   it.each([
     [429, 'RATE_LIMITED'],
@@ -105,4 +107,41 @@ describe('auth forms show API failures', () => {
     expect(text).not.toContain(es.errors.retryLater);
     expect(text).not.toContain(es.errors.network);
   });
+
+  it('shows the Google sign-in failure in both languages (AC-02, AC-05, AC-08, AC-09)', () => {
+    for (const locale of ['es', 'en'] as const) {
+      const text = render(
+        locale,
+        <SignInForm
+          pending={false}
+          errors={{ form: 'googleFailed' }}
+          onSubmit={noop}
+          googleStartUrl={GOOGLE_START_URL}
+        />,
+      );
+      expect(text).toContain(CATALOGS[locale].errors.googleFailed);
+    }
+    expect(en.errors.googleFailed).toBe('Google sign-in failed. Please try again.');
+    expect(es.errors.googleFailed).toBe(
+      'No pudimos iniciar sesión con Google. Vuelve a intentarlo.',
+    );
+  });
+
+  it.each(['es', 'en'] as const)(
+    'both screens offer Google with an "or" divider in %s, only when given a start URL',
+    (locale) => {
+      const catalog = CATALOGS[locale];
+      for (const Form of [SignInForm, RegisterForm]) {
+        const withGoogle = render(
+          locale,
+          <Form pending={false} errors={{}} onSubmit={noop} googleStartUrl={GOOGLE_START_URL} />,
+        );
+        expect(withGoogle).toContain(catalog.auth.google.continue);
+        expect(withGoogle).toContain(` ${catalog.auth.or} `);
+
+        const withoutGoogle = render(locale, <Form pending={false} errors={{}} onSubmit={noop} />);
+        expect(withoutGoogle).not.toContain(catalog.auth.google.continue);
+      }
+    },
+  );
 });

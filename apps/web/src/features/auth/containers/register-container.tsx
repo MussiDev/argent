@@ -7,12 +7,14 @@ import { useApiClient } from '@/lib/api-client-provider';
 import { readDeviceContext } from '@/lib/device-context';
 import { RegisterForm, type RegisterFormValues } from '../components/register-form';
 import { toFormErrors, toValidationErrors, type FormErrors } from '../form-errors';
+import { useGoogleStartUrl } from '../google-start-url';
 
 export function RegisterContainer() {
   const api = useApiClient();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const googleStartUrl = useGoogleStartUrl();
 
   async function register(values: RegisterFormValues) {
     // FR-10 / FR-11: the account starts in the device's time zone and language.
@@ -37,6 +39,7 @@ export function RegisterContainer() {
     <RegisterForm
       pending={pending}
       errors={errors}
+      googleStartUrl={googleStartUrl}
       onSubmit={(values) => {
         void register(values);
       }}

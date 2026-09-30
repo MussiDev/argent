@@ -19,9 +19,33 @@ function render(element: ReactElement): string {
 
 const noop = () => undefined;
 
+const GOOGLE_START_URL = 'http://api.argent.test/auth/google/start?language=es';
+
 const FORMS: [string, (errors: FormErrors) => ReactElement][] = [
   ['register', (errors) => <RegisterForm pending={false} errors={errors} onSubmit={noop} />],
   ['sign-in', (errors) => <SignInForm pending={false} errors={errors} onSubmit={noop} />],
+  [
+    'register with Google',
+    (errors) => (
+      <RegisterForm
+        pending={false}
+        errors={errors}
+        onSubmit={noop}
+        googleStartUrl={GOOGLE_START_URL}
+      />
+    ),
+  ],
+  [
+    'sign-in with Google',
+    (errors) => (
+      <SignInForm
+        pending={false}
+        errors={errors}
+        onSubmit={noop}
+        googleStartUrl={GOOGLE_START_URL}
+      />
+    ),
+  ],
   [
     'forgot-password',
     (errors) => <ForgotPasswordForm pending={false} errors={errors} onSubmit={noop} />,
@@ -74,5 +98,19 @@ describe('auth form accessibility', () => {
       (id) => new RegExp(`<p[^>]*id="${id}"[^>]*>([^<]*)</p>`).exec(html)?.[1],
     );
     expect(descriptions).toContain(es.errors.passwordTooShort);
+  });
+
+  it.each([
+    ['sign-in', SignInForm],
+    ['register', RegisterForm],
+  ] as const)('the %s Google link is named by its label and hides the mark', (_, Form) => {
+    const html = render(
+      <Form pending={false} errors={{}} onSubmit={noop} googleStartUrl={GOOGLE_START_URL} />,
+    );
+
+    const link = /<a[^>]*href="([^"]*auth\/google\/start[^"]*)"[^>]*>(.*?)<\/a>/s.exec(html);
+    expect(link?.[1]).toBe(GOOGLE_START_URL);
+    expect(link?.[2]).toMatch(/<svg[^>]*aria-hidden="true"/);
+    expect(link?.[2]?.replace(/<svg.*<\/svg>/s, '').trim()).toBe(es.auth.google.continue);
   });
 });

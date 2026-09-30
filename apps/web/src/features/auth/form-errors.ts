@@ -10,7 +10,10 @@ export type FieldErrorKey =
   | 'passwordTooShort'
   | 'passwordBreached';
 
-export type ErrorMessageKey = ApiErrorKey | FieldErrorKey;
+/** Keys of the `errors` catalog namespace for what the API reports through a redirect URL. */
+export type RedirectErrorKey = 'googleFailed';
+
+export type ErrorMessageKey = ApiErrorKey | FieldErrorKey | RedirectErrorKey;
 
 export type AuthField = 'email' | 'password' | 'newPassword';
 

@@ -6,6 +6,7 @@ import type { EmailWorker } from '../../src/identity/infrastructure/email/email-
 import type { DatabaseConnection } from '../../src/shared/db/client';
 import { createLogger } from '../../src/shared/logging/logger';
 import { CapturingTransport } from '../fakes/capturing-transport';
+import type { FakeGoogleOidc } from '../fixtures/fake-google-oidc';
 import { MutableClock } from '../fakes/mutable-clock';
 import { testRequireSession } from '../fakes/test-session';
 import { testEnv } from './test-env';
@@ -31,6 +32,11 @@ export interface IdentityHarnessOptions {
   realSessions?: boolean;
   /** Environment overrides, e.g. `TRUST_PROXY: '1'` to vary client IPs with X-Forwarded-For. */
   env?: Record<string, string>;
+  /**
+   * A running fake OIDC server (`startFakeGoogleOidc()`, started by the test file) whose GOOGLE_*
+   * variables configure Google sign-in. Without it Google sign-in is unconfigured.
+   */
+  google?: FakeGoogleOidc;
   /** Other modules' routers, built with the real `requireSession`. */
   routerFactories?: RouterFactory[];
   /** Test-only routers (fixtures); `createApp` mounts them only when NODE_ENV is `test`. */
@@ -47,7 +53,7 @@ export function createIdentityHarness(
     level: 'debug',
     destination: { write: (line: string) => lines.push(line) },
   });
-  const env = testEnv({ WEB_BASE_URL: LINK_BASE_URL, ...options.env });
+  const env = testEnv({ WEB_BASE_URL: LINK_BASE_URL, ...options.google?.env, ...options.env });
   const clock = new MutableClock();
   const transport = new CapturingTransport();
   const app = createApp({

@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createIdentityInfrastructure } from '../../src/identity';
+import { DrizzleOAuthStateRepository } from '../../src/identity/infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from '../../src/identity/infrastructure/db/drizzle-one-time-token-repository';
 import { DrizzleSessionRepository } from '../../src/identity/infrastructure/db/drizzle-session-repository';
+import { DrizzleUserIdentityRepository } from '../../src/identity/infrastructure/db/drizzle-user-identity-repository';
 import { DrizzleUserRepository } from '../../src/identity/infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from '../../src/identity/infrastructure/db/postgres-attempt-limiter';
 import { Argon2idPasswordHasher } from '../../src/identity/infrastructure/security/argon2id-password-hasher';
@@ -34,6 +36,9 @@ describe('createIdentityInfrastructure', () => {
     expect(identity.users).toBeInstanceOf(DrizzleUserRepository);
     expect(identity.sessions).toBeInstanceOf(DrizzleSessionRepository);
     expect(identity.oneTimeTokens).toBeInstanceOf(DrizzleOneTimeTokenRepository);
+    expect(identity.identities).toBeInstanceOf(DrizzleUserIdentityRepository);
+    expect(identity.oauthStates).toBeInstanceOf(DrizzleOAuthStateRepository);
+    expect(identity.oauthStatePurger).toBeInstanceOf(DrizzleOAuthStateRepository);
     expect(identity.attemptLimiter).toBeInstanceOf(PostgresAttemptLimiter);
     expect(identity.passwordHasher).toBeInstanceOf(Argon2idPasswordHasher);
     expect(identity.tokenGenerator).toBeInstanceOf(CryptoTokenGenerator);

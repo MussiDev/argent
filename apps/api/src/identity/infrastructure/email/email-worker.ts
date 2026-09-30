@@ -3,6 +3,7 @@ import type { Logger } from '../../../shared/logging/logger';
 import { issueEmailToken } from '../../application/issue-email-token';
 import type { AttemptPurger } from '../../application/ports/attempt-purger';
 import type { Clock } from '../../application/ports/clock';
+import type { OAuthStatePurger } from '../../application/ports/oauth-state-purger';
 import type { OneTimeTokenPurpose } from '../../application/ports/one-time-token-repository';
 import type { TokenGenerator } from '../../application/ports/token-generator';
 import { DrizzleOneTimeTokenRepository } from '../db/drizzle-one-time-token-repository';
@@ -34,6 +35,7 @@ export interface EmailWorkerDependencies {
   transport: EmailTransport;
   tokenGenerator: TokenGenerator;
   attemptPurger: AttemptPurger;
+  oauthStatePurger: OAuthStatePurger;
   clock: Clock;
   logger: Logger;
   webBaseUrl: string;
@@ -162,7 +164,8 @@ export class EmailWorker {
         new Date(now - ATTEMPTS_RETENTION_MS),
       );
       const outboxRows = await this.purgeOutbox(new Date(now - OUTBOX_RETENTION_MS));
-      this.deps.logger.debug({ attempts, outboxRows }, 'retention purge done');
+      const oauthStates = await this.deps.oauthStatePurger.purgeExpired(new Date(now));
+      this.deps.logger.debug({ attempts, outboxRows, oauthStates }, 'retention purge done');
     } catch (error) {
       this.deps.logger.error({ err: error }, 'retention purge failed');
     }

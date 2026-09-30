@@ -7,3 +7,4 @@ export * from './auth/resend-verification';
 export * from './auth/sign-in';
 export * from './auth/session';
 export * from './auth/password-reset';
+export * from './auth/google';

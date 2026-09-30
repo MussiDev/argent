@@ -1,0 +1,67 @@
+/** What a verified Google ID token says about the person; nothing here is a business decision. */
+export interface GoogleClaims {
+  /** Google's stable account identifier (`sub`). */
+  subject: string;
+  /** Lower-cased. */
+  email: string;
+  emailVerified: boolean;
+  /** Google Workspace domain (`hd` claim), or null for consumer accounts. */
+  hostedDomain: string | null;
+}
+
+export interface GoogleAuthorizationRequest {
+  state: string;
+  nonce: string;
+  /** Plain PKCE verifier; the adapter derives the S256 challenge sent to Google. */
+  codeVerifier: string;
+}
+
+export interface GoogleCodeExchange {
+  code: string;
+  codeVerifier: string;
+  /** `TokenGenerator.hash` of the nonce sent with the authorization request. */
+  expectedNonceHash: string;
+}
+
+export type GoogleSignInFailureReason =
+  | 'not_configured'
+  | 'token_timeout'
+  | 'token_network'
+  | 'token_http_status'
+  | 'token_response_malformed'
+  | 'jwks_unavailable'
+  | 'no_matching_key'
+  | 'bad_signature'
+  | 'algorithm_not_allowed'
+  | 'wrong_audience'
+  | 'wrong_azp'
+  | 'wrong_issuer'
+  | 'expired'
+  | 'invalid_token'
+  | 'claims_malformed'
+  | 'nonce_mismatch';
+
+/**
+ * Google sign-in could not produce verified claims. `reason` is for logs only; callers answer every
+ * reason the same way. It never carries the code, the tokens or the verifier.
+ */
+export class GoogleSignInFailed extends Error {
+  constructor(
+    readonly reason: GoogleSignInFailureReason,
+    readonly status?: number,
+  ) {
+    super(`Google sign-in failed: ${reason}${status === undefined ? '' : ` ${status}`}`);
+    this.name = 'GoogleSignInFailed';
+  }
+}
+
+/** Google OpenID Connect, authorization code flow with PKCE (confidential client). */
+export interface GoogleIdentityProvider {
+  /** Where to send the browser to ask Google for consent. */
+  authorizationUrl(request: GoogleAuthorizationRequest): string;
+  /**
+   * Redeems the code and returns the claims of a fully verified ID token (signature, audience,
+   * issuer, expiry and nonce). Rejects with `GoogleSignInFailed` otherwise.
+   */
+  exchangeCode(exchange: GoogleCodeExchange): Promise<GoogleClaims>;
+}

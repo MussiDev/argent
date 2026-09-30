@@ -8,6 +8,17 @@ const API_URL = 'http://localhost:4000';
 const E2E_DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? 'postgres://argent:argent@localhost:5434/argent_e2e';
 
+/**
+ * The fake Google OpenID Connect server (apps/api/test/fake-google-oidc-server.ts). It listens on
+ * 127.0.0.1, another site than the web app and API on localhost, so its consent page starts a
+ * cross-site navigation back to the callback, as Google does.
+ */
+const FAKE_GOOGLE_ORIGIN = 'http://127.0.0.1:4100';
+const FAKE_GOOGLE_CLIENT = {
+  GOOGLE_CLIENT_ID: 'e2e-google-client.apps.googleusercontent.com',
+  GOOGLE_CLIENT_SECRET: 'e2e-google-client-secret',
+};
+
 /** Environment shared by the e2e API and its email worker: same database, secret and URLs. */
 const API_ENV = {
   E2E_DATABASE_URL,
@@ -18,6 +29,11 @@ const API_ENV = {
   WEB_BASE_URL: WEB_URL,
   EMAIL_PROVIDER: 'mailpit',
   BREACH_CHECKER: 'fake',
+  ...FAKE_GOOGLE_CLIENT,
+  GOOGLE_AUTHORIZATION_URL: `${FAKE_GOOGLE_ORIGIN}/authorize`,
+  GOOGLE_TOKEN_URL: `${FAKE_GOOGLE_ORIGIN}/token`,
+  GOOGLE_JWKS_URL: `${FAKE_GOOGLE_ORIGIN}/jwks`,
+  GOOGLE_ISSUER: FAKE_GOOGLE_ORIGIN,
 };
 
 export default defineConfig({
@@ -34,6 +50,18 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
+    {
+      // Stands in for Google, so no e2e test ever calls it.
+      command: 'pnpm --filter @argent/api exec tsx test/fake-google-oidc-server.ts',
+      url: `${FAKE_GOOGLE_ORIGIN}/jwks`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+      env: {
+        ...FAKE_GOOGLE_CLIENT,
+        FAKE_GOOGLE_PORT: '4100',
+        FAKE_GOOGLE_REDIRECT_URI: `${API_URL}/auth/google/callback`,
+      },
+    },
     {
       // Playwright starts webServers before globalSetup, so the e2e database is created and
       // migrated as part of the API command, before the API boots.

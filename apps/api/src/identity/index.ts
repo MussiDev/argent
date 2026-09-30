@@ -2,6 +2,7 @@ import type { RequestHandler, Router } from 'express';
 import type { Env } from '../shared/config/env';
 import { createRequireSession } from '../shared/http/require-session';
 import type { Logger } from '../shared/logging/logger';
+import { CompleteGoogleSignIn } from './application/complete-google-sign-in';
 import { ConfirmPasswordReset } from './application/confirm-password-reset';
 import { GetCurrentSession } from './application/get-current-session';
 import { RefreshSession } from './application/refresh-session';
@@ -11,27 +12,36 @@ import { ResendVerification } from './application/resend-verification';
 import { SignIn } from './application/sign-in';
 import { SignOut } from './application/sign-out';
 import { SignOutAll } from './application/sign-out-all';
+import { StartGoogleSignIn } from './application/start-google-sign-in';
+import { StartSession } from './application/start-session';
 import { VerifyEmail } from './application/verify-email';
 import type { AttemptLimiter } from './application/ports/attempt-limiter';
 import type { AttemptPurger } from './application/ports/attempt-purger';
 import type { BreachedPasswordChecker } from './application/ports/breached-password-checker';
 import type { Clock } from './application/ports/clock';
 import type { EmailSender } from './application/ports/email-sender';
+import type { GoogleIdentityProvider } from './application/ports/google-identity-provider';
+import type { OAuthStatePurger } from './application/ports/oauth-state-purger';
+import type { OAuthStateRepository } from './application/ports/oauth-state-repository';
 import type { OneTimeTokenRepository } from './application/ports/one-time-token-repository';
 import type { PasswordHasher } from './application/ports/password-hasher';
 import type { SessionRepository } from './application/ports/session-repository';
 import type { TokenGenerator } from './application/ports/token-generator';
 import type { UnitOfWork } from './application/ports/unit-of-work';
+import type { UserIdentityRepository } from './application/ports/user-identity-repository';
 import type { UserRepository } from './application/ports/user-repository';
+import { DrizzleOAuthStateRepository } from './infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from './infrastructure/db/drizzle-one-time-token-repository';
 import { DrizzleSessionRepository } from './infrastructure/db/drizzle-session-repository';
 import { DrizzleUnitOfWork } from './infrastructure/db/drizzle-unit-of-work';
+import { DrizzleUserIdentityRepository } from './infrastructure/db/drizzle-user-identity-repository';
 import { DrizzleUserRepository } from './infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from './infrastructure/db/postgres-attempt-limiter';
 import type { IdentityDb } from './infrastructure/db/schema';
 import type { EmailTransport } from './infrastructure/email/email-transport';
 import { EmailWorker } from './infrastructure/email/email-worker';
 import { OutboxEmailSender } from './infrastructure/email/outbox-email-sender';
+import { createGoogleRoutes } from './infrastructure/http/google-routes';
 import { createPasswordResetRoutes } from './infrastructure/http/password-reset-routes';
 import { createRegistrationRoutes } from './infrastructure/http/registration-routes';
 import { ACCESS_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
@@ -42,8 +52,10 @@ import {
 } from './infrastructure/security/argon2id-password-hasher';
 import { CryptoTokenGenerator } from './infrastructure/security/crypto-token-generator';
 import { FakeBreachedPasswordChecker } from './infrastructure/security/fake-breached-password-checker';
+import { GoogleOidcIdentityProvider } from './infrastructure/security/google-oidc-identity-provider';
 import { HibpBreachedPasswordChecker } from './infrastructure/security/hibp-breached-password-checker';
 import { JoseAccessTokenIssuer } from './infrastructure/security/jose-access-token-issuer';
+import { UnconfiguredGoogleIdentityProvider } from './infrastructure/security/unconfigured-google-identity-provider';
 import { systemClock } from './infrastructure/system-clock';
 
 export * from './domain/account-defaults';
@@ -56,11 +68,15 @@ export * from './application/ports/attempt-purger';
 export * from './application/ports/breached-password-checker';
 export * from './application/ports/clock';
 export * from './application/ports/email-sender';
+export * from './application/ports/google-identity-provider';
+export * from './application/ports/oauth-state-purger';
+export * from './application/ports/oauth-state-repository';
 export * from './application/ports/one-time-token-repository';
 export * from './application/ports/password-hasher';
 export * from './application/ports/session-repository';
 export * from './application/ports/token-generator';
 export * from './application/ports/unit-of-work';
+export * from './application/ports/user-identity-repository';
 export * from './application/ports/user-repository';
 export type { IdentityDb } from './infrastructure/db/schema';
 export { systemClock } from './infrastructure/system-clock';
@@ -82,6 +98,9 @@ export interface IdentityInfrastructure {
   users: UserRepository;
   sessions: SessionRepository;
   oneTimeTokens: OneTimeTokenRepository;
+  identities: UserIdentityRepository;
+  oauthStates: OAuthStateRepository;
+  oauthStatePurger: OAuthStatePurger;
   attemptLimiter: AttemptLimiter;
   attemptPurger: AttemptPurger;
   passwordHasher: PasswordHasher;
@@ -99,11 +118,15 @@ export function createIdentityInfrastructure({
   clock = systemClock,
 }: IdentityInfrastructureDependencies): IdentityInfrastructure {
   const attemptLimiter = new PostgresAttemptLimiter(db, clock);
+  const oauthStates = new DrizzleOAuthStateRepository(db);
   return {
     clock,
     users: new DrizzleUserRepository(db),
     sessions: new DrizzleSessionRepository(db),
     oneTimeTokens: new DrizzleOneTimeTokenRepository(db),
+    identities: new DrizzleUserIdentityRepository(db),
+    oauthStates,
+    oauthStatePurger: oauthStates,
     attemptLimiter,
     attemptPurger: attemptLimiter,
     passwordHasher: new Argon2idPasswordHasher({ logger }),
@@ -121,7 +144,19 @@ export interface IdentityModuleDependencies extends Omit<
   IdentityInfrastructureDependencies,
   'env'
 > {
-  env: Pick<Env, 'BREACH_CHECKER' | 'JWT_SECRET'>;
+  env: Pick<
+    Env,
+    | 'BREACH_CHECKER'
+    | 'JWT_SECRET'
+    | 'API_ORIGIN'
+    | 'WEB_BASE_URL'
+    | 'GOOGLE_CLIENT_ID'
+    | 'GOOGLE_CLIENT_SECRET'
+    | 'GOOGLE_AUTHORIZATION_URL'
+    | 'GOOGLE_TOKEN_URL'
+    | 'GOOGLE_JWKS_URL'
+    | 'GOOGLE_ISSUER'
+  >;
   /**
    * Test seam: replaces the real `requireSession` on the identity module's authenticated routes.
    * It must set `req.auth`.
@@ -139,6 +174,29 @@ export interface IdentityModule {
    * authenticated routes. Sets `req.auth`; answers 401 `UNAUTHENTICATED` otherwise.
    */
   requireSession: RequestHandler;
+}
+
+/**
+ * Google sign-in as configured. Built once per module: the adapter caches Google's signing keys.
+ * Without a client id (only possible outside production) every Google sign-in fails.
+ */
+function createGoogleIdentityProvider(
+  env: IdentityModuleDependencies['env'],
+  tokenGenerator: TokenGenerator,
+): GoogleIdentityProvider {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    return new UnconfiguredGoogleIdentityProvider();
+  }
+  return new GoogleOidcIdentityProvider({
+    clientId: env.GOOGLE_CLIENT_ID,
+    clientSecret: env.GOOGLE_CLIENT_SECRET,
+    apiOrigin: env.API_ORIGIN,
+    authorizationUrl: env.GOOGLE_AUTHORIZATION_URL,
+    tokenUrl: env.GOOGLE_TOKEN_URL,
+    jwksUrl: env.GOOGLE_JWKS_URL,
+    issuer: env.GOOGLE_ISSUER,
+    tokenGenerator,
+  });
 }
 
 /** Composition root of the identity module: its routers and the shared `requireSession`. */
@@ -170,6 +228,13 @@ export function createIdentityModule({
     },
   });
   const routeSession = requireSessionOverride ?? requireSession;
+  const startSession = new StartSession({
+    sessions: identity.sessions,
+    tokenGenerator: identity.tokenGenerator,
+    accessTokens,
+    clock: identity.clock,
+  });
+  const google = createGoogleIdentityProvider(env, identity.tokenGenerator);
 
   const routers = [
     createRegistrationRoutes({
@@ -201,10 +266,7 @@ export function createIdentityModule({
         users: identity.users,
         passwordHasher: identity.passwordHasher,
         dummyPasswordHash: DUMMY_PASSWORD_HASH,
-        sessions: identity.sessions,
-        tokenGenerator: identity.tokenGenerator,
-        accessTokens,
-        clock: identity.clock,
+        startSession,
         reportRefundFailure: (error) => {
           // `err` goes through the logger's safe serializer (no query params or row values).
           dependencies.logger.warn(
@@ -247,6 +309,25 @@ export function createIdentityModule({
       }),
       logger: dependencies.logger,
     }),
+    createGoogleRoutes({
+      startGoogleSignIn: new StartGoogleSignIn({
+        attemptLimiter: identity.attemptLimiter,
+        oauthStates: identity.oauthStates,
+        google,
+        tokenGenerator: identity.tokenGenerator,
+        clock: identity.clock,
+      }),
+      completeGoogleSignIn: new CompleteGoogleSignIn({
+        oauthStates: identity.oauthStates,
+        google,
+        tokenGenerator: identity.tokenGenerator,
+        unitOfWork: identity.unitOfWork,
+        startSession,
+        clock: identity.clock,
+      }),
+      webBaseUrl: env.WEB_BASE_URL,
+      logger: dependencies.logger,
+    }),
   ];
   return { routers, requireSession };
 }
@@ -261,7 +342,10 @@ export interface EmailWorkerFactoryDependencies {
   pollIntervalMs?: number;
 }
 
-/** The outbox worker, with the PostgreSQL attempt purger and the crypto token generator. */
+/**
+ * The outbox worker, with the PostgreSQL attempt and OAuth-state purgers and the crypto token
+ * generator.
+ */
 export function createEmailWorker({
   db,
   env,
@@ -275,6 +359,7 @@ export function createEmailWorker({
     transport,
     tokenGenerator: new CryptoTokenGenerator(),
     attemptPurger: new PostgresAttemptLimiter(db, clock),
+    oauthStatePurger: new DrizzleOAuthStateRepository(db),
     clock,
     logger,
     webBaseUrl: env.WEB_BASE_URL,

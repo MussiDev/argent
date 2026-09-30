@@ -13,6 +13,7 @@ import type {
 import { REGISTER_IP_POLICY, RegisterUser } from '../../src/identity/application/register-user';
 import type { OneTimeTokenRepository } from '../../src/identity/application/ports/one-time-token-repository';
 import type { SessionRepository } from '../../src/identity/application/ports/session-repository';
+import type { UserIdentityRepository } from '../../src/identity/application/ports/user-identity-repository';
 import { DuplicateEmail } from '../../src/identity/domain/errors';
 import { InMemoryEmailSender } from '../fakes/in-memory-email-sender';
 
@@ -75,6 +76,7 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
     findById: () => Promise.resolve(null),
     markEmailVerified: () => Promise.resolve(),
     changePassword: () => Promise.resolve(),
+    supersedeUnverified: () => Promise.reject(new Error('unused')),
   };
   const unitOfWork: UnitOfWork = {
     run: (work) =>
@@ -83,6 +85,7 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
         emailSender,
         oneTimeTokens: {} as OneTimeTokenRepository,
         sessions: {} as SessionRepository,
+        identities: {} as UserIdentityRepository,
       }),
   };
   const registerUser = new RegisterUser({

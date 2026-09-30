@@ -10,6 +10,7 @@ import { readField } from '../read-field';
 import { useFocusFirstInvalid } from '../use-focus-first-invalid';
 import { AuthField } from './auth-field';
 import { FormAlert } from './form-alert';
+import { GoogleSignInOption } from './google-sign-in-button';
 
 export interface RegisterFormValues {
   email: string;
@@ -19,10 +20,12 @@ export interface RegisterFormValues {
 export interface RegisterFormProps {
   pending: boolean;
   errors: FormErrors;
+  /** `GET /auth/google/start` on the API; without it the screen offers no Google sign-in. */
+  googleStartUrl?: string;
   onSubmit: (values: RegisterFormValues) => void;
 }
 
-export function RegisterForm({ pending, errors, onSubmit }: RegisterFormProps) {
+export function RegisterForm({ pending, errors, googleStartUrl, onSubmit }: RegisterFormProps) {
   const t = useTranslations('auth');
   const formRef = useFocusFirstInvalid(errors);
 
@@ -40,7 +43,8 @@ export function RegisterForm({ pending, errors, onSubmit }: RegisterFormProps) {
         <CardTitle as="h1">{t('register.title')}</CardTitle>
         <CardDescription>{t('register.description')}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="grid gap-4">
+        {googleStartUrl === undefined ? null : <GoogleSignInOption href={googleStartUrl} />}
         <form ref={formRef} className="grid gap-4" noValidate onSubmit={handleSubmit}>
           <FormAlert error={errors.form} />
           <AuthField

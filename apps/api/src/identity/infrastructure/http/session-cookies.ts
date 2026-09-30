@@ -1,7 +1,7 @@
 import type { CookieOptions } from 'express';
 import type { ResponseFacade } from '../../../shared/http/validate';
 import { SESSION_IDLE_LIMIT_MS } from '../../application/get-current-session';
-import type { SessionTokens } from '../../application/sign-in';
+import type { SessionTokens } from '../../application/start-session';
 
 /** `__Host-`: the browser enforces Secure, Path=/ and no Domain, so it stays host-only (NFR-11). */
 export const ACCESS_TOKEN_COOKIE = '__Host-argent_at';
@@ -13,6 +13,18 @@ const BASE_OPTIONS: CookieOptions = { httpOnly: true, secure: true, sameSite: 's
 
 export const ACCESS_TOKEN_COOKIE_OPTIONS: CookieOptions = { ...BASE_OPTIONS, path: '/' };
 export const REFRESH_TOKEN_COOKIE_OPTIONS: CookieOptions = { ...BASE_OPTIONS, path: '/auth' };
+
+/** Binds a Google sign-in to the browser that started it (login CSRF, threat R-27). */
+export const OAUTH_BINDING_COOKIE = '__Secure-argent_oauth';
+/**
+ * The only `Lax` cookie: Google's redirect back is a cross-site top-level navigation, which does
+ * not carry `Strict` cookies. It holds a random value whose hash must match the stored state.
+ */
+export const OAUTH_BINDING_COOKIE_OPTIONS: CookieOptions = {
+  ...BASE_OPTIONS,
+  sameSite: 'lax',
+  path: '/auth/google',
+};
 
 export function setSessionCookies<TBody>(res: ResponseFacade<TBody>, tokens: SessionTokens): void {
   res

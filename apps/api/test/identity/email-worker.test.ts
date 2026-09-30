@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEmailWorker } from '../../src/identity';
 import type { AttemptPurger } from '../../src/identity/application/ports/attempt-purger';
 import { Email } from '../../src/identity/domain/email';
+import { DrizzleOAuthStateRepository } from '../../src/identity/infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleUserRepository } from '../../src/identity/infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from '../../src/identity/infrastructure/db/postgres-attempt-limiter';
 import {
@@ -181,6 +182,7 @@ describe('EmailWorker', () => {
       transport: new CapturingTransport(),
       tokenGenerator: new CryptoTokenGenerator(),
       attemptPurger: purger,
+      oauthStatePurger: { purgeExpired: () => Promise.resolve(0) },
       clock,
       logger: silent,
       webBaseUrl: LINK_BASE_URL,
@@ -205,6 +207,41 @@ describe('EmailWorker', () => {
     await worker.runOnce();
     expect(cutoffs).toHaveLength(2);
     expect(await keys()).toEqual(['recent']);
+  });
+
+  it('purges expired oauth_states rows and keeps live ones', async () => {
+    const clock = new MutableClock(new Date('2026-09-28T12:00:00.000Z'));
+    const states = new DrizzleOAuthStateRepository(connection.db);
+    const at = (minutes: number) => new Date(clock.now().getTime() + minutes * 60 * 1000);
+    for (const [stateHash, expiresAt] of [
+      ['expired', at(-1)],
+      ['expiring-now', at(0)],
+      ['live', at(1)],
+    ] as const) {
+      await states.create({
+        stateHash,
+        bindingHash: 'binding',
+        nonceHash: 'nonce',
+        codeVerifier: 'verifier',
+        timeZone: 'UTC',
+        language: 'es',
+        expiresAt,
+      });
+    }
+    const worker = createEmailWorker({
+      db: connection.db,
+      env: { WEB_BASE_URL: LINK_BASE_URL },
+      logger: silent,
+      transport: new CapturingTransport(),
+      clock,
+    });
+
+    await worker.runOnce();
+
+    const left = await connection.pool.query<{ state_hash: string }>(
+      'select state_hash from oauth_states order by state_hash',
+    );
+    expect(left.rows.map((row) => row.state_hash)).toEqual(['live']);
   });
 
   it('drops a verification row whose user is already verified, without sending', async () => {

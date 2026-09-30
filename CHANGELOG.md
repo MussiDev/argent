@@ -19,6 +19,13 @@ All notable changes to this project are documented in this file. The format foll
   anything that is not the user's; unverified accounts blocked from data.
 - DISC-001-01a Web authentication screens (register, verify, sign in, forgot and reset password)
   in Spanish and English, with time zone and language defaults from the device.
+- DISC-001-01b Google sign-in through the OpenID Connect authorization code flow with PKCE, run by
+  the API with single-use OAuth states bound to the browser; no Google script in the web app.
+- DISC-001-01b Accounts created with Google start verified and without a password; a Google
+  account links to an existing account only when Google is authoritative for the email (Gmail or
+  Workspace), and an unverified password account with that email is taken over (password and
+  sessions removed) to prevent account pre-hijacking.
+- DISC-001-01b "Continue with Google" on the sign-in and register screens, in Spanish and English.
 
 ### Fixed
 

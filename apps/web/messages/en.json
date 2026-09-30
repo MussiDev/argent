@@ -18,6 +18,10 @@
       "newPassword": "New password"
     },
     "passwordHint": "Use at least 10 characters.",
+    "or": "or",
+    "google": {
+      "continue": "Continue with Google"
+    },
     "register": {
       "title": "Create your account",
       "description": "Manage your pesos and dollars in one place.",
@@ -90,6 +94,7 @@
     "unexpected": "Something went wrong. Try again.",
     "unauthenticated": "Your session has ended. Sign in again.",
     "emailNotVerified": "Verify your email to continue.",
-    "validationFailed": "Check the data you entered and try again."
+    "validationFailed": "Check the data you entered and try again.",
+    "googleFailed": "Google sign-in failed. Please try again."
   }
 }

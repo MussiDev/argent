@@ -1,27 +1,11 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { NewUser, User, UserRepository } from '../../application/ports/user-repository';
 import type { Email } from '../../domain/email';
 import { DuplicateEmail } from '../../domain/errors';
 import { users, type IdentityDb } from './schema';
+import { violatedUniqueConstraint } from './unique-violation';
 
-const UNIQUE_VIOLATION = '23505';
 const EMAIL_UNIQUE_CONSTRAINT = 'users_email_unique';
-const MAX_CAUSE_DEPTH = 5;
-
-/** Drizzle wraps driver errors (DrizzleQueryError), so the pg error may sit in the cause chain. */
-function isDuplicateEmailViolation(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && current instanceof Error; depth += 1) {
-    if (
-      Reflect.get(current, 'code') === UNIQUE_VIOLATION &&
-      Reflect.get(current, 'constraint') === EMAIL_UNIQUE_CONSTRAINT
-    ) {
-      return true;
-    }
-    current = current.cause;
-  }
-  return false;
-}
 
 export class DrizzleUserRepository implements UserRepository {
   constructor(private readonly db: IdentityDb) {}
@@ -33,6 +17,7 @@ export class DrizzleUserRepository implements UserRepository {
         .values({
           email: user.email.value,
           passwordHash: user.passwordHash,
+          emailVerifiedAt: user.emailVerifiedAt ?? null,
           defaultRateType: user.defaultRateType,
           displayCurrency: user.displayCurrency,
           timeZone: user.timeZone,
@@ -42,7 +27,8 @@ export class DrizzleUserRepository implements UserRepository {
       if (!created) throw new Error('Insert into users returned no row');
       return created;
     } catch (error) {
-      if (isDuplicateEmailViolation(error)) throw new DuplicateEmail({ cause: error });
+      if (violatedUniqueConstraint(error) === EMAIL_UNIQUE_CONSTRAINT)
+        throw new DuplicateEmail({ cause: error });
       throw error;
     }
   }
@@ -70,5 +56,23 @@ export class DrizzleUserRepository implements UserRepository {
         passwordChangedAt: at,
       })
       .where(eq(users.id, id));
+  }
+
+  /**
+   * `email_verified_at is null` is re-evaluated after waiting for a concurrent writer's row lock,
+   * so an account verified meanwhile is left alone.
+   */
+  async supersedeUnverified(id: string, at: Date): Promise<User | null> {
+    const [superseded] = await this.db
+      .update(users)
+      .set({
+        passwordHash: null,
+        credentialsVersion: sql`${users.credentialsVersion} + 1`,
+        passwordChangedAt: at,
+        emailVerifiedAt: at,
+      })
+      .where(and(eq(users.id, id), isNull(users.emailVerifiedAt)))
+      .returning();
+    return superseded ?? null;
   }
 }

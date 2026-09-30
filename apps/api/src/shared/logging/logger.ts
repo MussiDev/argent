@@ -14,6 +14,17 @@ const SECRET_KEYS = [
   'toEmail',
   'to_email',
   'message.to',
+  // OAuth / OpenID Connect secrets (Google sign-in). The authorization `code` is listed apart, only
+  // inside a query or body: elsewhere `code` is an error code (`code`, `err.code`, `err.cause.code`).
+  'state',
+  'id_token',
+  'idToken',
+  'code_verifier',
+  'codeVerifier',
+  'client_secret',
+  'clientSecret',
+  'binding',
+  'nonce',
 ];
 
 /**
@@ -24,6 +35,10 @@ export const REDACT_PATHS = [
   ...SECRET_KEYS,
   ...SECRET_KEYS.map((key) => `*.${key}`),
   ...SECRET_KEYS.map((key) => `*.*.${key}`),
+  'query.code',
+  'body.code',
+  '*.query.code',
+  '*.body.code',
   'headers.cookie',
   'headers["set-cookie"]',
   '*.headers.cookie',

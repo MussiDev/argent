@@ -4,8 +4,23 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrationsFolder, runMigrations } from '../../src/shared/db/migrate';
 import { ensureTestDatabase, testDatabaseUrl } from '../helpers/test-database';
 
-const ALL_MIGRATIONS = 4;
-const IDENTITY_TABLES = ['auth_attempts', 'email_outbox', 'one_time_tokens', 'sessions', 'users'];
+const ALL_MIGRATIONS = 5;
+const TABLES_BEFORE_0004 = [
+  'auth_attempts',
+  'email_outbox',
+  'one_time_tokens',
+  'sessions',
+  'users',
+];
+const IDENTITY_TABLES = [
+  'auth_attempts',
+  'email_outbox',
+  'oauth_states',
+  'one_time_tokens',
+  'sessions',
+  'user_identities',
+  'users',
+];
 
 /** A throwaway database next to the test database, so the migration runs on a truly empty one. */
 const emptyDatabaseUrl = (() => {
@@ -78,7 +93,7 @@ async function indexDefinition(name: string): Promise<string | undefined> {
 }
 
 describe('0000_identity migration', () => {
-  it('applies on an empty database and creates the five tables', async () => {
+  it('applies on an empty database and creates the identity tables', async () => {
     expect(await publicTables()).toEqual([]);
 
     await runMigrations(emptyDatabaseUrl);
@@ -173,6 +188,7 @@ describe('0000_identity migration', () => {
   });
 
   it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
+    await client.query(await rollback('0004_google_identity'));
     await client.query(await rollback('0003_outbox_retry'));
     await client.query(await rollback('0002_credentials_version'));
     await client.query(await rollback('0001_outbox_hardening'));
@@ -206,6 +222,7 @@ describe('0001_outbox_hardening migration', () => {
   it('is reverted by its rollback script (after the newer ones), leaving 0000 in place, and re-applies', async () => {
     await client.query('delete from email_outbox');
     // Newest first: drizzle only applies migrations newer than the last one recorded.
+    await client.query(await rollback('0004_google_identity'));
     await client.query(await rollback('0003_outbox_retry'));
     await client.query(await rollback('0002_credentials_version'));
     await client.query(await rollback('0001_outbox_hardening'));
@@ -216,7 +233,7 @@ describe('0001_outbox_hardening migration', () => {
         "insert into email_outbox (id, kind, language, payload) values (gen_random_uuid(), 'discard', 'pt', '{}')",
       ),
     ).toBeUndefined();
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
     expect(await appliedMigrations()).toBe(1);
 
     await client.query('delete from email_outbox');
@@ -284,12 +301,13 @@ describe('0002_credentials_version migration', () => {
     expect(session.rows).toEqual([{ credentials_version: 0 }]);
   });
 
-  it('is reverted by its rollback script (after the newer one), keeping the data of the older columns, and re-applies', async () => {
+  it('is reverted by its rollback script (after the newer ones), keeping the data of the older columns, and re-applies', async () => {
+    await client.query(await rollback('0004_google_identity'));
     await client.query(await rollback('0003_outbox_retry'));
     await client.query(await rollback('0002_credentials_version'));
 
     expect(await credentialsColumns()).toEqual([]);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
     expect(await appliedMigrations()).toBe(2);
     const kept = await client.query("select 1 from users where email = 'cv@example.com'");
     expect(kept.rowCount).toBe(1);
@@ -339,19 +357,123 @@ describe('0003_outbox_retry migration', () => {
     expect(inserted.rows).toEqual([{ next_attempt_at: null }]);
   });
 
-  it('is reverted by its rollback script alone, restoring the previous index and keeping the rows, and re-applies', async () => {
+  it('is reverted by its rollback script (after the newer one), restoring the previous index and keeping the rows, and re-applies', async () => {
+    await client.query(await rollback('0004_google_identity'));
     await client.query(await rollback('0003_outbox_retry'));
 
     expect(await nextAttemptColumn()).toEqual([]);
     expect(await outboxIndexes()).toEqual([PENDING_BY_SENT_AT]);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
     const kept = await client.query("select 1 from email_outbox where kind = 'discard'");
     expect(kept.rowCount).toBe(1);
 
     await runMigrations(emptyDatabaseUrl);
     expect(await nextAttemptColumn()).toHaveLength(1);
     expect(await outboxIndexes()).toEqual([PENDING_BY_CREATED_AT]);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+  });
+});
+
+async function passwordHashNullable(): Promise<string | undefined> {
+  const result = await client.query<{ is_nullable: string }>(
+    "select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'users' and column_name = 'password_hash'",
+  );
+  return result.rows[0]?.is_nullable;
+}
+
+async function countOf(statement: string): Promise<number> {
+  const result = await client.query<{ n: string }>(statement);
+  return Number(result.rows[0]?.n);
+}
+
+describe('0004_google_identity migration', () => {
+  it('applies on a database at 0003: password_hash nullable, user_identities, oauth_states and the google_start_ip kind', async () => {
+    await client.query(await rollback('0004_google_identity'));
+    expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+
+    await runMigrations(emptyDatabaseUrl);
+
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await passwordHashNullable()).toBe('YES');
+    const inserted = await client.query<{ id: string }>(
+      "insert into users (email, time_zone, language, email_verified_at) values ('google@gmail.com', 'UTC', 'es', now()) returning id",
+    );
+    const userId = inserted.rows[0]?.id ?? '';
+    const other = await client.query<{ id: string }>(
+      "insert into users (email, password_hash, time_zone, language) values ('other@gmail.com', 'h', 'UTC', 'es') returning id",
+    );
+    const otherId = other.rows[0]?.id ?? '';
+    expect(
+      await sqlState(
+        "insert into auth_attempts (key, kind, window_start) values ('ip', 'google_start_ip', now())",
+      ),
+    ).toBeUndefined();
+
+    // user_identities: provider check, both unique constraints, cascade on user deletion
+    const link = (user: string, provider: string, subject: string) =>
+      sqlState(
+        `insert into user_identities (user_id, provider, subject, email_authoritative) values ('${user}', '${provider}', '${subject}', true)`,
+      );
+    expect(await link(userId, 'google', 's1')).toBeUndefined();
+    expect(await link(otherId, 'google', 's2')).toBeUndefined();
+    expect(await link(otherId, 'apple', 's3')).toBe('23514');
+    expect(await link(otherId, 'google', 's1')).toBe('23505');
+    expect(await link(userId, 'google', 's4')).toBe('23505');
+    await client.query(`delete from users where id = '${otherId}'`);
+    expect(await countOf('select count(*) as n from user_identities')).toBe(1);
+
+    // oauth_states: language check and the purge index on expires_at
+    expect(
+      await sqlState(
+        "insert into oauth_states (state_hash, binding_hash, nonce_hash, code_verifier, time_zone, language, expires_at) values ('s', 'b', 'n', 'v', 'UTC', 'pt', now())",
+      ),
+    ).toBe('23514');
+    expect(await indexDefinition('oauth_states_expires_at_idx')).toBe(
+      'CREATE INDEX oauth_states_expires_at_idx ON public.oauth_states USING btree (expires_at)',
+    );
+  });
+
+  it('has a rollback that fails while a password-less user exists, changing nothing', async () => {
+    expect(await countOf('select count(*) as n from users where password_hash is null')).toBe(1);
+
+    expect(await sqlState(await rollback('0004_google_identity'))).toBe('23502');
+
+    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(
+      await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
+    ).toBe(1);
+  });
+
+  it('is reverted by its rollback when no password-less user exists, removing google_start_ip rows, and re-applies', async () => {
+    await client.query('delete from users where password_hash is null');
+    await client.query(
+      "insert into auth_attempts (key, kind, window_start) values ('ip', 'sign_in_ip', now())",
+    );
+
+    await client.query(await rollback('0004_google_identity'));
+
+    expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await passwordHashNullable()).toBe('NO');
+    expect(
+      await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
+    ).toBe(0);
+    expect(await countOf("select count(*) as n from auth_attempts where kind = 'sign_in_ip'")).toBe(
+      1,
+    );
+    expect(
+      await sqlState(
+        "insert into auth_attempts (key, kind, window_start) values ('ip2', 'google_start_ip', now())",
+      ),
+    ).toBe('23514');
+    expect(await countOf("select count(*) as n from users where email = 'cv@example.com'")).toBe(1);
+
+    await runMigrations(emptyDatabaseUrl);
+    expect(await publicTables()).toEqual(IDENTITY_TABLES);
     expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
   });
 });

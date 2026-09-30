@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { parseEnv } from '../../src/shared/config/env';
 import { productionOverrides, testEnvSource } from '../helpers/test-env';
 
+const GOOGLE_AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_JWKS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
+const GOOGLE_ISSUER = 'https://accounts.google.com';
+
+/** Endpoints of a local OIDC server, as the integration and e2e runs configure them. */
+const FAKE_GOOGLE: Record<string, string> = {
+  GOOGLE_CLIENT_ID: 'local-client',
+  GOOGLE_CLIENT_SECRET: 'local-secret',
+  GOOGLE_AUTHORIZATION_URL: 'http://127.0.0.1:4100/authorize',
+  GOOGLE_TOKEN_URL: 'http://127.0.0.1:4100/token',
+  GOOGLE_JWKS_URL: 'http://127.0.0.1:4100/jwks',
+  GOOGLE_ISSUER: 'http://127.0.0.1:4100',
+};
+
 function parseProduction(overrides: Record<string, string>) {
   return () => parseEnv(testEnvSource({ ...productionOverrides, ...overrides }));
 }
@@ -88,5 +103,84 @@ describe('environment production rules', () => {
     for (const provider of ['console', 'mailpit']) {
       expect(parseEnv(testEnvSource({ EMAIL_PROVIDER: provider })).EMAIL_FROM).toMatch(/@/);
     }
+  });
+
+  it('defaults the Google endpoints to Google and leaves the client unset outside production', () => {
+    const env = parseEnv(testEnvSource());
+
+    expect(env.GOOGLE_CLIENT_ID).toBeUndefined();
+    expect(env.GOOGLE_CLIENT_SECRET).toBeUndefined();
+    expect(env.GOOGLE_AUTHORIZATION_URL).toBe(GOOGLE_AUTHORIZATION_URL);
+    expect(env.GOOGLE_TOKEN_URL).toBe(GOOGLE_TOKEN_URL);
+    expect(env.GOOGLE_JWKS_URL).toBe(GOOGLE_JWKS_URL);
+    expect(env.GOOGLE_ISSUER).toBe(GOOGLE_ISSUER);
+  });
+
+  it('treats empty GOOGLE_* values as unset (blank lines copied from .env.example)', () => {
+    const env = parseEnv(
+      testEnvSource({ GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '', GOOGLE_TOKEN_URL: '' }),
+    );
+
+    expect(env.GOOGLE_CLIENT_ID).toBeUndefined();
+    expect(env.GOOGLE_TOKEN_URL).toBe(GOOGLE_TOKEN_URL);
+  });
+
+  it('accepts a local OIDC server for the Google endpoints outside production', () => {
+    const env = parseEnv(testEnvSource(FAKE_GOOGLE));
+
+    expect(env.GOOGLE_CLIENT_ID).toBe('local-client');
+    expect(env.GOOGLE_TOKEN_URL).toBe('http://127.0.0.1:4100/token');
+    expect(env.GOOGLE_ISSUER).toBe('http://127.0.0.1:4100');
+  });
+
+  it('requires GOOGLE_CLIENT_ID in production', () => {
+    const source = { ...testEnvSource(productionOverrides), GOOGLE_CLIENT_ID: undefined };
+    expect(() => parseEnv(source)).toThrow('GOOGLE_CLIENT_ID: required in production');
+  });
+
+  it('requires GOOGLE_CLIENT_SECRET in production, apart from the rule tying it to the client id', () => {
+    const source = { ...testEnvSource(productionOverrides), GOOGLE_CLIENT_SECRET: undefined };
+    expect(() => parseEnv(source)).toThrow('GOOGLE_CLIENT_SECRET: required in production');
+  });
+
+  it.each(['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'])(
+    'does not let a whitespace-only %s satisfy production',
+    (name) => {
+      expect(parseProduction({ [name]: ' \t ' })).toThrow(new RegExp(`${name}: `));
+    },
+  );
+
+  it('rejects a whitespace-only GOOGLE_CLIENT_ID outside production', () => {
+    expect(() =>
+      parseEnv(testEnvSource({ GOOGLE_CLIENT_ID: '   ', GOOGLE_CLIENT_SECRET: 'local-secret' })),
+    ).toThrow(/GOOGLE_CLIENT_ID/);
+  });
+
+  it('trims GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET', () => {
+    const env = parseEnv(
+      testEnvSource({ GOOGLE_CLIENT_ID: ' local-client ', GOOGLE_CLIENT_SECRET: 'local-secret\n' }),
+    );
+
+    expect(env.GOOGLE_CLIENT_ID).toBe('local-client');
+    expect(env.GOOGLE_CLIENT_SECRET).toBe('local-secret');
+  });
+
+  it('requires GOOGLE_CLIENT_SECRET whenever GOOGLE_CLIENT_ID is set', () => {
+    expect(() => parseEnv(testEnvSource({ GOOGLE_CLIENT_ID: 'local-client' }))).toThrow(
+      /GOOGLE_CLIENT_SECRET/,
+    );
+  });
+
+  it.each(['GOOGLE_AUTHORIZATION_URL', 'GOOGLE_TOKEN_URL', 'GOOGLE_JWKS_URL', 'GOOGLE_ISSUER'])(
+    'rejects a non-Google %s in production',
+    (name) => {
+      expect(parseProduction({ [name]: FAKE_GOOGLE[name] ?? '' })).toThrow(new RegExp(name));
+    },
+  );
+
+  it('rejects a Google endpoint that is not a URL', () => {
+    expect(() => parseEnv(testEnvSource({ GOOGLE_JWKS_URL: 'not a url' }))).toThrow(
+      /GOOGLE_JWKS_URL/,
+    );
   });
 });

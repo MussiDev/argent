@@ -112,6 +112,7 @@ function buildRefresh(
         users: {} as TransactionalRepositories['users'],
         oneTimeTokens: {} as TransactionalRepositories['oneTimeTokens'],
         emailSender: {} as TransactionalRepositories['emailSender'],
+        identities: {} as TransactionalRepositories['identities'],
       });
       committed.push(...staged);
       return result;

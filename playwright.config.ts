@@ -19,15 +19,20 @@ const FAKE_GOOGLE_CLIENT = {
   GOOGLE_CLIENT_SECRET: 'e2e-google-client-secret',
 };
 
-/** Environment shared by the e2e API and its email worker: same database, secret and URLs. */
-const API_ENV = {
-  E2E_DATABASE_URL,
+/** The email worker's environment: only the settings it reads, as in production. */
+const WORKER_ENV = {
   DATABASE_URL: E2E_DATABASE_URL,
+  WEB_BASE_URL: WEB_URL,
+  EMAIL_PROVIDER: 'mailpit',
+};
+
+/** The e2e API's environment: the worker's database and email settings plus its own. */
+const API_ENV = {
+  ...WORKER_ENV,
+  E2E_DATABASE_URL,
   JWT_SECRET: 'e2e-only-secret-that-is-at-least-thirty-two-bytes',
   WEB_ORIGIN: WEB_URL,
   API_ORIGIN: API_URL,
-  WEB_BASE_URL: WEB_URL,
-  EMAIL_PROVIDER: 'mailpit',
   BREACH_CHECKER: 'fake',
   ...FAKE_GOOGLE_CLIENT,
   GOOGLE_AUTHORIZATION_URL: `${FAKE_GOOGLE_ORIGIN}/authorize`,
@@ -80,7 +85,7 @@ export default defineConfig({
       wait: { stdout: /email worker started/ },
       reuseExistingServer: false,
       timeout: 60_000,
-      env: API_ENV,
+      env: WORKER_ENV,
     },
     {
       command: isCI

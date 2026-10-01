@@ -59,7 +59,12 @@ export class DrizzleTwoFactorRepository implements TwoFactorRepository {
     return advanced.length > 0;
   }
 
-  async delete(userId: string): Promise<void> {
-    await this.db.delete(userTwoFactor).where(eq(userTwoFactor.userId, userId));
+  /** Of two concurrent deletes, the second waits for the first's row lock and resolves false. */
+  async delete(userId: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(userTwoFactor)
+      .where(eq(userTwoFactor.userId, userId))
+      .returning({ userId: userTwoFactor.userId });
+    return deleted.length > 0;
   }
 }

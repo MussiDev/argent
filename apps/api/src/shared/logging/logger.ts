@@ -25,6 +25,11 @@ const SECRET_KEYS = [
   'clientSecret',
   'binding',
   'nonce',
+  // Two-factor secrets (DISC-001-01c): the TOTP secret, its URI and the recovery codes. TOTP and
+  // recovery codes sent by the user travel as `code`, redacted below at body level.
+  'secret',
+  'otpauthUri',
+  'recoveryCodes',
 ];
 
 /**

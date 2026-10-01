@@ -44,7 +44,7 @@
 - **Tampering:** enable requires a pending secret and a valid code and activates only the exact secret it verified; setup cannot replace an enabled secret (409, R-52).
 - **Repudiation:** enable and disable are logged with the user id.
 - **Information Disclosure:** recovery codes are returned only in the enable response; status returns a count (AC-02).
-- **Denial of Service:** disable goes through the same per-user second-factor limit, so it is not a faster code oracle (R-40, R-45).
+- **Denial of Service:** disable has its own per-user limits (`two_factor_disable_user` 5 per 15 minutes, `two_factor_disable_user_24h` 20 per 24 hours), so it is not a faster code oracle and cannot exhaust the sign-in second step (R-40, R-45, R-51).
 - **Elevation of Privilege:** disabling needs a valid TOTP or recovery code; enabling and disabling end the other sessions and email the owner (R-46).
 
 ### `apps/api/src/identity/application/verify-second-factor.ts` + `POST /auth/2fa/verify` + the modified `POST /auth/sign-in` and `GET /auth/google/callback`

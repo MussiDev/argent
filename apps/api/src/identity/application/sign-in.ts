@@ -1,26 +1,11 @@
 import { Email } from '../domain/email';
 import { RateLimited } from '../domain/errors';
 import { UNKNOWN_IP } from './client-ip';
-import type { AttemptLimiter, AttemptPolicy, AttemptResult } from './ports/attempt-limiter';
+import { SIGN_IN_ACCOUNT_POLICY, SIGN_IN_IP_POLICY } from './attempt-policies';
+import type { AttemptLimiter, AttemptResult } from './ports/attempt-limiter';
 import type { PasswordHasher } from './ports/password-hasher';
 import type { User, UserRepository } from './ports/user-repository';
 import type { SessionTokens, StartSession } from './start-session';
-
-const FIFTEEN_MINUTES = 15 * 60;
-
-/** NFR-03 / threat R-01: 5 failed sign-ins per account (normalized email) per 15 minutes. */
-export const SIGN_IN_ACCOUNT_POLICY: AttemptPolicy = {
-  kind: 'sign_in_account',
-  limit: 5,
-  windowSeconds: FIFTEEN_MINUTES,
-};
-
-/** NFR-03 / threat R-01: 20 failed sign-ins per client IP per 15 minutes. */
-export const SIGN_IN_IP_POLICY: AttemptPolicy = {
-  kind: 'sign_in_ip',
-  limit: 20,
-  windowSeconds: FIFTEEN_MINUTES,
-};
 
 export interface SignInDependencies {
   attemptLimiter: AttemptLimiter;

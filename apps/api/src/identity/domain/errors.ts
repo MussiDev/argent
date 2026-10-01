@@ -85,3 +85,51 @@ export class InvalidCredentials extends AppError {
     super('INVALID_CREDENTIALS');
   }
 }
+
+/** A wrong or replayed TOTP code, or an unknown or used recovery code, in settings (enable, disable). */
+export class TotpInvalid extends AppError {
+  constructor() {
+    super('TOTP_INVALID');
+  }
+}
+
+export class TwoFactorAlreadyEnabled extends AppError {
+  constructor() {
+    super('TWO_FACTOR_ALREADY_ENABLED');
+  }
+}
+
+export class TwoFactorNotEnabled extends AppError {
+  constructor() {
+    super('TWO_FACTOR_NOT_ENABLED');
+  }
+}
+
+/** Enable without a pending setup, or with a pending secret replaced meanwhile (threat R-52). */
+export class TwoFactorSetupRequired extends AppError {
+  constructor() {
+    super('TWO_FACTOR_SETUP_REQUIRED');
+  }
+}
+
+/** No encryption key for TOTP secrets is configured (only possible outside production). */
+export class TwoFactorUnavailable extends AppError {
+  constructor(options?: { cause?: unknown }) {
+    super('TWO_FACTOR_UNAVAILABLE');
+    if (options?.cause !== undefined) this.cause = options.cause;
+  }
+}
+
+/** A wrong or replayed code at the second step of sign-in (AC-05). */
+export class SecondFactorInvalid extends AppError {
+  constructor() {
+    super('SECOND_FACTOR_INVALID');
+  }
+}
+
+/** The sign-in challenge is missing, expired, used up or no longer valid for the user. */
+export class SecondFactorExpired extends AppError {
+  constructor() {
+    super('SECOND_FACTOR_EXPIRED');
+  }
+}

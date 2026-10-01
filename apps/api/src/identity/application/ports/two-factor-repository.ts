@@ -23,5 +23,6 @@ export interface TwoFactorRepository {
   activate(userId: string, sealed: string, at: Date): Promise<boolean>;
   /** Records `step` as used only when it is later than the last one; atomic (threat R-41). */
   advanceLastUsedStep(userId: string, step: number): Promise<boolean>;
-  delete(userId: string): Promise<void>;
+  /** Removes the user's 2FA; resolves false when there was nothing to remove. */
+  delete(userId: string): Promise<boolean>;
 }

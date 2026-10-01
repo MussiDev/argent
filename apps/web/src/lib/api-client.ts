@@ -63,6 +63,14 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
   VALIDATION_FAILED: 'validationFailed',
   NOT_FOUND: 'unexpected',
   INTERNAL: 'unexpected',
+  // Two-factor codes: no screen uses them yet; their own message keys come with those screens.
+  TOTP_INVALID: 'unexpected',
+  TWO_FACTOR_ALREADY_ENABLED: 'unexpected',
+  TWO_FACTOR_NOT_ENABLED: 'unexpected',
+  TWO_FACTOR_SETUP_REQUIRED: 'unexpected',
+  TWO_FACTOR_UNAVAILABLE: 'retryLater',
+  SECOND_FACTOR_INVALID: 'unexpected',
+  SECOND_FACTOR_EXPIRED: 'unexpected',
 };
 
 function failure(code: ApiFailureCode): ApiFailure {

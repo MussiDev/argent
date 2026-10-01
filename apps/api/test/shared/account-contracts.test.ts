@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ACCOUNT_CURRENCIES,
   ACCOUNT_TYPES,
+  MINOR_UNITS_MAX,
   MINOR_UNITS_MIN,
+  OPENING_BALANCE_LIMIT_MINOR_UNITS,
   accountIdParamsSchema,
   accountNameSchema,
   accountResponseSchema,
@@ -75,14 +77,42 @@ describe('createAccountRequestSchema', () => {
     expect(createAccountRequestSchema.parse(valid).openingBalance).toBe('0');
   });
 
-  it('accepts a negative opening balance and the int64 minimum', () => {
+  it('accepts a negative opening balance', () => {
     expect(
       createAccountRequestSchema.parse({ ...valid, openingBalance: '-150000' }).openingBalance,
     ).toBe('-150000');
+  });
+
+  it('accepts an opening balance of exactly plus and minus 10^15 (AC-19)', () => {
+    expect(OPENING_BALANCE_LIMIT_MINOR_UNITS).toBe(10n ** 15n);
     expect(
-      createAccountRequestSchema.parse({ ...valid, openingBalance: MINOR_UNITS_MIN.toString() })
+      createAccountRequestSchema.parse({ ...valid, openingBalance: '1000000000000000' })
         .openingBalance,
-    ).toBe('-9223372036854775808');
+    ).toBe('1000000000000000');
+    expect(
+      createAccountRequestSchema.parse({ ...valid, openingBalance: '-1000000000000000' })
+        .openingBalance,
+    ).toBe('-1000000000000000');
+  });
+
+  it.each(['1000000000000001', '-1000000000000001'])(
+    'rejects opening balance %s beyond the 10^15 bound and names openingBalance (AC-18)',
+    (openingBalance) => {
+      const result = createAccountRequestSchema.safeParse({ ...valid, openingBalance });
+      expect(result.success).toBe(false);
+      expect(failedPaths(result)).toContain('openingBalance');
+      expect(
+        result.error?.issues.find((issue) => issue.path.join('.') === 'openingBalance')?.message,
+      ).toBe('Opening balance must be within plus or minus 1000000000000000 minor units');
+    },
+  );
+
+  it('rejects the int64 extremes as an opening balance', () => {
+    for (const openingBalance of [MINOR_UNITS_MAX.toString(), MINOR_UNITS_MIN.toString()]) {
+      const result = createAccountRequestSchema.safeParse({ ...valid, openingBalance });
+      expect(result.success).toBe(false);
+      expect(failedPaths(result)).toContain('openingBalance');
+    }
   });
 
   it('rejects values outside int64', () => {
@@ -97,7 +127,7 @@ describe('createAccountRequestSchema', () => {
   });
 
   it('trims and NFC-normalizes the name', () => {
-    const result = createAccountRequestSchema.parse({ ...valid, name: '  Café  ' });
+    const result = createAccountRequestSchema.parse({ ...valid, name: '  Cafe\u0301  ' });
     expect(result.name).toBe('Café');
   });
 });
@@ -117,6 +147,47 @@ describe('accountNameSchema', () => {
     expect(accountNameSchema.safeParse('').success).toBe(false);
     expect(accountNameSchema.safeParse('   ').success).toBe(false);
     expect(accountNameSchema.safeParse(5).success).toBe(false);
+  });
+
+  const forbidden: [string, string][] = [
+    ['zero-width space', 'Ca\u200Bsh'],
+    ['right-to-left override', 'Ca\u202Esh'],
+    ['NUL character', 'Ca\u0000sh'],
+    ['soft hyphen', 'Ca\u00ADsh'],
+    ['leading BOM', '\uFEFFCaja'],
+    ['trailing newline', 'Caja\n'],
+    ['leading tab', '\tCaja'],
+    ['tab inside', 'Ca\tja'],
+    ['leading zero-width space', '\u200BCaja'],
+    ['trailing right-to-left override', 'Caja\u202E'],
+  ];
+
+  it.each(forbidden)('rejects a name with a %s for create and rename (AC-20)', (_label, name) => {
+    expect(accountNameSchema.safeParse(name).success).toBe(false);
+    const create = createAccountRequestSchema.safeParse({ ...valid, name });
+    expect(create.success).toBe(false);
+    expect(failedPaths(create)).toContain('name');
+    const rename = renameAccountRequestSchema.safeParse({ name });
+    expect(rename.success).toBe(false);
+    expect(failedPaths(rename)).toContain('name');
+  });
+
+  it('still trims plain spaces at the edges', () => {
+    expect(accountNameSchema.parse('  Caja  ')).toBe('Caja');
+  });
+
+  const emptyNames: [string, string][] = [
+    ['only spaces', '     '],
+    ['only zero-width characters', '\u200B\u200C\u200D\uFEFF'],
+    ['spaces and zero-width characters', '  \u200B \u200D  '],
+  ];
+
+  it.each(emptyNames)('rejects a name of %s as empty (AC-21)', (_label, name) => {
+    const result = accountNameSchema.safeParse(name);
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toContain('1 to 50');
+    expect(failedPaths(createAccountRequestSchema.safeParse({ ...valid, name }))).toContain('name');
+    expect(failedPaths(renameAccountRequestSchema.safeParse({ name }))).toContain('name');
   });
 });
 
@@ -215,6 +286,43 @@ describe('response schemas', () => {
     };
     expect(listAccountsResponseSchema.safeParse(body).success).toBe(true);
     expect(listAccountsResponseSchema.safeParse({ ...body, totals: { ARS: '1' } }).success).toBe(
+      false,
+    );
+  });
+
+  it('accepts a total of 9,300 times 10^15 and a balance beyond int64 (AC-22)', () => {
+    const huge = (9_300n * 10n ** 15n).toString();
+    const beyond = (MINOR_UNITS_MAX + 1n).toString();
+    const body = {
+      items: [{ ...account, balance: beyond }],
+      totals: { ARS: huge, USD: `-${huge}` },
+      total: 1,
+      limit: 50,
+      offset: 0,
+    };
+    expect(listAccountsResponseSchema.safeParse(body).success).toBe(true);
+    expect(accountResponseSchema.safeParse({ ...account, balance: beyond }).success).toBe(true);
+  });
+
+  it('rejects a non-integer or 41-digit balance or total (AC-22)', () => {
+    const body = {
+      items: [account],
+      totals: { ARS: '1', USD: '0' },
+      total: 1,
+      limit: 50,
+      offset: 0,
+    };
+    for (const bad of ['1.5', 'abc', '', '9'.repeat(41)]) {
+      expect(accountResponseSchema.safeParse({ ...account, balance: bad }).success).toBe(false);
+      expect(
+        listAccountsResponseSchema.safeParse({ ...body, totals: { ARS: bad, USD: '0' } }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('keeps the int64 validator on openingBalance of the response', () => {
+    const beyond = (MINOR_UNITS_MAX + 1n).toString();
+    expect(accountResponseSchema.safeParse({ ...account, openingBalance: beyond }).success).toBe(
       false,
     );
   });

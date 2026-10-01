@@ -17,6 +17,18 @@ export const minorUnitsStringSchema = z
     message: 'Amount must be an integer string within the signed 64-bit range',
   });
 
+const EXACT_INTEGER_PATTERN = /^-?(0|[1-9]\d{0,39})$/;
+
+/**
+ * A decimal integer string of at most 40 digits with no int64 range. Only for derived values that
+ * are never stored (balances, totals); stored amounts use `minorUnitsStringSchema`.
+ */
+export const exactIntegerStringSchema = z
+  .string()
+  .refine((text) => EXACT_INTEGER_PATTERN.test(text), {
+    message: 'Value must be an integer string of at most 40 digits',
+  });
+
 export function parseMinorUnits(text: string): bigint {
   return BigInt(minorUnitsStringSchema.parse(text));
 }
@@ -37,6 +49,20 @@ export function sumMinorUnits(values: readonly bigint[]): bigint {
   let total = 0n;
   for (const value of values) {
     total = addMinorUnits(total, value);
+  }
+  return total;
+}
+
+/** Plain bigint addition with no range check: for derived values that are never stored. */
+export function addExact(a: bigint, b: bigint): bigint {
+  return a + b;
+}
+
+/** Plain bigint sum with no range check and no RangeError: for derived values never stored. */
+export function sumExact(values: readonly bigint[]): bigint {
+  let total = 0n;
+  for (const value of values) {
+    total = addExact(total, value);
   }
   return total;
 }

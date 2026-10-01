@@ -2,14 +2,49 @@ import { describe, expect, it } from 'vitest';
 import {
   MINOR_UNITS_MAX,
   MINOR_UNITS_MIN,
+  addExact,
   addMinorUnits,
+  exactIntegerStringSchema,
   formatMinorUnitsString,
   formatMoney,
   minorUnitsStringSchema,
   parseAmountInput,
   parseMinorUnits,
+  sumExact,
   sumMinorUnits,
 } from '@argent/shared';
+
+describe('exact arithmetic for derived values', () => {
+  it('sumExact over 100,000 amounts of 10^15 equals exactly 10^20 with no error', () => {
+    const values = Array.from({ length: 100_000 }, () => 10n ** 15n);
+    expect(sumExact(values)).toBe(10n ** 20n);
+  });
+
+  it('sumExact of an empty list is 0n', () => {
+    expect(sumExact([])).toBe(0n);
+  });
+
+  it('addExact of two int64 maxima equals twice the maximum with no error', () => {
+    expect(addExact(MINOR_UNITS_MAX, MINOR_UNITS_MAX)).toBe(MINOR_UNITS_MAX * 2n);
+    expect(addExact(MINOR_UNITS_MIN, MINOR_UNITS_MIN)).toBe(MINOR_UNITS_MIN * 2n);
+  });
+
+  it('exactIntegerStringSchema accepts integers beyond int64 up to 40 digits', () => {
+    expect(exactIntegerStringSchema.safeParse('0').success).toBe(true);
+    expect(exactIntegerStringSchema.safeParse('-12').success).toBe(true);
+    expect(exactIntegerStringSchema.safeParse('9223372036854775808').success).toBe(true);
+    expect(exactIntegerStringSchema.safeParse('9'.repeat(40)).success).toBe(true);
+    expect(exactIntegerStringSchema.safeParse(`-${'9'.repeat(40)}`).success).toBe(true);
+  });
+
+  it('exactIntegerStringSchema rejects 41 digits, decimals, junk and non-strings', () => {
+    expect(exactIntegerStringSchema.safeParse('9'.repeat(41)).success).toBe(false);
+    for (const bad of ['1.5', '1e3', '', '-', 'abc', '007', '-0x1', ' 1']) {
+      expect(exactIntegerStringSchema.safeParse(bad).success).toBe(false);
+    }
+    expect(exactIntegerStringSchema.safeParse(5).success).toBe(false);
+  });
+});
 
 describe('sumMinorUnits', () => {
   it('sums 100,000 generated bigint amounts to the exact total', () => {

@@ -27,6 +27,12 @@ describe('displayNameSchema', () => {
     expect(displayNameSchema.safeParse('😀'.repeat(51)).success).toBe(false);
   });
 
+  it('rejects a name containing a NUL character (AC-02)', () => {
+    expect(displayNameSchema.safeParse('Ana\u0000').success).toBe(false);
+    expect(displayNameSchema.safeParse('A\u0000na').success).toBe(false);
+    expect(displayNameSchema.safeParse('A\u0000').success).toBe(false);
+  });
+
   it('rejects an oversized string by its UTF-16 length', () => {
     expect(displayNameSchema.safeParse('a'.repeat(5000)).success).toBe(false);
   });

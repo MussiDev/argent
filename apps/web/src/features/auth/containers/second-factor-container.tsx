@@ -30,6 +30,7 @@ export function SecondFactorContainer() {
       setErrors(
         toValidationErrors(
           parsed.error,
+          {},
           mode === 'totp' ? 'totpCodeFormat' : 'secondFactorCodeFormat',
         ),
       );

@@ -6,6 +6,9 @@ import { resetAttemptLimits } from './support/database';
 const es = catalogs.es;
 const en = catalogs.en;
 
+// The name every freshly registered user typed on the registration form.
+const SIGN_UP_NAME = 'Ana Pérez';
+
 test.use({ locale: 'es-AR', timezoneId: 'America/Cordoba' });
 
 test.beforeEach(async () => {
@@ -29,7 +32,7 @@ test('a verified user edits the name and preferences, signs out and in, and sees
   );
 
   const name = page.getByLabel(es.profile.account.displayName, { exact: true });
-  await expect(name).toHaveValue('');
+  await expect(name).toHaveValue(SIGN_UP_NAME);
   await expect(page.getByText(email)).toBeVisible();
   await expect(page.getByText(es.profile.account.twoFactorOff)).toBeVisible();
 
@@ -53,6 +56,22 @@ test('a verified user edits the name and preferences, signs out and in, and sees
   await expect(page.getByLabel(es.profile.preferences.defaultRateType)).toHaveValue('mep');
   await expect(page.getByLabel(es.profile.preferences.displayCurrency)).toHaveValue('USD');
   await expect(page.getByLabel(es.profile.preferences.timeZone)).toHaveValue('Europe/Madrid');
+});
+
+test('a visitor registers with a display name, verifies, signs in and sees the name on the profile screen (AC-03)', async ({
+  page,
+}) => {
+  const email = uniqueEmail('profile-signup-name');
+  await registerAndVerify(page, email, 'Lucía Gómez');
+  await signIn(page, email);
+  await expect(page).toHaveURL(/\/es$/);
+
+  await page.getByRole('link', { name: es.app.nav.profile }).click();
+
+  await expect(page).toHaveURL(/\/es\/settings\/profile$/);
+  await expect(page.getByLabel(es.profile.account.displayName, { exact: true })).toHaveValue(
+    'Lucía Gómez',
+  );
 });
 
 test('an empty name is refused on the client with a field message (AC-03)', async ({ page }) => {

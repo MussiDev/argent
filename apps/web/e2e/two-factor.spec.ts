@@ -18,6 +18,7 @@ function uniqueEmail(label: string, domain = 'e2e.argent.test'): string {
 
 async function registerAndVerify(page: Page, email: string): Promise<void> {
   await page.goto('/es/register');
+  await page.getByLabel(es.auth.fields.displayName).fill('Ana Pérez');
   await page.getByLabel(es.auth.fields.email).fill(email);
   await page.getByLabel(es.auth.fields.password).fill(PASSWORD);
   await page.getByRole('button', { name: es.auth.register.submit }).click();

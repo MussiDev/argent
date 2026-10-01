@@ -55,6 +55,7 @@ describe('auth forms show API failures', () => {
     [503, 'PASSWORD_CHECK_UNAVAILABLE'],
   ] as const)('%i %s shows the retry-later message on registration', async (status, code) => {
     const result = await apiAnswering(errorResponse(status, code)).register({
+      displayName: 'Ana',
       email: 'ana@example.com',
       password: 'correct horse battery',
     });

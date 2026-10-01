@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import type { ApiErrorKey, ApiFailure } from '@/lib/api-client';
+import { displayNameErrorKind } from '@/lib/display-name-error';
 
 /** Keys of `profile.errors` in the i18n catalogs that only client-side validation produces. */
 export type ProfileFieldErrorKey = 'displayNameRequired' | 'displayNameTooLong' | 'timeZoneInvalid';
@@ -17,7 +18,9 @@ function displayNameKey(issue: z.core.$ZodIssue, input: unknown): ProfileFieldEr
   if (issue.code === 'too_big') return 'displayNameTooLong';
   // The shared schema reports empty and too long with the same refinement; the value tells which.
   if (issue.code === 'custom' && typeof input === 'string') {
-    return Array.from(input.trim()).length === 0 ? 'displayNameRequired' : 'displayNameTooLong';
+    return displayNameErrorKind(input) === 'required'
+      ? 'displayNameRequired'
+      : 'displayNameTooLong';
   }
   return 'displayNameRequired';
 }

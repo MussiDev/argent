@@ -131,7 +131,7 @@ export function SecuritySettingsContainer() {
   async function enable(code: string) {
     const parsed = twoFactorEnableRequestSchema.safeParse({ code });
     if (!parsed.success) {
-      setErrors(toValidationErrors(parsed.error, 'totpCodeFormat'));
+      setErrors(toValidationErrors(parsed.error, {}, 'totpCodeFormat'));
       return;
     }
     setPending(true);
@@ -153,7 +153,7 @@ export function SecuritySettingsContainer() {
   async function disable(code: string) {
     const parsed = twoFactorDisableRequestSchema.safeParse({ code });
     if (!parsed.success) {
-      setErrors(toValidationErrors(parsed.error, 'secondFactorCodeFormat'));
+      setErrors(toValidationErrors(parsed.error, {}, 'secondFactorCodeFormat'));
       return;
     }
     setPending(true);

@@ -38,6 +38,7 @@ describe('api client', () => {
     const { client, fetch } = clientWith(jsonResponse(202, { status: 'verification_sent' }));
 
     const result = await client.register({
+      displayName: 'Ana',
       email: 'ana@example.com',
       password: 'correct horse battery',
       timeZone: 'America/Cordoba',
@@ -53,6 +54,7 @@ describe('api client', () => {
     expect(headers.get('X-Requested-With')).toBe('argent');
     expect(headers.get('Content-Type')).toBe('application/json');
     expect(JSON.parse(init.body as string)).toEqual({
+      displayName: 'Ana',
       email: 'ana@example.com',
       password: 'correct horse battery',
       timeZone: 'America/Cordoba',
@@ -73,7 +75,11 @@ describe('api client', () => {
   ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
     const { client } = clientWith(jsonResponse(status, { code }));
 
-    const result = await client.register({ email: 'ana@example.com', password: 'x' });
+    const result = await client.register({
+      displayName: 'Ana',
+      email: 'ana@example.com',
+      password: 'x',
+    });
 
     expect(result).toEqual({ ok: false, code, messageKey });
   });
@@ -276,7 +282,11 @@ describe('api client', () => {
   it('never follows redirects', async () => {
     const { client, fetch } = clientWith(jsonResponse(202, { status: 'verification_sent' }));
 
-    await client.register({ email: 'ana@example.com', password: 'correct horse battery' });
+    await client.register({
+      displayName: 'Ana',
+      email: 'ana@example.com',
+      password: 'correct horse battery',
+    });
 
     expect(requestAt(fetch, 0).init.redirect).toBe('error');
   });

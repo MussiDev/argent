@@ -18,6 +18,7 @@
   },
   "auth": {
     "fields": {
+      "displayName": "Display name",
       "email": "Email",
       "password": "Password",
       "newPassword": "New password"
@@ -105,6 +106,8 @@
     "passwordRequired": "Enter a password.",
     "emailRequired": "Enter your email.",
     "emailTooLong": "The email is too long.",
+    "displayNameRequired": "Enter a display name.",
+    "displayNameTooLong": "The display name can be at most 50 characters long.",
     "tokenInvalid": "This link is invalid or has expired.",
     "retryLater": "Too many attempts or the service is busy. Try again in a few minutes.",
     "network": "We could not connect. Check your connection and try again.",

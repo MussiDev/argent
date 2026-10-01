@@ -57,7 +57,12 @@ const FORMS: [string, (errors: FormErrors) => ReactElement][] = [
 ];
 
 const INVALID: FormErrors = {
-  fields: { email: 'emailRequired', password: 'passwordTooShort', newPassword: 'passwordTooShort' },
+  fields: {
+    displayName: 'displayNameRequired',
+    email: 'emailRequired',
+    password: 'passwordTooShort',
+    newPassword: 'passwordTooShort',
+  },
 };
 
 function describedByIds(html: string): string[] {
@@ -112,5 +117,23 @@ describe('auth form accessibility', () => {
     expect(link?.[1]).toBe(GOOGLE_START_URL);
     expect(link?.[2]).toMatch(/<svg[^>]*aria-hidden="true"/);
     expect(link?.[2]?.replace(/<svg.*<\/svg>/s, '').trim()).toBe(es.auth.google.continue);
+  });
+
+  it('describes an invalid display name with its error message', () => {
+    const html = render(
+      <RegisterForm
+        pending={false}
+        errors={{ fields: { displayName: 'displayNameTooLong' } }}
+        onSubmit={noop}
+      />,
+    );
+
+    expect(html).toContain(`>${es.auth.fields.displayName}`);
+    const input = /<input[^>]*name="displayName"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(input).toContain('aria-invalid="true"');
+    const descriptions = describedByIds(input).map(
+      (id) => new RegExp(`<p[^>]*id="${id}"[^>]*>([^<]*)</p>`).exec(html)?.[1],
+    );
+    expect(descriptions).toContain(es.errors.displayNameTooLong);
   });
 });

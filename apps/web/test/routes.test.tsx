@@ -11,6 +11,7 @@ import RegisterPage from '../src/app/[locale]/(auth)/register/page';
 import ResetPasswordPage from '../src/app/[locale]/(auth)/reset-password/page';
 import SignInPage from '../src/app/[locale]/(auth)/sign-in/page';
 import SecondFactorPage from '../src/app/[locale]/(auth)/sign-in/second-factor/page';
+import ProfilePage from '../src/app/[locale]/(app)/settings/profile/page';
 import SecurityPage from '../src/app/[locale]/(app)/settings/security/page';
 import VerifyEmailPage from '../src/app/[locale]/(auth)/verify-email/page';
 import { CATALOGS, renderApp, stubApi, VALID_TOKEN } from './support/render-app';
@@ -81,5 +82,35 @@ describe('routes', () => {
     expect(await screen.findByRole('heading', { level: 1, name: es.security.title })).toBeDefined();
     expect(await screen.findByText(es.security.twoFactor.off)).toBeDefined();
     expect(calls.map((call) => call.path)).toEqual(['/auth/session', '/auth/2fa']);
+  });
+
+  it('the profile screen is only shown behind the session guard', async () => {
+    const { calls } = stubApi({
+      'GET /auth/session': SESSION,
+      'GET /profile': {
+        status: 200,
+        body: {
+          displayName: null,
+          email: 'ana@example.com',
+          twoFactorEnabled: false,
+          preferences: {
+            defaultRateType: 'blue',
+            displayCurrency: 'ARS',
+            timeZone: 'UTC',
+            language: 'es',
+          },
+        },
+      },
+    });
+    renderApp(
+      <AppLayout>
+        <ProfilePage />
+      </AppLayout>,
+    );
+
+    expect(screen.queryByRole('heading', { name: es.profile.title })).toBeNull();
+    expect(await screen.findByRole('heading', { level: 1, name: es.profile.title })).toBeDefined();
+    expect(await screen.findByLabelText(es.profile.account.displayName)).toBeDefined();
+    expect(calls.map((call) => call.path)).toEqual(['/auth/session', '/profile']);
   });
 });

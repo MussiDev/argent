@@ -13,10 +13,14 @@
 | DISC-001-01a | Email & Password Authentication (+ project foundation) | prd-DISC-001-01a.md | none | done — merged to main (PR #2) |
 | DISC-001-01b | Google Sign-In | prd-DISC-001-01b.md | depends on a | done — merged to main (PR #5) |
 | DISC-001-01c | Two-Factor Authentication | prd-DISC-001-01c.md | depends on a | done — draft PR #8, rebased on main; merges when the PR merges (needs TOTP_ENCRYPTION_KEY on the Railway API service; check `.railway/railway.ts` preserves it) |
-| DISC-001-01d | Profile, Preferences & Account Deletion | prd-DISC-001-01d.md | depends on a; shows 2FA status from c | active |
+| DISC-001-01d | Profile & Preferences | prd-DISC-001-01d.md | depends on a; shows 2FA status from c (merged) | done — draft PR; merges when the PR merges, after DISC-001-02a (migration 0006_accounts; this ticket's migration is 0007 and its journal `when` must stay later than 0006's) |
+| DISC-001-01e | Display Name at Sign-Up | prd-DISC-001-01e.md | depends on d (display name storage), a and b | active |
+| DISC-001-01f | Account Deletion | prd-DISC-001-01f.md | depends on a, b, c and d | pending |
 
 ## Suggested implementation order
-a → d → b → c
+a → d → b → c → e → f
+
+d comes before e and f; e and f are independent of each other.
 
 ## Original context
 PRD 01 of discovery DISC-001 defined identity and access for the finance PWA: open registration
@@ -26,6 +30,11 @@ with email/password or Google, optional TOTP 2FA, sessions, password reset, per-
 first ticket also has to lay the project foundation, so it was split on 2026-09-26 (user
 decision). The full original text is in git history (commit on `main`, file
 `docs/ddw/prd/prd-DISC-001-01.md` before the split).
+
+On 2026-10-01 the user split DISC-001-01d again, because new requirements (a second factor and a
+Google re-authentication for account deletion, and a display name captured at sign-up) would have
+put it at about 26 acceptance criteria. Account deletion moved to DISC-001-01f and the display name
+at sign-up to DISC-001-01e; DISC-001-01d keeps profile and preferences.
 
 ## Traceability: original ID → sub-ticket ID
 
@@ -44,7 +53,7 @@ Other PRDs of DISC-001 reference this PRD as "PRD 01, FR-xx"; use this table to 
 | FR-09 | DISC-001-01d FR-02 |
 | FR-10 | DISC-001-01d FR-04 |
 | FR-11 | DISC-001-01b FR-04 |
-| FR-12 | DISC-001-01d FR-08 |
+| FR-12 | DISC-001-01f FR-01 |
 | FR-13 | DISC-001-01a FR-07 |
 | FR-14 | DISC-001-01b FR-02 |
 | FR-15 | DISC-001-01b FR-03 |
@@ -82,7 +91,7 @@ Other PRDs of DISC-001 reference this PRD as "PRD 01, FR-xx"; use this table to 
 | AC-20 | DISC-001-01a AC-18 |
 | AC-21 | DISC-001-01b AC-06 |
 | AC-22 | DISC-001-01b AC-07 |
-| AC-23 | DISC-001-01d AC-10 |
+| AC-23 | DISC-001-01f AC-01 |
 | AC-24 | DISC-001-01a AC-14 |
 | AC-25 | DISC-001-01a AC-15 |
 | AC-26 | DISC-001-01b AC-03 |
@@ -97,11 +106,15 @@ Other PRDs of DISC-001 reference this PRD as "PRD 01, FR-xx"; use this table to 
 | AC-35 | DISC-001-01a AC-11 |
 | AC-36 | DISC-001-01a AC-03 |
 | AC-37 | DISC-001-01b AC-05 |
-| AC-38 | DISC-001-01d AC-11 |
+| AC-38 | DISC-001-01f AC-02 |
 | AC-39 | DISC-001-01d AC-07 |
 | AC-40 | DISC-001-01d AC-08 |
 | AC-41 | DISC-001-01a AC-19 |
 | AC-42 | DISC-001-01a AC-20 |
-| AC-43 | DISC-001-01d AC-09 |
+| AC-43 | DISC-001-01d AC-09 and AC-10 |
 | AC-44 | DISC-001-01a AC-21 |
 | AC-45 | DISC-001-01a AC-22 |
+
+Requirements added after the original text have no original ID: DISC-001-01d FR-08 and AC-10 (amount
+formatter), DISC-001-01e (all of it) and DISC-001-01f FR-02 to FR-04, NFR-02 to NFR-04 and AC-03 to
+AC-10.

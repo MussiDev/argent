@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { House, ShieldCheck } from 'lucide-react';
+import { House, ShieldCheck, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Link } from '@/i18n/navigation';
@@ -73,6 +73,14 @@ export function AuthenticatedShell({
           >
             <ShieldCheck aria-hidden />
             {t('nav.security')}
+          </Link>
+          <Link
+            href="/settings/profile"
+            aria-current={currentPath === '/settings/profile' ? 'page' : undefined}
+            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+          >
+            <UserRound aria-hidden />
+            {t('nav.profile')}
           </Link>
         </nav>
         <SignOutButton pending={signingOut} onSignOut={onSignOut} />

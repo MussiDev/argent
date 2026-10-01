@@ -183,9 +183,11 @@
     "errors": {
       "nameRequired": "Ingresa un nombre.",
       "nameTooLong": "El nombre puede tener como máximo {max} caracteres.",
+      "nameInvalidCharacters": "El nombre contiene caracteres que no se pueden mostrar. Quítalos e inténtalo de nuevo.",
       "typeRequired": "Elige un tipo de cuenta.",
       "currencyRequired": "Elige una moneda.",
-      "amountInvalid": "Ingresa un monto válido, por ejemplo 1.500,00."
+      "amountInvalid": "Ingresa un monto válido, por ejemplo 1.500,00.",
+      "amountOutOfRange": "El saldo inicial no puede superar {max} en valor absoluto."
     }
   },
   "security": {

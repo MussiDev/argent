@@ -165,6 +165,21 @@ describe('AccountsContainer', () => {
     expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
   });
 
+  it('does not send a new name with a zero-width character and says why (AC-20)', async () => {
+    const { calls } = stubApi({ [ACTIVE]: list([CAJA]) });
+    renderApp(<AccountsContainer />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: /^Renombrar/ }));
+    const field = screen.getByLabelText(es.accounts.actions.renameField.replace('{name}', 'Caja'));
+    await user.clear(field);
+    await user.type(field, 'Banco\u200B');
+    await user.click(screen.getByRole('button', { name: es.accounts.actions.save }));
+
+    expect(await screen.findByText(es.accounts.errors.nameInvalidCharacters)).toBeDefined();
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
+  });
+
   it('cancels a rename without calling the API', async () => {
     const { calls } = stubApi({ [ACTIVE]: list([CAJA]) });
     renderApp(<AccountsContainer />);
@@ -449,6 +464,105 @@ describe('CreateAccountContainer', () => {
     expect(await screen.findByText(es.accounts.errors.amountInvalid)).toBeDefined();
     expect(amount.getAttribute('aria-invalid')).toBe('true');
     expect(calls).toHaveLength(0);
+  });
+
+  it('shows the invalid-characters message for a name with a zero-width character and sends nothing (AC-20)', async () => {
+    const { calls } = stubApi({});
+    renderApp(<CreateAccountContainer />);
+    const user = userEvent.setup();
+
+    await fillName(user, 'Caja\u200B');
+    await choose(user);
+    await submit(user);
+
+    expect(await screen.findByText(es.accounts.errors.nameInvalidCharacters)).toBeDefined();
+    expect(screen.queryByText(es.accounts.errors.nameRequired)).toBeNull();
+    expect(screen.getByLabelText(es.accounts.fields.name).getAttribute('aria-invalid')).toBe(
+      'true',
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it('shows the name-required message for a zero-width-only name and sends nothing (AC-21)', async () => {
+    const { calls } = stubApi({});
+    renderApp(<CreateAccountContainer />);
+    const user = userEvent.setup();
+
+    await fillName(user, '\u200B\u200B');
+    await choose(user);
+    await submit(user);
+
+    expect(await screen.findByText(es.accounts.errors.nameRequired)).toBeDefined();
+    expect(screen.queryByText(es.accounts.errors.nameInvalidCharacters)).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('shows the out-of-range message with the formatted limit for 10.000.000.000.000,01 typed in es and sends nothing (AC-18)', async () => {
+    const { calls } = stubApi({});
+    renderApp(<CreateAccountContainer />, { locale: 'es' });
+    const user = userEvent.setup();
+
+    await fillName(user, 'Caja');
+    await choose(user);
+    const amount = screen.getByLabelText(es.accounts.fields.openingBalance);
+    await user.clear(amount);
+    await user.type(amount, '10.000.000.000.000,01');
+    await submit(user);
+
+    const message = es.accounts.errors.amountOutOfRange.replace(
+      '{max}',
+      money(10n ** 15n, 'ARS', 'es'),
+    );
+    await waitFor(() => {
+      expect(document.body.textContent.replace(/\s+/g, ' ')).toContain(message);
+    });
+    expect(amount.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.queryByText(es.accounts.errors.amountInvalid)).toBeNull();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses a negative amount beyond the limit and formats the limit in the account currency (AC-19)', async () => {
+    const { calls } = stubApi({});
+    renderApp(<CreateAccountContainer />, { locale: 'en' });
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText(en.accounts.fields.name), 'Card');
+    await user.selectOptions(screen.getByLabelText(en.accounts.fields.type), 'cash');
+    await user.selectOptions(screen.getByLabelText(en.accounts.fields.currency), 'USD');
+    const amount = screen.getByLabelText(en.accounts.fields.openingBalance);
+    await user.clear(amount);
+    await user.type(amount, '-10,000,000,000,000.01');
+    await user.click(screen.getByRole('button', { name: en.accounts.form.submit }));
+
+    const message = en.accounts.errors.amountOutOfRange.replace(
+      '{max}',
+      money(10n ** 15n, 'USD', 'en'),
+    );
+    await waitFor(() => {
+      expect(document.body.textContent.replace(/\s+/g, ' ')).toContain(message);
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it.each([
+    ['10.000.000.000.000,00', '1000000000000000'],
+    ['-10.000.000.000.000,00', '-1000000000000000'],
+  ])('sends the limit %s as %s minor units (AC-18, AC-19)', async (typed, minor) => {
+    const { calls } = stubApi({ 'POST /accounts': { status: 201, body: account() } });
+    renderApp(<CreateAccountContainer />, { locale: 'es' });
+    const user = userEvent.setup();
+
+    await fillName(user, 'Caja');
+    await choose(user);
+    const amount = screen.getByLabelText(es.accounts.fields.openingBalance);
+    await user.clear(amount);
+    await user.type(amount, typed);
+    await submit(user);
+
+    await waitFor(() => {
+      expect(calls).toHaveLength(1);
+    });
+    expect((calls[0]?.body as { openingBalance?: string }).openingBalance).toBe(minor);
   });
 
   it('shows the duplicate-name message on the name field (AC-13)', async () => {

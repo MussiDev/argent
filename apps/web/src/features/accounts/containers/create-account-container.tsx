@@ -1,8 +1,11 @@
 'use client';
 
 import {
+  OPENING_BALANCE_LIMIT_MINOR_UNITS,
   createAccountRequestSchema,
   formatMinorUnitsString,
+  formatMoney,
+  openingBalanceSchema,
   parseAmountInput,
 } from '@argent/shared';
 import { useLocale } from 'next-intl';
@@ -36,7 +39,11 @@ export function CreateAccountContainer() {
     if (amountText !== '') {
       const minorUnits = parseAmountInput(amountText, locale);
       if (minorUnits === null) fields.openingBalance = 'accounts.errors.amountInvalid';
-      else openingBalance = formatMinorUnitsString(minorUnits);
+      else {
+        const text = formatMinorUnitsString(minorUnits);
+        if (openingBalanceSchema.safeParse(text).success) openingBalance = text;
+        else fields.openingBalance = 'accounts.errors.amountOutOfRange';
+      }
     }
 
     const parsed = createAccountRequestSchema.safeParse({
@@ -71,7 +78,18 @@ export function CreateAccountContainer() {
   async function create(values: AccountFormValues) {
     const { request, fields } = validate(values);
     if (request === undefined) {
-      setErrors({ fields });
+      setErrors({
+        fields,
+        ...(fields.openingBalance === 'accounts.errors.amountOutOfRange'
+          ? {
+              openingBalanceLimit: formatMoney(
+                OPENING_BALANCE_LIMIT_MINOR_UNITS,
+                values.currency === 'USD' ? 'USD' : 'ARS',
+                locale,
+              ),
+            }
+          : {}),
+      });
       return;
     }
     setPending(true);

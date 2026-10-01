@@ -183,9 +183,11 @@
     "errors": {
       "nameRequired": "Enter a name.",
       "nameTooLong": "The name can be at most {max} characters long.",
+      "nameInvalidCharacters": "The name contains characters that cannot be shown. Remove them and try again.",
       "typeRequired": "Choose an account type.",
       "currencyRequired": "Choose a currency.",
-      "amountInvalid": "Enter a valid amount, for example 1,500.00."
+      "amountInvalid": "Enter a valid amount, for example 1,500.00.",
+      "amountOutOfRange": "The opening balance cannot exceed {max} in absolute value."
     }
   },
   "security": {

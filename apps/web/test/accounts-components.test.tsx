@@ -19,7 +19,10 @@ import {
   AccountList,
   type AccountListProps,
 } from '../src/features/accounts/components/account-list';
-import type { AccountFormErrors } from '../src/features/accounts/account-form-errors';
+import {
+  nameErrorMessage,
+  type AccountFormErrors,
+} from '../src/features/accounts/account-form-errors';
 
 afterEach(cleanup);
 
@@ -227,6 +230,85 @@ describe('AccountForm accessibility', () => {
   });
 });
 
+describe('nameErrorMessage', () => {
+  const ZWSP = '\u200B';
+  const RLO = '\u202E';
+
+  it('answers invalid characters for visible text next to a control or format character (AC-20)', () => {
+    expect(nameErrorMessage(`Caja${ZWSP}${RLO}`)).toBe('accounts.errors.nameInvalidCharacters');
+    expect(nameErrorMessage(`Ca${ZWSP}ja`)).toBe('accounts.errors.nameInvalidCharacters');
+    expect(nameErrorMessage('Caja\u0000')).toBe('accounts.errors.nameInvalidCharacters');
+    expect(nameErrorMessage('Caja\u00AD')).toBe('accounts.errors.nameInvalidCharacters');
+  });
+
+  it('answers invalid characters when trim would hide the control or format character', () => {
+    expect(nameErrorMessage('\uFEFFCaja')).toBe('accounts.errors.nameInvalidCharacters');
+    expect(nameErrorMessage('Caja\n')).toBe('accounts.errors.nameInvalidCharacters');
+    expect(nameErrorMessage('\tCaja')).toBe('accounts.errors.nameInvalidCharacters');
+  });
+
+  it('answers required when nothing visible is left (AC-21)', () => {
+    expect(nameErrorMessage(`${ZWSP}${ZWSP}`)).toBe('accounts.errors.nameRequired');
+    expect(nameErrorMessage(`${RLO}\u200D\uFEFF`)).toBe('accounts.errors.nameRequired');
+    expect(nameErrorMessage('   ')).toBe('accounts.errors.nameRequired');
+    expect(nameErrorMessage('')).toBe('accounts.errors.nameRequired');
+  });
+
+  it('answers too long above 50 code points, counting an emoji once', () => {
+    expect(nameErrorMessage('x'.repeat(51))).toBe('accounts.errors.nameTooLong');
+    expect(nameErrorMessage('\u{1F4B0}'.repeat(51))).toBe('accounts.errors.nameTooLong');
+  });
+});
+
+describe('AccountForm new messages', () => {
+  it('shows the invalid-characters message on the name field', () => {
+    renderIntl(
+      <AccountForm
+        pending={false}
+        errors={{ fields: { name: 'accounts.errors.nameInvalidCharacters' } }}
+        onSubmit={noop}
+      />,
+    );
+
+    expect(screen.getByText(es.accounts.errors.nameInvalidCharacters)).toBeDefined();
+    expect(screen.getByLabelText(es.accounts.fields.name).getAttribute('aria-invalid')).toBe(
+      'true',
+    );
+  });
+
+  it('interpolates the formatted limit into the out-of-range message', () => {
+    const limit = money(10n ** 15n, 'ARS', 'es');
+    renderIntl(
+      <AccountForm
+        pending={false}
+        errors={{
+          fields: { openingBalance: 'accounts.errors.amountOutOfRange' },
+          openingBalanceLimit: limit,
+        }}
+        onSubmit={noop}
+      />,
+    );
+
+    const control = screen.getByLabelText(es.accounts.fields.openingBalance);
+    expect(control.getAttribute('aria-invalid')).toBe('true');
+    const ids = (control.getAttribute('aria-describedby') ?? '').split(' ');
+    const texts = ids.map((id) => document.getElementById(id)?.textContent.replace(/\s+/g, ' '));
+    expect(texts).toContain(es.accounts.errors.amountOutOfRange.replace('{max}', limit));
+  });
+});
+
+describe('accounts error copy', () => {
+  it('has the two new messages in both languages, the amount one with the {max} slot', () => {
+    for (const catalog of [es, en]) {
+      expect(catalog.accounts.errors.nameInvalidCharacters.length).toBeGreaterThan(0);
+      expect(catalog.accounts.errors.amountOutOfRange).toContain('{max}');
+    }
+    expect(es.accounts.errors.nameInvalidCharacters).not.toBe(
+      en.accounts.errors.nameInvalidCharacters,
+    );
+  });
+});
+
 describe('AccountList', () => {
   it('shows each balance and both totals formatted for the active locale (AC-11, AC-12)', () => {
     const accounts = [
@@ -253,6 +335,26 @@ describe('AccountList', () => {
       cleanup();
     }
     expect(money(150000n, 'ARS', 'es')).not.toBe(money(150000n, 'ARS', 'en'));
+  });
+
+  it('formats balances and totals beyond int64 without throwing (AC-22, NFR-06)', () => {
+    const accounts = [
+      account({ id: 'a1', name: 'Caja', currency: 'ARS', balance: '9223372036854775808' }),
+    ];
+    for (const locale of ['es', 'en'] as const) {
+      renderIntl(
+        <AccountList
+          {...listProps({ accounts, totals: { ARS: '9300000000000000000', USD: '0' } })}
+        />,
+        locale,
+      );
+      const catalog = CATALOGS[locale];
+      const row = screen.getByRole('listitem', { name: 'Caja' });
+      expect(within(row).getByText(money(9223372036854775808n, 'ARS', locale))).toBeDefined();
+      const totals = screen.getByRole('group', { name: catalog.accounts.list.totals });
+      expect(within(totals).getByText(money(9300000000000000000n, 'ARS', locale))).toBeDefined();
+      cleanup();
+    }
   });
 
   it('shows the type of each account through the catalog', () => {

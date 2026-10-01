@@ -2,7 +2,7 @@
 
 import {
   formatMoney,
-  parseMinorUnits,
+  exactIntegerStringSchema,
   ACCOUNT_CURRENCIES,
   ACCOUNT_NAME_MAX_LENGTH,
   type AccountCurrency,
@@ -114,7 +114,7 @@ export function AccountList(props: AccountListProps) {
   const locale = useLocale();
 
   function money(amount: string, currency: AccountCurrency): string {
-    return formatMoney(parseMinorUnits(amount), currency, locale);
+    return formatMoney(BigInt(exactIntegerStringSchema.parse(amount)), currency, locale);
   }
 
   return (

@@ -85,6 +85,7 @@ export function AccountForm({ pending, errors, onSubmit }: AccountFormProps) {
             label={t('fields.openingBalance')}
             hint={t('fields.openingBalanceHint')}
             error={errors.fields?.openingBalance}
+            max={errors.openingBalanceLimit}
           >
             {(control) => (
               <Input

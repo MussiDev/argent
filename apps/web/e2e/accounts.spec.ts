@@ -195,6 +195,55 @@ test('the form reports a missing name and offers the five account types (AC-02, 
   await expect(page).toHaveURL(/\/es\/accounts\/new$/);
 });
 
+test('the form refuses an opening balance beyond the limit and creates nothing (AC-18, AC-19)', async ({
+  page,
+}) => {
+  await signedInUser(page, 'beyond-limit');
+
+  await fillAccountForm(page, {
+    name: 'Demasiado',
+    type: 'savings',
+    currency: 'ARS',
+    openingBalance: '10.000.000.000.000,01',
+  });
+
+  const message = t.errors.amountOutOfRange.replace('{max}', money(10n ** 15n, 'ARS'));
+  await expect(page.getByText(message)).toBeVisible();
+  await expect(page.getByLabel(t.fields.openingBalance)).toHaveAttribute('aria-invalid', 'true');
+  await expect(page).toHaveURL(/\/es\/accounts\/new$/);
+
+  await page.goto('/es/accounts');
+  await expect(page.getByText(t.list.empty)).toBeVisible();
+  await expect(row(page, 'Demasiado')).toHaveCount(0);
+});
+
+test('the form refuses a name with only zero-width characters and creates nothing (AC-21)', async ({
+  page,
+}) => {
+  await signedInUser(page, 'invisible-name');
+
+  await fillAccountForm(page, { name: '\u200B\u200B', type: 'cash', currency: 'ARS' });
+
+  await expect(page.getByText(t.errors.nameRequired)).toBeVisible();
+  await expect(page.getByLabel(t.fields.name)).toHaveAttribute('aria-invalid', 'true');
+  await expect(page).toHaveURL(/\/es\/accounts\/new$/);
+
+  await page.goto('/es/accounts');
+  await expect(page.getByText(t.list.empty)).toBeVisible();
+});
+
+test('the form refuses a name with a hidden character next to text (AC-20)', async ({ page }) => {
+  await signedInUser(page, 'hidden-character');
+
+  await fillAccountForm(page, { name: 'Caja\u200B', type: 'cash', currency: 'ARS' });
+
+  await expect(page.getByText(t.errors.nameInvalidCharacters)).toBeVisible();
+  await expect(page).toHaveURL(/\/es\/accounts\/new$/);
+
+  await page.goto('/es/accounts');
+  await expect(page.getByText(t.list.empty)).toBeVisible();
+});
+
 test('rename, archive, unarchive and delete update the list (AC-06, AC-07, AC-08, AC-09)', async ({
   page,
 }) => {

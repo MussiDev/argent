@@ -38,6 +38,13 @@ All notable changes to this project are documented in this file. The format foll
   short-lived single-use challenge; failed codes count toward the sign-in limit and are also
   limited per user, so a known email cannot lock its owner out of the second step.
 - DISC-001-01c Enabling or disabling 2FA ends every other session and emails the owner a notice.
+- DISC-001-01d Profile screen and API (`GET` and `PATCH /profile`): display name, read-only email
+  and 2FA status, plus editable default rate type, display currency, time zone (validated against
+  the IANA database) and interface language; changing the language moves to the matching locale
+  route. Migration `0007_profile_display_name` adds a nullable display name; existing accounts keep
+  none until the user sets one.
+- DISC-001-01d Shared integer-only amount formatter that follows the interface language (`1,557.30`
+  in English, `1.557,30` in Spanish).
 
 ### Fixed
 

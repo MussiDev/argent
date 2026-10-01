@@ -14,6 +14,7 @@
 | `apps/api/test/deploy/railway-iac.test.ts` | Block 1 |
 | `package.json` scripts `railway:plan` / `railway:apply` | Block 1, Block 2 |
 | `railway config pull` output in the scratch directory | Block 2 |
+| `scripts/railway-config.mjs` | Block 3 |
 
 ## Trust boundaries
 - Developer machine → Railway API: `railway config plan|apply|pull` carry the user's Railway session
@@ -75,6 +76,19 @@
 - **Denial of Service:** none; a read-only command.
 - **Elevation of Privilege:** none; it reads with the user's permissions.
 
+### `scripts/railway-config.mjs`
+- **Spoofing:** the wrapper runs whatever `railway` the OS lookup returns, and sets `_` so the SDK
+  executes that same binary; a planted `railway` earlier on the PATH would run with the user's
+  Railway session (R-04).
+- **Tampering:** it only accepts `plan` or `apply` and passes the remaining arguments as an argument
+  array, never through a shell, so no argument can inject a command.
+- **Repudiation:** it adds nothing to log; Railway's activity log records each apply.
+- **Information Disclosure:** it prints only the CLI's own output and a fixed not-found message; it
+  reads no variable values.
+- **Denial of Service:** a missing CLI exits with code 1 at once; no retry loop.
+- **Elevation of Privilege:** it runs with the user's own permissions and Railway session; it is
+  never run in CI.
+
 ## Data classification
 | Data | Class | At rest | In transit |
 |---|---|---|---|
@@ -89,7 +103,7 @@
 | R-01 | A secret value is committed in `.railway/railway.ts` | I | M | H | every secret is `preserve()`; the test fails naming any secret with a literal value (AC-05) |
 | R-02 | A tampered or unreviewed definition is applied to production | T | L | H | changes go through a reviewed pull request; apply is manual, never in CI, and only after reading the plan |
 | R-03 | The first apply deletes or recreates a service, or touches services of other projects | D | M | H | the partial owns only the four services; adoption stops on any creation, deletion or change outside the partial (Block 2) |
-| R-04 | A compromised global Railway CLI | S | L | M | the CLI is installed from the official `@railway/cli` package by the user; the repository pins the SDK in the lockfile |
+| R-04 | A compromised or planted Railway CLI, run by the user's shell or by the wrapper through `_` | S | L | M | the CLI is installed from the official `@railway/cli` package by the user; the wrapper only resolves the PATH lookup or the `railway.exe` npm installs beside its own shim, runs it without a shell, and accepts only `plan`/`apply`; the repository pins the SDK in the lockfile |
 | R-05 | Secret values from `railway config pull` leak into the repository | I | M | H | pull runs in the scratch directory outside the repository and the file is deleted after comparison; `git status` is checked |
 
 ## Supply chain

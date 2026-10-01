@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-FEAT-001.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 1 |
-| Loops since last human decision | 1 |
+| Spec loops | 2 |
+| Loops since last human decision | 0 |
 
 ## Summary
 
@@ -18,8 +18,17 @@ put in production by hand. Secrets are `preserve()`d, so no value lives in the r
 test runs the definition in-process and checks every setting and every secret. The three deprecated
 `railway*.json` files and their test are removed. Railway's CLI is installed globally by the user
 (user decision 2026-10-01: the repository does not pin `@railway/cli`, so no install downloads its
-binary); the root scripts `railway:plan` and `railway:apply` call it. The first plan against
-production must show no differences before anything is applied.
+binary); the root scripts `railway:plan` and `railway:apply` call it through a small
+cross-platform wrapper, `scripts/railway-config.mjs` (Block 3). The first plan against production
+must show no differences before anything is applied, except the restart retries the user lowered
+from 10 to 5.
+
+Spec loop 2 (corrective loop from VERIFY, user decisions of 2026-10-01): Blocks 1 and 2 describe
+the definition as reconciled with production in Block 2 — Railway's leading-slash watch patterns,
+the API's `checkSuites` and container limit, worker and web variables that reference `argent-api`,
+and restart retries of 5 with the restart type left at Railway's `ON_FAILURE` default (Railway
+stores its defaults as unset, so a declared default is a permanent plan change). Block 3 adds the
+wrapper, because the SDK's CLI version check cannot run npm's Windows shim.
 
 ## Coverage: PRD → blocks
 
@@ -28,9 +37,9 @@ production must show no differences before anything is applied.
 | FR-01 | Block 1 (definition), Block 2 (plan against production) |
 | FR-02 | Block 1 |
 | FR-03 | Block 1 |
-| FR-04 | Block 1 (scripts), Block 2 (first run) |
+| FR-04 | Block 1 (scripts), Block 2 (first run), Block 3 (cross-platform wrapper) |
 | FR-05 | Block 1 |
-| NFR-01 | Block 2: the plan output is reviewed and must list 0 creations, 0 deletions and 0 changes |
+| NFR-01 | Block 2: the plan output is reviewed and must list 0 creations, 0 deletions and only the accepted restart retries change; after apply, 0 changes |
 | NFR-02 | Block 1: the secrets test (AC-05) and `preserve()` for every secret |
 | NFR-03 | Strategy: `railway` is added only to `devDependencies`; `pnpm audit --prod` and the API bundle do not include it |
 | NFR-04 | Strategy: no file under `apps/*/src` or `packages/shared/src` changes; the full suite runs with coverage at closeout |
@@ -39,16 +48,17 @@ production must show no differences before anything is applied.
 
 Block 2 depends on Block 1: production is planned against the definition Block 1 writes. Block 1
 is implemented and merged-ready first; Block 2 runs before the pull request is merged, and any
-value it reconciles is committed in Block 1's files.
+value it reconciles is committed in Block 1's files. Block 3 depends on Block 1 (it replaces the
+scripts) and closes Block 2's last step: the plan run through `pnpm railway:plan`.
 
 ## Block 1 — Definition, scripts and test
 
 **Files**
 - `.railway/railway.ts` (new) — the partial: `export const partial = 'pesly'` and a default export
   built with `defineRailway`.
-- `package.json` (modified) — devDependency `railway` `3.12.0` (exact); scripts
-  `railway:plan` = `railway config plan --environment production` and
-  `railway:apply` = `railway config apply --environment production`.
+- `package.json` (modified) — devDependency `railway` `3.12.0` (exact); scripts `railway:plan` and
+  `railway:apply` (their final form is set in Block 3; the CLI has no `--environment` flag and
+  works on the linked environment).
 - `apps/api/package.json` (modified) — devDependency `railway` `3.12.0` (exact), so the API's test
   project can resolve `railway/iac`.
 - `pnpm-lock.yaml` (modified) — lockfile update from `pnpm install`.
@@ -65,7 +75,10 @@ value it reconciles is committed in Block 1's files.
 - `postgres('argent-postgres')` with no further settings (image, volume and networking are out of
   scope and stay as Railway has them).
 - Three services, each with `source: github('MussiDev/pesly', { branch: 'main' })` and
-  `deploy: { restartPolicyType: 'ON_FAILURE', restartPolicyMaxRetries: 10 }`:
+  `deploy: { restartPolicyMaxRetries: 5 }`; the restart type is not declared, so Railway's default
+  `ON_FAILURE` applies. `argent-api` also sets `checkSuites: true` on its source (deploys wait for
+  CI) and `deploy.limitOverride.containers` to 2 vCPU and 2,000,000,000 bytes, both as production
+  has them:
 
 | Service | `build.buildCommand` | `start` | `preDeploy` |
 |---|---|---|---|
@@ -74,17 +87,20 @@ value it reconciles is committed in Block 1's files.
 | `argent-web` | `pnpm --filter @argent/web build` | `node --max-old-space-size=320 apps/web/node_modules/next/dist/bin/next start apps/web` | none |
 
 - `build.builder` is `'RAILPACK'` for all three. `build.watchPatterns` is
-  `['apps/api/**', 'packages/shared/**', 'pnpm-lock.yaml']` for the API and worker and
-  `['apps/web/**', 'packages/shared/**', 'pnpm-lock.yaml']` for the web.
+  `['/apps/api/**', '/packages/shared/**', '/pnpm-lock.yaml']` for the API and worker and
+  `['/apps/web/**', '/packages/shared/**', '/pnpm-lock.yaml']` for the web (Railway stores them
+  rooted at the repository, with a leading slash).
 - Variables (`env`):
   - `argent-api`: `NODE_ENV`, `LOG_LEVEL`, `WEB_BASE_URL`, `WEB_ORIGIN`, `API_ORIGIN`,
     `EMAIL_PROVIDER`, `EMAIL_FROM`, `BREACH_CHECKER`, `TRUST_PROXY` as literal values;
     `DATABASE_URL` as a reference to `argent-postgres`'s `DATABASE_URL` (private network);
     `JWT_SECRET`, `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` as `preserve()`.
   - `argent-worker`: only the seven settings `parseWorkerEnv` reads (FIX-003) — `NODE_ENV`,
-    `LOG_LEVEL`, `WEB_BASE_URL`, `EMAIL_PROVIDER`, `EMAIL_FROM` as literals, `DATABASE_URL` as the
-    same reference, `RESEND_API_KEY` as `preserve()`.
-  - `argent-web`: `NODE_ENV` and `API_ORIGIN` as literals.
+    `LOG_LEVEL`, `EMAIL_PROVIDER` as literals; `WEB_BASE_URL` and `EMAIL_FROM` as references to
+    `argent-api`'s variables; `DATABASE_URL` as the same database reference; `RESEND_API_KEY` as
+    `preserve()`.
+  - `argent-web`: `NODE_ENV` as a literal and `API_ORIGIN` as a reference to `argent-api`'s
+    `API_ORIGIN`.
   - The literal values are the ones in production today; Block 2 confirms each against
     `railway config pull` and corrects any mismatch here.
 - The file exports only the partial name and the default program; the expected lists live in the
@@ -92,9 +108,10 @@ value it reconciles is committed in Block 1's files.
 
 `apps/api/test/deploy/railway-iac.test.ts` hard-codes what the PRD requires: the four owned
 service names (FR-01), the four secret names (FR-03), and per service the allowed literal variable
-names (the worker's seven settings from FIX-003). It asserts that every variable outside a
-service's allowed literal set is `preserve()` (or the `DATABASE_URL` reference), so a secret
-turned into a literal fails even if it was also dropped from any list. It also asserts that the
+names and allowed references (`resource.OUTPUT`, the worker's seven settings from FIX-003). It
+asserts that every variable outside a service's allowed literals and references is `preserve()`,
+so a secret turned into a literal, or handed to another service by reference, fails even if it was
+also dropped from any list. It also asserts that the
 `railway` version in the root and `apps/api` `package.json` is the same exact string, so the
 definition's `defineRailway` and the test's `createRailwayContext` come from one copy.
 
@@ -111,7 +128,7 @@ resulting service nodes (`build`, `deploy`, `variables`). A small pure helper in
 `literalSecrets(services, secretNames)`, returns `service.variable` for every secret whose value is
 not of type `preserve`; the test asserts it returns an empty list for the real definition and
 exercises it against a hand-built node with a literal secret. Two more pure helpers in the test,
-`serviceSetDifference(expected, found)` and `heapCapIssues(services, caps)`, report a missing or
+`resourceSetDifference(expected, found)` and `heapCapIssues(services, caps)`, report a missing or
 extra service by name and a start command whose `--max-old-space-size` is missing or different,
 naming the service; each is asserted empty for the real definition and exercised against
 hand-built nodes.
@@ -133,7 +150,13 @@ hand-built nodes.
       `argent-postgres`, and declares the `pesly` partial — validates AC-01
 - [ ] each application service builds with RAILPACK and its build command, and watches its paths —
       validates AC-03
-- [ ] each application service restarts `ON_FAILURE` with at most 10 retries — validates AC-03
+- [ ] each application service keeps the `ON_FAILURE` default (no declared restart type) and
+      restarts at most 5 times — validates AC-03
+- [ ] every application service deploys from `main` of `MussiDev/pesly`, and the API waits for
+      the GitHub checks (`checkSuites`) — validates AC-03
+- [ ] the API container is capped at 2 vCPU and 2 GB, as production has it — validates AC-03
+- [ ] the shared settings follow the API: worker and web reference `argent-api`'s values, and the
+      origins use https — validates AC-04
 - [ ] start commands cap the heap at 320 MB (API, web) and 192 MB (worker), and the web starts with
       `node` directly — validates AC-03
 - [ ] only the API runs the migration as its pre-deploy command — validates AC-03
@@ -144,6 +167,8 @@ hand-built nodes.
 - [ ] the `railway` version pinned in the root and `apps/api` `package.json` is identical —
       validates AC-03
 - [ ] sad path: a secret given a literal value is reported by name — validates AC-05
+- [ ] sad path: a reference that hands the worker another service's secret is reported —
+      validates AC-05
 - [ ] sad path: a service missing, renamed or added in the definition is reported with the expected
       and found sets — validates AC-01
 - [ ] sad path: a start command without its heap cap, or with a different one, is reported naming
@@ -171,8 +196,9 @@ its `graphql` and `tsx` dependencies) are clean, and `git ls-files` lists no `ra
 2. `railway config pull` runs in a scratch directory outside the repository, and its output is
    compared with `.railway/railway.ts` for the four owned services. Any literal that differs is
    corrected in the repository; preserved secrets are not compared and never copied.
-3. `pnpm railway:plan` runs. Its output must list 0 services created, 0 deleted, 0 changes to
-   services outside the partial and 0 changes to the owned services (NFR-01, AC-01, AC-02, AC-06).
+3. The plan runs (through `pnpm railway:plan` once Block 3 exists). Its output must list 0
+   services created, 0 deleted, 0 changes to services outside the partial and 0 changes to the
+   owned services, except changes the user accepts in step 4 (NFR-01, AC-01, AC-02, AC-06).
 4. If the plan is empty, nothing is applied. If it lists only changes the user explicitly accepts,
    the user runs `pnpm railway:apply`, and a second plan must then be empty (AC-06).
 
@@ -203,15 +229,86 @@ its `graphql` and `tsx` dependencies) are clean, and `git ls-files` lists no `ra
 - [ ] sad path: a global CLI older than 5.63.1 is upgraded before any plan runs; `railway --version`
       is recorded in the test report — validates AC-06
 
+Outcome (2026-10-01): the first plan listed 10 changes. Seven were reconciled to production in
+the definition (watch pattern form, `checkSuites`, the API container limit, three references).
+Railway stores its default restart policy as unset, so declaring `ON_FAILURE`/10 stayed a change
+after apply; the user accepted lowering the retries to 5 and leaving the type at its default. Two
+applies ran with the user's approval; the final plan is empty.
+
 **Completion criterion**
 The recorded plan output (pasted in the test report, with no secret values) shows 0 creations,
-0 deletions and 0 changes, and the services stay Online.
+0 deletions and, after the accepted apply, 0 changes, and the services stay Online.
+
+## Block 3 — Cross-platform wrapper for the Railway CLI
+
+**Files**
+- `scripts/railway-config.mjs` (new) — runs `railway config <plan|apply>` with the globally
+  installed CLI on Windows, Linux and macOS.
+- `package.json` (modified) — `railway:plan` = `node scripts/railway-config.mjs plan`,
+  `railway:apply` = `node scripts/railway-config.mjs apply`.
+- `apps/api/test/deploy/railway-cli-wrapper.test.ts` (new) — tests the wrapper's pure functions.
+- `docs/ddw/security/threat-FEAT-001.md` (modified) — R-04 covers the executable the wrapper
+  resolves and passes to the SDK.
+
+**Logic**
+
+The `railway` SDK checks the CLI version on import with `execFileSync(process.env._ || 'railway',
+['--version'])`, without a shell. On Windows, npm installs the CLI as a `railway.cmd` shim, which
+that call cannot run, so the plan fails. The wrapper:
+
+1. Resolves the CLI executable with an exported pure function,
+   `resolveRailwayExecutable({ platform, candidates, exists })`. `candidates` are the paths the OS
+   lookup returns (`where railway` on Windows, `command -v railway` elsewhere). On Windows a
+   `railway.exe` candidate is used as is; for a `railway.cmd` (or extensionless) npm shim it uses
+   `<shim dir>/node_modules/@railway/cli/bin/railway.exe` when that file exists. Elsewhere the first
+   candidate is used. It returns `null` when nothing matches.
+2. Validates the subcommand with an exported pure function, `buildRailwayArgs(argv)`: the first
+   argument must be `plan` or `apply`; the rest pass through unchanged. It returns
+   `['config', subcommand, ...rest]`.
+3. Runs the resolved executable through an exported function,
+   `runRailway({ executable, args, spawn })`, with `stdio: 'inherit'` and the environment extended
+   with `_` set to the resolved path, so the SDK's check runs the real binary; it returns the CLI's
+   exit code, which the wrapper exits with. `spawn` is injected so the tests never start a process.
+
+**Input validation**
+- `argv[0]`: exactly `plan` or `apply`; anything else, or nothing, is refused.
+- Extra arguments are passed to the CLI as separate arguments, never through a shell.
+
+**Error handling**
+- The Railway CLI is not installed (no candidate, or a shim without its `railway.exe`) — the
+  wrapper prints `Railway CLI not found: install it with npm i -g @railway/cli` and exits with
+  code 1 (AC-09).
+- The subcommand is missing or is not `plan`/`apply` — the wrapper prints the usage line and exits
+  with code 2.
+- The CLI itself fails (not linked, plan error) — the wrapper exits with the CLI's own code, and
+  nothing more is run.
+
+**Required tests**
+- [ ] on Windows, an npm `railway.cmd` shim resolves to the `railway.exe` installed beside it —
+      validates AC-08
+- [ ] on Windows, a `railway.exe` found on the PATH is used as is; on Linux and macOS the first
+      candidate is used — validates AC-08
+- [ ] sad path: with no candidate, or a shim whose `railway.exe` is missing, the CLI is reported
+      as not found — validates AC-09
+- [ ] sad path: a missing or unknown subcommand is refused, and `plan`/`apply` with extra arguments
+      build `['config', subcommand, ...rest]` — validates AC-08
+- [ ] sad path: when the CLI itself fails (for example, not linked), the wrapper returns the CLI's
+      own exit code and runs nothing more; `_` is set to the resolved executable — validates AC-08
+- [ ] manual, recorded in the test report: `pnpm railway:plan` on Windows reports the configuration
+      up to date — validates AC-06 and AC-08
+- [ ] manual, recorded in the test report: the wrapper's not-found message and exit code 1, with
+      the CLI hidden from the PATH — validates AC-09
+
+**Completion criterion**
+The wrapper tests pass, `pnpm railway:plan` runs on Windows without any manual environment setup
+and reports the configuration up to date, and `pnpm lint` and `pnpm typecheck` are clean.
 
 ## Final verification
 
 - `git ls-files` lists `.railway/railway.ts` and no `railway.json` / `railway.worker.json`.
 - `pnpm test:coverage`, `pnpm typecheck`, `pnpm lint` and `pnpm audit --prod --audit-level high` are
   clean; coverage stays at or above 80/80/80.
-- `pnpm railway:plan` against production reports no differences.
+- `pnpm railway:plan` against production reports no differences, on Windows without manual
+  environment setup.
 - A search of the repository finds no secret value for `JWT_SECRET`, `RESEND_API_KEY`,
   `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET`.

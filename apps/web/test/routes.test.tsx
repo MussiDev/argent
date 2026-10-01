@@ -2,6 +2,8 @@
 import { screen } from '@testing-library/react';
 import type { ComponentType } from 'react';
 import { describe, expect, it } from 'vitest';
+import AccountsPage from '../src/app/[locale]/(app)/accounts/page';
+import NewAccountPage from '../src/app/[locale]/(app)/accounts/new/page';
 import AppLayout from '../src/app/[locale]/(app)/layout';
 import HomePage from '../src/app/[locale]/(app)/page';
 import CheckYourEmailPage from '../src/app/[locale]/(auth)/check-your-email/page';
@@ -65,6 +67,85 @@ describe('routes', () => {
     expect(screen.queryByRole('heading', { name: es.home.title })).toBeNull();
     expect(await screen.findByRole('heading', { level: 1, name: es.home.title })).toBeDefined();
     expect(screen.getByText(es.home.tagline)).toBeDefined();
+    const link = screen.getByRole('link', { name: es.accounts.link });
+    expect(link.getAttribute('href')).toBe('/es/accounts');
+  });
+
+  it('the accounts list is only shown behind the session guard', async () => {
+    const { calls } = stubApi({
+      'GET /auth/session': SESSION,
+      'GET /accounts?archived=false&limit=100': {
+        status: 200,
+        body: {
+          items: [
+            {
+              id: 'a1',
+              name: 'Caja',
+              type: 'cash',
+              currency: 'ARS',
+              openingBalance: '0',
+              balance: '150000',
+              archived: false,
+              archivedAt: null,
+              createdAt: '2026-10-01T00:00:00.000Z',
+            },
+          ],
+          totals: { ARS: '150000', USD: '0' },
+          total: 1,
+          limit: 100,
+          offset: 0,
+        },
+      },
+    });
+    renderApp(
+      <AppLayout>
+        <AccountsPage />
+      </AppLayout>,
+    );
+
+    expect(screen.queryByRole('heading', { name: es.accounts.title })).toBeNull();
+    expect(await screen.findByRole('heading', { level: 1, name: es.accounts.title })).toBeDefined();
+    expect(await screen.findByRole('listitem', { name: 'Caja' })).toBeDefined();
+    expect(calls.map((call) => call.path)).toEqual([
+      '/auth/session',
+      '/accounts?archived=false&limit=100',
+    ]);
+  });
+
+  it('the new account form is only shown behind the session guard', async () => {
+    stubApi({ 'GET /auth/session': SESSION });
+    renderApp(
+      <AppLayout>
+        <NewAccountPage />
+      </AppLayout>,
+    );
+
+    expect(screen.queryByRole('heading', { name: es.accounts.new.title })).toBeNull();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: es.accounts.new.title }),
+    ).toBeDefined();
+    expect(screen.getByLabelText(es.accounts.fields.name)).toBeDefined();
+  });
+
+  it('renders both accounts screens in English', async () => {
+    stubApi({
+      'GET /auth/session': SESSION,
+      'GET /accounts?archived=false&limit=100': {
+        status: 200,
+        body: { items: [], totals: { ARS: '0', USD: '0' }, total: 0, limit: 100, offset: 0 },
+      },
+    });
+    renderApp(
+      <AppLayout>
+        <AccountsPage />
+      </AppLayout>,
+      { locale: 'en' },
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: CATALOGS.en.accounts.title }),
+    ).toBeDefined();
+    expect(await screen.findByText(CATALOGS.en.accounts.list.empty)).toBeDefined();
   });
 
   it('the security settings are only shown behind the session guard', async () => {

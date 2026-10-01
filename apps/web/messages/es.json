@@ -122,6 +122,72 @@
     "totpCodeFormat": "Ingresa los 6 dígitos del código.",
     "secondFactorCodeFormat": "Ingresa un código de 6 dígitos o un código de recuperación."
   },
+  "accounts": {
+    "title": "Cuentas",
+    "link": "Ir a tus cuentas",
+    "new": {
+      "title": "Nueva cuenta",
+      "description": "Agrega un lugar donde guardas tu dinero."
+    },
+    "fields": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "currency": "Moneda",
+      "openingBalance": "Saldo inicial",
+      "openingBalanceHint": "Opcional. Usa un signo menos para un saldo negativo.",
+      "typePlaceholder": "Elige un tipo",
+      "currencyPlaceholder": "Elige una moneda"
+    },
+    "types": {
+      "cash": "Efectivo",
+      "bank_account": "Cuenta bancaria",
+      "digital_wallet": "Billetera virtual",
+      "credit_card": "Tarjeta de crédito",
+      "savings": "Ahorros"
+    },
+    "currencies": {
+      "ARS": "Pesos argentinos (ARS)",
+      "USD": "Dólares estadounidenses (USD)"
+    },
+    "form": {
+      "submit": "Crear cuenta",
+      "pending": "Creando…",
+      "back": "Volver a las cuentas"
+    },
+    "list": {
+      "activeTitle": "Cuentas activas",
+      "archivedTitle": "Cuentas archivadas",
+      "newAccount": "Nueva cuenta",
+      "empty": "Todavía no tienes cuentas. Crea una para empezar.",
+      "emptyArchived": "No tienes cuentas archivadas.",
+      "showArchived": "Ver cuentas archivadas",
+      "showActive": "Ver cuentas activas",
+      "totals": "Totales"
+    },
+    "totals": {
+      "ARS": "Total en pesos",
+      "USD": "Total en dólares"
+    },
+    "actions": {
+      "rename": "Renombrar",
+      "renameField": "Nuevo nombre de {name}",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "archive": "Archivar",
+      "unarchive": "Desarchivar",
+      "delete": "Eliminar",
+      "confirmDelete": "¿Eliminar {name}? Esta acción no se puede deshacer.",
+      "confirmDeleteYes": "Sí, eliminar",
+      "archiveInstead": "Archivar en vez de eliminar"
+    },
+    "errors": {
+      "nameRequired": "Ingresa un nombre.",
+      "nameTooLong": "El nombre puede tener como máximo {max} caracteres.",
+      "typeRequired": "Elige un tipo de cuenta.",
+      "currencyRequired": "Elige una moneda.",
+      "amountInvalid": "Ingresa un monto válido, por ejemplo 1.500,00."
+    }
+  },
   "security": {
     "title": "Seguridad",
     "enabledNotice": "Activaste la verificación en dos pasos. Cerramos tus otras sesiones.",

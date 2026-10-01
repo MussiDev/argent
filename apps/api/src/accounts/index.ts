@@ -8,3 +8,4 @@ export * from './application/list-accounts';
 export * from './application/rename-account';
 export * from './application/set-account-archived';
 export * from './application/delete-account';
+export * from './infrastructure/http/account-routes';

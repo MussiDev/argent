@@ -6,7 +6,7 @@
 | PRD | docs/ddw/prd/prd-DISC-001-02a.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 3 |
+| Spec loops | 4 |
 | Loops since last human decision | 0 |
 
 ## Summary
@@ -75,14 +75,30 @@ touching accounts code, and no movements table is created here.
   the delete use case already maps that violation to `ACCOUNT_HAS_MOVEMENTS`.
 
 ## Human decisions taken during PLAN (settled; do not re-raise in reviews)
-- **Q5, opening balance sign:** the opening balance may be negative; any value inside the signed
-  64-bit range is accepted, including zero and negatives (FR-01, AC-17).
+- **Q5, opening balance sign:** the opening balance may be negative, including zero and
+  negatives (FR-01, AC-17); its magnitude is bounded by Q8.
 - **Q6, opening balance optional:** the opening balance is not required; when omitted the API
   stores `0` and the web form pre-fills `0` (FR-01, AC-16). This amended the PRD through the PLAN to
   DEFINE corrective loop (PRD loops 2).
 - **Q7, no cap on accounts per user and no extra write-rate limit:** the human decided to keep it as
   built. Cost is bounded by pagination, indexes, aggregate queries and the 500-id chunking. The
   threat model records it as accepted risk R-15.
+- **Q8, opening balance bound (L-1, decided after VERIFY, 2026-10-01):** the absolute value of the
+  opening balance is at most 10^13 major units, which is 10^15 minor units; a value outside the bound
+  is a 400 validation error naming the field, never a 500 (FR-13, AC-18, AC-19). Balances and totals
+  are derived values, computed with arbitrary-precision `bigint` and serialized as unbounded decimal
+  strings, so no sum can fail or overflow (NFR-06, AC-22). Proof: a stored opening balance is at most
+  10^15 minor units in absolute value and a movement sum is a `bigint`, so a total over N accounts is
+  at most N times 10^15 plus the movement sums; JavaScript `bigint` has no upper limit, the response
+  schema accepts any integer string of up to 40 digits (a total of 10^40 minor units would need 10^25
+  accounts), and nothing derived is ever written back to a `bigint` column. Only the stored opening
+  balance keeps the signed 64-bit type and a database CHECK.
+- **Q9, names reject control and format characters (I-2, decided after VERIFY, 2026-10-01):** an
+  account name containing a Unicode Cc or Cf character (control, zero-width, bidirectional
+  override, soft hyphen, byte order mark) is a 400 validation error naming `body.name`; a name that
+  is empty once whitespace is trimmed is an empty name; the web form tells "name required" (nothing
+  visible) from "invalid characters" (visible text plus a Cc or Cf character) (FR-14, AC-20,
+  AC-21).
 - Q3 (language for the default categories) and Q4 (categories module layout) concern 02b only.
 
 ## Coverage: PRD → blocks
@@ -97,13 +113,16 @@ touching accounts code, and no movements table is created here.
 | FR-07 | Block 3, Block 5, Block 6, Block 7 |
 | FR-08 | Block 2, Block 3, Block 4, Block 5, Block 6, Block 7 |
 | FR-09 | Block 3, Block 5, Block 6, Block 7 |
-| FR-10 | Block 3, Block 5, Block 6, Block 7 |
+| FR-10 | Block 3, Block 5, Block 6, Block 7, Block 10 |
 | FR-11 | Block 2, Block 3, Block 4, Block 5 |
 | FR-12 | Block 3, Block 4, Block 5 |
+| FR-13 | Block 9, Block 10, Block 11 |
+| FR-14 | Block 9, Block 10, Block 11 |
 | NFR-01 | Strategy: bigint minor units in a `bigint` column, decimal strings in JSON, all sums through the shared helpers (Block 1); a unit test sums 100,000 amounts and compares to the exact expected total (Block 1) |
 | NFR-02 | Strategy: balances computed on read with one batched port call and aggregate queries (Block 3); the list query uses the owner index (Block 4); a performance test with a test-only 100,000-row movements table asserts p95 under 300 ms (Block 8) |
 | NFR-03 | Strategy: the list query schema caps `limit` at 100 and rejects larger values with 400 (Block 1, Block 5) |
 | NFR-04 | Strategy: every repository method requires an `AccessScope` and filters with `scopedTo` in the same statement (Block 4); the owner column is `NOT NULL` with a foreign key (Block 4) |
+| NFR-06 | Strategy: balances and totals use exact `bigint` arithmetic (`addExact`, `sumExact`) and unbounded integer-string response schemas, so no sum can throw or overflow; the proof is in Q8 and a test sums 100,000 amounts of 10^15 and lists 9,300 accounts at 10^15 (Block 9, Block 10) |
 | NFR-05 | Strategy: name validation counts code points, trims and normalizes (Block 1, Block 3), mirrored by a `CHECK` on `char_length` (Block 4) |
 
 ## Dependencies between blocks
@@ -115,6 +134,9 @@ Execution order: Block 1 → Block 2 → Block 3 → Block 4 → Block 5 → Blo
   `validate` and `AccessPolicy`.
 - Block 6 calls the contract fixed in Block 5; Block 7 uses Block 6.
 - Block 8 runs against everything and needs all other blocks.
+- Block 9 (added after VERIFY) amends Block 1's shared package and needs nothing else; Block 10 needs
+  Block 9 and amends Blocks 3, 4 and 5; Block 11 needs Block 9 and amends Block 7 and the Block 8
+  end-to-end spec. Order: Block 9 → Block 10 → Block 11.
 
 ## Block 1 — Money helpers and account contracts (packages/shared)
 
@@ -152,8 +174,8 @@ Execution order: Block 1 → Block 2 → Block 3 → Block 4 → Block 5 → Blo
   `USD`, `total`, `limit`, `offset`).
 
 **Input validation**
-- Names: string, trimmed, NFC, 1 to 50 code points. Type: one of the five values. Currency: `ARS`
-  or `USD` only. Amounts: decimal integer strings inside int64 (negatives allowed; the opening balance may be omitted). `limit` at most 100. Unknown keys are
+- Names: string, trimmed, NFC, 1 to 50 code points (Block 9 adds the rejection of Unicode Cc and Cf characters). Type: one of the five values. Currency: `ARS`
+  or `USD` only. Amounts: decimal integer strings inside int64 (negatives allowed; the opening balance may be omitted; Block 9 narrows the opening balance to plus or minus 10^15 minor units). `limit` at most 100. Unknown keys are
   stripped by the shared `validate` middleware, except `type` and `currency` on rename, which fail.
 
 **Error handling**
@@ -533,6 +555,119 @@ The three web test files and `i18n-catalogs.test.ts` pass, `pnpm typecheck` and 
 **Completion criterion**
 `pnpm e2e` passes the new spec, `pnpm test:perf` passes the new benchmark with its p95 recorded in the
 test output, and `pnpm test` stays green including the boundary probes.
+
+## Block 9 — Opening balance bound, name characters and exact arithmetic (packages/shared)
+
+**Files**
+- `packages/shared/src/money.ts` (modified) — exact (non-int64) derived-value helpers and validator.
+- `packages/shared/src/accounts/account.ts` (modified) — opening balance bound, name character rule, response schemas for balances and totals.
+- `apps/api/test/shared/money.test.ts` (modified) — tests for the exact helpers.
+- `apps/api/test/shared/account-contracts.test.ts` (modified) — tests for the bound, the name rule and the response schemas.
+
+**Logic**
+- `money.ts` adds `exactIntegerStringSchema` (a decimal integer string of at most 40 digits and an optional minus, no int64 range) for derived values that are never stored, and `addExact` / `sumExact`, plain `bigint` arithmetic with no range check and no `RangeError`. The int64 helpers (`minorUnitsStringSchema`, `addMinorUnits`, `sumMinorUnits`) stay for stored amounts.
+- `account.ts` adds `OPENING_BALANCE_LIMIT_MINOR_UNITS` (10^15 as `bigint`) and `openingBalanceSchema` (the int64 string validator plus an absolute value of at most the limit); `createAccountRequestSchema.openingBalance` uses it with the default `"0"`.
+- `accountNameSchema` rejects any name containing a character of Unicode category Cc or Cf (`/[\p{Cc}\p{Cf}]/u`) after the NFC and trim steps; a name that is empty after trimming still fails the length rule. The same validator serves create and rename.
+- `accountResponseSchema.balance` and `listAccountsResponseSchema.totals` use `exactIntegerStringSchema`; `openingBalance` keeps the int64 validator.
+
+**Input validation**
+- Opening balance: a decimal integer string inside plus or minus 10^15 minor units. Name: trimmed, NFC, 1 to 50 code points, no Cc or Cf character. Response balances and totals: any integer string of up to 40 digits.
+
+**Error handling**
+- An opening balance above 10^15 or below -10^15 fails validation with the field path `body.openingBalance`.
+- A name that contains a control or format character fails validation with the field path `body.name`.
+- A name made only of whitespace, control or format characters fails validation as an empty name.
+- A balance or total that is not an integer string, or that has more than 40 digits, fails response validation.
+
+**Required tests**
+- [ ] The create schema fails with an invalid opening balance of 10^15 + 1 and of -(10^15 + 1) and names `openingBalance` (validates AC-18).
+- [ ] The create schema accepts an opening balance of exactly 10^15 and of exactly -10^15 (validates AC-19).
+- [ ] The name schema fails on an invalid name with a zero-width space, a right-to-left override, a NUL character and a soft hyphen, for create and for rename (validates AC-20).
+- [ ] The name schema fails on an invalid name made only of spaces, only of zero-width characters, or of both (validates AC-21).
+- [ ] The response schemas accept a total of 9,300 times 10^15 and a balance beyond the int64 maximum, and fail on a non-integer or 41-digit string (validates AC-22).
+- [ ] `sumExact` over 100,000 amounts of 10^15 equals exactly 10^20 with no error, and `addExact` of two int64 maxima equals twice the maximum (validates NFR-06).
+
+**Completion criterion**
+The two shared test files pass, `pnpm --filter @argent/shared typecheck` and `pnpm --filter @argent/api typecheck` pass, and `@argent/shared` exports `addExact`, `sumExact`, `exactIntegerStringSchema` and `OPENING_BALANCE_LIMIT_MINOR_UNITS`.
+
+## Block 10 — Exact balances and totals, bound enforced in the database and the routes (API)
+
+**Files**
+- `apps/api/src/accounts/domain/account.ts` (modified) — `balanceOf` uses `addExact`.
+- `apps/api/src/accounts/application/list-accounts.ts` (modified) — totals use `sumExact`.
+- `apps/api/src/accounts/infrastructure/db/schema.ts` (modified) — check constraint on the opening balance.
+- `apps/api/drizzle/0006_accounts.sql`, `apps/api/drizzle/meta/0006_snapshot.json`, `apps/api/drizzle/meta/_journal.json` and `apps/api/drizzle/rollback/0006_accounts.down.sql` (modified) — the unmerged migration is regenerated in place (it was never pushed or deployed); the rollback script keeps the journal row delete in step with the new journal `when`.
+- `apps/api/test/accounts/account-use-cases.test.ts`, `apps/api/test/accounts/account-repository.test.ts`, `apps/api/test/accounts/account-routes.test.ts` and `apps/api/test/identity/migration.test.ts` (modified) — the new tests.
+
+**Logic**
+- `balanceOf` and the per-currency totals use the exact helpers of Block 9, so neither can throw `RangeError`; stored values keep int64.
+- The table gets `CHECK (opening_balance between -1000000000000000 and 1000000000000000)` named `accounts_opening_balance_range_check` as a second line of defence behind the shared schema, which makes `POST /accounts` answer 400 for out-of-range values before the database is reached.
+- Names are validated by the shared schema on `POST /accounts` and `PATCH /accounts/:id`; no route changes beyond using the amended schemas.
+- Tests that stored int64 extremes as an opening balance (the repository precision test beyond 2^53, the int64 minimum in the contract, route and AC-17 tests) are rewritten to the new bound of 10^15, which is below 2^53; precision beyond 2^53 is now exercised on derived values (the exact sums of Block 9 and the 9,300-account total) and no existing assertion is weakened.
+- Rollback and migration: the migration is regenerated with `drizzle-kit generate` after removing the unmerged 0006 files and journal entry, and the hand-appended trigger is kept; the rollback script's journal `created_at` is updated to the new `when`.
+
+**API contract**
+- `POST /accounts` — Request body: `name`, `type`, `currency`, optional `openingBalance`. Response 201: `AccountResponse`. Errors: 400 `VALIDATION_FAILED` naming `body.openingBalance` when outside plus or minus 10^15 minor units and `body.name` for a name with control or format characters, 401, 403, 409. Auth: session cookie plus verified email.
+- `PATCH /accounts/:id` — Request body: `name` only. Response 200: `AccountResponse`. Errors: 400 `VALIDATION_FAILED` naming `body.name` for control or format characters, 401, 403, 404, 409. Auth: session plus verified email.
+- `GET /accounts` — Response 200 with exact `totals` as integer strings of any size up to 40 digits. Errors: 400, 401, 403. Auth: session plus verified email.
+
+**Data model**
+- Entity `accounts`: adds the check constraint `accounts_opening_balance_range_check` on `opening_balance` (not null `bigint`, plus or minus 10^15); no other column, unique index or foreign key changes.
+
+**Input validation**
+- Create and rename bodies use the amended shared schemas of Block 9; `limit` and `offset` are unchanged.
+
+**Error handling**
+- An opening balance outside plus or minus 10^15 answers 400 naming the field and creates nothing, never 500.
+- A name with a control or format character, or empty after trimming, answers 400 naming `body.name` on create and on rename, and leaves the account unchanged.
+- A row written around the API with an opening balance outside the bound fails the check constraint (23514) and propagates unchanged.
+- Totals and balances never raise `RangeError`.
+
+**Required tests**
+- [ ] The use cases return exact totals above the int64 maximum for 9,300 active accounts at 10^15, without throwing (validates AC-22, NFR-06).
+- [ ] The repository fails with a 23514 check violation for an opening balance of 10^15 + 1 and accepts exactly 10^15 and -10^15 (validates FR-13, AC-19).
+- [ ] The routes answer 400 for an opening balance of 10^15 + 1 and of -(10^15 + 1) naming `body.openingBalance`, and no account exists afterwards (validates AC-18).
+- [ ] The routes answer 201 for an opening balance of exactly 10^15 and exactly -10^15 (validates AC-19).
+- [ ] The routes answer 400 naming `body.name` for create and for PATCH with a zero-width space, a right-to-left override and a NUL character, and the account is unchanged (validates AC-20).
+- [ ] The routes answer 400 for create and PATCH with a name made only of spaces or only of zero-width characters (validates AC-21).
+- [ ] `GET /accounts` for a user with 9,300 ARS accounts at 10^15 (seeded with one `generate_series` insert) answers 200 with the exact ARS total 9300000000000000000 for both the active list and the response parse (validates AC-22, NFR-06).
+- [ ] `migration.test.ts`: the regenerated 0006 applies, rolls back, re-applies, and the check constraint is present and fails an out-of-range insert (error path).
+
+**Completion criterion**
+The three accounts test files and `migration.test.ts` pass, `pnpm exec drizzle-kit generate` reports no pending change, and `GET /accounts` answers 200 with the exact total in the 9,300-account test.
+
+## Block 11 — Web messages for the new rules and end-to-end coverage
+
+**Files**
+- `apps/web/src/features/accounts/account-form-errors.ts` (modified) — `nameErrorMessage` and the message type.
+- `apps/web/src/features/accounts/containers/create-account-container.tsx` and `apps/web/src/features/accounts/components/account-field.tsx` (modified as needed) — the out-of-range amount message with the formatted limit.
+- `apps/web/messages/en.json` and `apps/web/messages/es.json` (modified) — `accounts.errors.nameInvalidCharacters` and `accounts.errors.amountOutOfRange`.
+- `apps/web/test/accounts-components.test.tsx` and `apps/web/test/accounts-containers.test.tsx` (modified) — new tests.
+- `apps/web/e2e/accounts.spec.ts` (modified) — new flows.
+
+**Logic**
+- `nameErrorMessage(name)` answers `nameInvalidCharacters` when the name has visible text and a Cc or Cf character, `nameRequired` when nothing is left once whitespace, control and format characters are ignored, and `nameTooLong` above 50 code points; the rule uses the same Unicode categories as the shared validator.
+- The create container validates the amount with the shared opening-balance validator after `parseAmountInput`; an amount outside plus or minus 10^15 minor units shows `amountOutOfRange` with the limit formatted by `formatMoney` for the active locale, and sends no request.
+- Copy comes from the catalogs in English and neutral Spanish; the limit is interpolated, never hardcoded.
+
+**Input validation**
+- The form fields use the shared schemas of Block 9; the API stays the authority.
+
+**Error handling**
+- A name with a control or format character next to visible text shows the invalid-characters message and sends no request.
+- A name with nothing visible shows the name-required message and sends no request.
+- An opening balance beyond the limit shows the out-of-range message with the formatted limit and sends no request.
+
+**Required tests**
+- [ ] `nameErrorMessage` returns the invalid-characters key for `Caja` plus a zero-width space and a right-to-left override, the required key for only zero-width characters or only spaces, and the too-long key above 50 code points (validates AC-20, AC-21).
+- [ ] The create container shows the invalid-characters message for a name with a zero-width character and calls nothing (validates AC-20).
+- [ ] The create container shows the name-required message for a zero-width-only name and calls nothing (validates AC-21).
+- [ ] The create container shows the out-of-range message with the formatted limit for `10.000.000.000.000,01` typed in `es` and calls nothing; the limit `10.000.000.000.000,00` and its negative are sent (validates AC-18, AC-19).
+- [ ] The catalogs keep the same keys in es and en (`i18n-catalogs.test.ts`) and the message copy for the two new keys exists in both languages (error path).
+- [ ] e2e: the form refuses an opening balance beyond the limit and a zero-width-only name, shows the messages, and creates nothing (validates AC-18, AC-21).
+
+**Completion criterion**
+The two web test files and `i18n-catalogs.test.ts` pass, `pnpm --filter @argent/web typecheck` passes, and `pnpm e2e` passes the amended `accounts.spec.ts` with free ports 3000, 4000 and 4100.
 
 ## Final verification
 - `pnpm lint`, `pnpm typecheck`, `pnpm test:coverage` (80% floor over the three trees), `pnpm test:perf`

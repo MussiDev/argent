@@ -7,7 +7,7 @@
 | Tier | FEATURE |
 | Date | 2026-10-01 |
 
-Risk identifiers are local to this ticket (R-01 to R-15).
+Risk identifiers are local to this ticket (R-01 to R-16).
 
 ## Components
 | Component | Source in the spec |
@@ -31,9 +31,9 @@ Risk identifiers are local to this ticket (R-01 to R-15).
 ## STRIDE analysis
 ### `packages/shared/src/money.ts` + `packages/shared/src/accounts/account.ts` (bigint helpers, request and response contracts)
 - **Spoofing:** not applicable to pure functions; the contracts never carry a user id, owner or role, so a client cannot name another owner (R-01).
-- **Tampering:** amounts are decimal integer strings inside the int64 range, parsed to `bigint`; floats, exponents and decimals are refused, and overflow throws a `RangeError` (R-04); `type` and `currency` on rename are declared `z.never()` so they cannot be changed by mass assignment (R-03).
+- **Tampering:** amounts are decimal integer strings inside the int64 range, parsed to `bigint`; floats, exponents and decimals are refused, the stored opening balance is bounded to plus or minus 10^15 minor units, and derived balances and totals use exact `bigint` arithmetic that cannot overflow or throw (R-04); `type` and `currency` on rename are declared `z.never()` so they cannot be changed by mass assignment (R-03).
 - **Repudiation:** none; pure functions with no side effects.
-- **Information Disclosure:** validation failures list field paths only and never echo submitted values; the response schema strips undeclared fields (R-10).
+- **Information Disclosure:** names with control, zero-width or bidirectional-override characters are refused, so a name cannot hide or reorder text for a later viewer (R-16); validation failures list field paths only and never echo submitted values; the response schema strips undeclared fields (R-10).
 - **Denial of Service:** `limit` is capped at 100 and names at 50 code points; amount strings are at most 20 characters; the 16 kb body limit applies (R-09).
 - **Elevation of Privilege:** nothing in the contracts grants a role or an access level; ownership is decided server-side from the session.
 
@@ -110,7 +110,7 @@ Risk identifiers are local to this ticket (R-01 to R-15).
 | R-01 | broken object-level authorization: a user reads, renames, archives or deletes another user's account by guessing an id (PRD AC-14) | E | M | H | `AccessScope` issued from the session, `scopedTo` owner predicate in the same statement, 404 identical to a missing id, tests per route and per repository method |
 | R-02 | an unverified email account uses financial routes | S | M | M | `requireSession` then `requireVerifiedEmail` on `/accounts`; tests for 401 and 403 on every route |
 | R-03 | mass assignment or direct SQL changes the currency, type or owner of an account, corrupting history (PRD AC-05) | T | M | H | rename schema declares `type` and `currency` as `z.never()`; a database trigger refuses changes to `type`, `currency` and `owner_id`; tested at both layers |
-| R-04 | precision loss, float arithmetic or int64 overflow corrupts balances (PRD NFR-01) | T | M | H | `bigint` column and TypeScript type, decimal strings in JSON, shared helpers with `RangeError` on overflow, exact 100,000-amount sum test, no float in tests |
+| R-04 | precision loss, float arithmetic or int64 overflow corrupts balances, or an overflowing total makes the account list answer 500 (PRD NFR-01, NFR-06, FR-13) | T | M | H | `bigint` column with a CHECK of plus or minus 10^15 on the opening balance and the same bound in the shared validator (400 naming the field, never 500), decimal strings in JSON, exact `bigint` sums (`addExact`, `sumExact`) and unbounded integer-string response validators for derived balances and totals (a total over N accounts is at most N times 10^15 plus movement sums, and `bigint` has no upper limit), an exact 100,000-amount sum test and a 9,300-account route test, no float in tests |
 | R-05 | a concurrent create or rename produces two accounts with the same name for one owner | T | L | L | unique index on (`owner_id`, `lower(name)`), violation mapped to `ACCOUNT_NAME_TAKEN` |
 | R-06 | an account is deleted while a movement is being recorded against it (check-then-act race), destroying history | T | L | H | `hasMovements` check, then a database foreign key `ON DELETE RESTRICT` required of PRD 03 and mapped to `ACCOUNT_HAS_MOVEMENTS`; tested with a test-only referencing table |
 | R-07 | cross-site request forges an archive or delete | S | M | M | origin guard with web origin and `X-Requested-With: argent`, SameSite cookies, tests for the missing header |
@@ -120,6 +120,7 @@ Risk identifiers are local to this ticket (R-01 to R-15).
 | R-11 | a delete, archive or rename cannot be attributed afterwards | R | L | M | audit log line per mutating route with user id and account id only, plus the existing request log with request id |
 | R-12 | the migration collides in numbering with sibling tickets or cannot be undone, leaving the database out of sync | T | M | M | provisional number `0006` with an explicit renumber procedure, migration tests for apply, rollback and re-apply, a documented rollback script that is destructive and needs an explicit plan |
 | R-13 | a future movements adapter returns or sums movements of other users' accounts | I | L | H | the port only receives scope-filtered account ids and returns data keyed by those ids; the adapter contract and a contract test are PRD 03's obligation, recorded in the spec deferrals |
+| R-16 | an account name with control, zero-width or bidirectional-override characters is blank-looking or reorders surrounding text, spoofing another account or member once names are shown to others (PRD FR-14) | S | L | M | the shared name validator refuses Unicode Cc and Cf characters on create and rename (400 naming `body.name`), the web form shows a specific message, tests cover zero-width, right-to-left override, NUL and soft hyphen |
 | R-15 | a user (or a stolen session) creates an unbounded number of accounts, growing storage and the cost of the list and totals queries (PRD NFR-02 assumes up to 100 accounts) | D | L | M | accepted, see below; bounded in the meantime by pagination, indexes, aggregate queries and the 500-id chunking (R-09) |
 | R-14 | an account name containing markup runs script in the web app (stored XSS) | T | L | H | React renders names as text; no raw HTML sink; the existing CSP blocks inline script; a component test renders a name containing markup as literal text |
 

@@ -6,14 +6,14 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01d.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 3 |
-| Loops since last human decision | 1 |
+| Spec loops | 4 |
+| Loops since last human decision | 2 |
 
 ## Summary
 Adds a profile and editable preferences to the `identity` module. A signed-in user reads
 `GET /profile` (display name, email, 2FA status, default rate type, display currency, time zone,
 interface language) and edits any of those but the email with `PATCH /profile`. The only schema
-change is a nullable `users.display_name` column (migration `0006_profile_display_name`); the four
+change is a nullable `users.display_name` column (migration `0007_profile_display_name`); the four
 preferences already live on `users` (DISC-001-01a). 2FA status comes from DISC-001-01c's real
 `GetTwoFactorStatus` use case, which is on main. A display name that was never set is returned as
 `null` and the screen shows an empty field. `packages/shared` gets the request and response schemas,
@@ -50,9 +50,12 @@ arithmetic on `bigint`, and the select control is a styled native `<select>` in 
 ## Decisions recorded and assumptions of this spec
 Decided by the human (recorded in the PRD's decision log):
 - 2FA status is read from 01c's real code; no stub (D-5).
-- The migration is `0006_profile_display_name` because 01c owns `0005`. DISC-001-02a is planned in
-  parallel and also claims the next number: whichever merges later renumbers its migration (rename
-  the SQL and rollback files, regenerate the snapshot, fix `_journal.json`) (D-6).
+- The migration is `0007_profile_display_name`: 01c owns `0005`, and the coordinator assigns
+  migration numbers per ticket to avoid collisions: DISC-001-02a is `0006` (being implemented),
+  this ticket `0007` and DISC-001-07a `0008`. This supersedes the "whichever merges later
+  renumbers" wording of D-6 in the PRD's decision log. This migration therefore applies on top of
+  02a's `0006`, so CODE starts from a base that contains it; if the numbers change again, rename the
+  SQL and rollback files, regenerate the snapshot and fix `_journal.json`.
 - Existing accounts keep no display name (`null`) until the user sets one; the UI handles `null`
   (D-3).
 - AC-09/AC-10 (amount formatting by language) are verified by unit tests of the shared formatter
@@ -118,11 +121,11 @@ All tests above pass in `packages/shared` and the existing identity domain tests
 
 **Files**
 - `apps/api/src/identity/infrastructure/db/schema.ts` (modified) — `users.displayName` and its check constraint.
-- `apps/api/drizzle/0006_profile_display_name.sql` (new, generated with `drizzle-kit generate --name profile_display_name`), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0006_snapshot.json` (new, generated), `apps/api/drizzle/rollback/0006_profile_display_name.down.sql` (new; destructive, see Data model).
+- `apps/api/drizzle/0007_profile_display_name.sql` (new, generated with `drizzle-kit generate --name profile_display_name`), `apps/api/drizzle/meta/_journal.json` (modified), `apps/api/drizzle/meta/0007_snapshot.json` (new, generated), `apps/api/drizzle/rollback/0007_profile_display_name.down.sql` (new; destructive, see Data model).
 - `apps/api/src/identity/application/ports/profile-repository.ts` (new) — `Profile`, `ProfileChanges`, `ProfileRepository`.
 - `apps/api/src/identity/infrastructure/db/drizzle-profile-repository.ts` (new).
 - `apps/api/src/identity/index.ts` (modified) — exports the port and builds the adapter in `createIdentityInfrastructure`; `IdentityInfrastructure` gains a required `profiles` field, so `apps/api/test/identity/identity-infrastructure.test.ts` (modified if it builds an object of that type) is checked.
-- `apps/api/test/identity/migration.test.ts` (modified) — `ALL_MIGRATIONS` becomes 7 and every rollback chain that starts at `0005_two_factor` first rolls back `0006_profile_display_name` (newest first), with the `ALL_MIGRATIONS - n` offsets adjusted. Today's lines: the `rollback('0005_two_factor')` calls at 203, 238, 320, 377, 409, 460, 529 and 612 (line 460 matters most: the 0004 rollback that must fail on a password-less user needs 0006 rolled back first), the full-chain test at 202-208, and the offsets `-3` (384), `-2` (412), `-1` (464), `-2` (479), `-1` (531) and `-1` (615), each one more than now; a new `describe` covers `0006_profile_display_name`. `apps/api/test/deploy/build-output.test.ts` needs no change (it lists tables, and this migration adds none).
+- `apps/api/test/identity/migration.test.ts` (modified) — `ALL_MIGRATIONS` grows by one (8 once 02a's `0006` is in the base) and every rollback chain first rolls back `0007_profile_display_name`, then 02a's `0006`, then `0005_two_factor` (newest first), with the `ALL_MIGRATIONS - n` offsets adjusted. The line numbers below are from main before 02a and will shift when 02a lands; they identify the places, not the final lines. The `rollback('0005_two_factor')` calls at 203, 238, 320, 377, 409, 460, 529 and 612 (line 460 matters most: the 0004 rollback that must fail on a password-less user needs 0007 and 0006 rolled back first), the full-chain test at 202-208, and the offsets `-3` (384), `-2` (412), `-1` (464), `-2` (479), `-1` (531) and `-1` (615), each one more than now; a new `describe` covers `0007_profile_display_name`. `apps/api/test/deploy/build-output.test.ts` needs no change (it lists tables, and this migration adds none).
 - `apps/api/test/identity/profile-persistence.test.ts` (new).
 
 **Logic**
@@ -134,7 +137,7 @@ All tests above pass in `packages/shared` and the existing identity domain tests
 **Data model**
 - Entity `users` (table `users`), new column `display_name text` nullable, no default; check constraint `users_display_name_check`: `display_name is null or char_length(display_name) between 1 and 50`.
 - No new table, no new index (all access is by primary key). Existing columns `default_rate_type`, `display_currency`, `time_zone`, `language` and their check constraints are unchanged.
-- Migration `0006_profile_display_name` only adds a nullable column and a check that every existing row satisfies (non-destructive). Its rollback script drops the check and the column; it is destructive (every display name is lost), says so in its header, asks for the API to be stopped first, and deletes its row from `drizzle.__drizzle_migrations` keyed by the `when` of its journal entry (which must be later than 0005's, or drizzle will not apply it), following `0005_two_factor.down.sql`.
+- Migration `0007_profile_display_name` only adds a nullable column and a check that every existing row satisfies (non-destructive). Its rollback script drops the check and the column; it is destructive (every display name is lost), says so in its header, asks for the API to be stopped first, and deletes its row from `drizzle.__drizzle_migrations` keyed by the `when` of its journal entry (which must be later than 02a's `0006` entry, or drizzle will not apply it), following the earlier `*.down.sql` scripts such as `0005_two_factor.down.sql`.
 
 **Input validation**
 - The repository takes typed values only: a user id (uuid taken from the session) and `ProfileChanges` already validated by Block 1's schemas (display name 1 to 50 code points, rate type, display currency, time zone and language from their lists); the check constraints repeat the display name and enum rules as the last line of defense.
@@ -145,7 +148,7 @@ All tests above pass in `packages/shared` and the existing identity domain tests
 - `findByUserId` for an unknown id resolves null.
 
 **Required tests**
-- [ ] migration `0006` applies on `0005` with existing users, who keep a null display name, and its rollback restores `0005` — validates FR-02
+- [ ] migration `0007` applies on `0006` with existing users, who keep a null display name, and its rollback restores `0006` — validates FR-02
 - [ ] `update` persists a display name and each preference, returns the updated profile, and leaves the other columns untouched — validates AC-02, AC-05, AC-06, AC-07
 - [ ] `update` of an unknown user id resolves null and writes nothing (error path) — validates FR-02
 - [ ] inserting or updating a display name that is empty or has 51 characters fails on the check constraint (invalid) — validates AC-03
@@ -258,12 +261,12 @@ All tests above pass; `GET /profile` and `PATCH /profile` answer as the contract
 All tests above pass, including `pnpm e2e` for the new spec; the new screen works in light and dark themes at phone width; `pnpm lint`, `pnpm typecheck` and the coverage floor of 80% hold.
 
 ## Rollback and reverse migration
-The only schema change is `0006_profile_display_name` (a nullable column and its check). Rollback:
-stop the API and the email worker, run `apps/api/drizzle/rollback/0006_profile_display_name.down.sql`
+The only schema change is `0007_profile_display_name` (a nullable column and its check). Rollback:
+stop the API and the email worker, run `apps/api/drizzle/rollback/0007_profile_display_name.down.sql`
 as a whole (it drops the check and the column and forgets the migration; every saved display name is
 lost), then revert the commit. The new routes, the formatter and the screen are additive and
-disappear with the revert. If DISC-001-02a merges first and takes `0006`, this migration is
-renumbered before it merges (see the decisions above).
+disappear with the revert. This migration is `0007` and follows 02a's `0006`; if numbers are
+reassigned it is renumbered before it merges (see the decisions above).
 
 ## Final verification
 - `GET /profile` and `PATCH /profile` behave as their contracts say, with the real session middleware, and each of the PRD's 10 acceptance criteria has at least one passing test.

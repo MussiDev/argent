@@ -42,3 +42,5 @@ All notable changes to this project are documented in this file. The format foll
   `PORT`, and every start command capping the V8 heap (320 MB API and web, 192 MB worker).
 - FIX-003 The email worker validates only the seven settings it reads, so API-only settings (the
   JWT secret, the Google client) can no longer stop it and are no longer handed to it.
+- FIX-004 Google sign-ins finishing at the same time for the same new account (a double click, two
+  tabs) all sign in, instead of one of them showing "Google sign-in failed".

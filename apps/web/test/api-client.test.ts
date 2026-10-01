@@ -399,6 +399,8 @@ describe('api client: two-factor authentication', () => {
       '/auth/2fa/disable',
       (client) => client.disableTwoFactor({ code: '123456' }),
     ],
+    ['getProfile', '/profile', (client) => client.getProfile()],
+    ['updateProfile', '/profile', (client) => client.updateProfile({ displayName: 'Ana' })],
   ];
 
   it.each(SETTINGS_CALLS)(
@@ -420,6 +422,73 @@ describe('api client: two-factor authentication', () => {
       ]);
     },
   );
+
+  const PROFILE = {
+    displayName: null,
+    email: 'ana@example.com',
+    twoFactorEnabled: false,
+    preferences: {
+      defaultRateType: 'blue',
+      displayCurrency: 'ARS',
+      timeZone: 'America/Argentina/Buenos_Aires',
+      language: 'es',
+    },
+  };
+
+  it('reads the profile with the session cookies and the CSRF header (FR-02)', async () => {
+    const { client, fetch } = clientWith(jsonResponse(200, PROFILE));
+
+    const result = await client.getProfile();
+
+    expect(result).toEqual({ ok: true, data: PROFILE });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/profile`);
+    expect(init.method).toBe('GET');
+    expect(init.credentials).toBe('include');
+    expect(new Headers(init.headers).get('X-Requested-With')).toBe('argent');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('updates the profile with PATCH, a JSON body, the cookies and the CSRF header (FR-02)', async () => {
+    const { client, fetch } = clientWith(jsonResponse(200, { ...PROFILE, displayName: 'Ana' }));
+
+    const result = await client.updateProfile({ displayName: 'Ana' });
+
+    expect(result).toEqual({ ok: true, data: { ...PROFILE, displayName: 'Ana' } });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/profile`);
+    expect(init.method).toBe('PATCH');
+    expect(init.credentials).toBe('include');
+    const headers = new Headers(init.headers);
+    expect(headers.get('X-Requested-With')).toBe('argent');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual({ displayName: 'Ana' });
+  });
+
+  it.each([
+    ['getProfile', (client: Client) => client.getProfile()],
+    ['updateProfile', (client: Client) => client.updateProfile({ displayName: 'Ana' })],
+  ] as const)('maps a %s body that does not parse to INTERNAL (sad path)', async (_name, call) => {
+    const { client } = clientWith(jsonResponse(200, { ...PROFILE, email: undefined }));
+
+    const result = await call(client);
+
+    expect(result).toEqual({ ok: false, code: 'INTERNAL', messageKey: 'unexpected' });
+  });
+
+  it('maps a 400 on the profile update to the generic validation message (sad path)', async () => {
+    const { client } = clientWith(
+      jsonResponse(400, { code: 'VALIDATION_FAILED', fields: ['displayName'] }),
+    );
+
+    const result = await client.updateProfile({ displayName: 'Ana' });
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'VALIDATION_FAILED',
+      messageKey: 'validationFailed',
+    });
+  });
 
   it('verifies the second factor with the challenge cookie and returns the signed-in user', async () => {
     const { client, fetch } = clientWith(jsonResponse(200, SIGNED_IN));

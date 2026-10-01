@@ -12,7 +12,8 @@
     "retry": "Reintentar",
     "nav": {
       "home": "Inicio",
-      "security": "Seguridad"
+      "security": "Seguridad",
+      "profile": "Perfil"
     }
   },
   "auth": {
@@ -233,6 +234,54 @@
       "submit": "Desactivar",
       "pending": "Desactivando…",
       "cancel": "Cancelar"
+    }
+  },
+  "profile": {
+    "title": "Perfil",
+    "saved": "Guardado.",
+    "account": {
+      "title": "Tu perfil",
+      "description": "Cómo apareces en Argent.",
+      "displayName": "Nombre para mostrar",
+      "displayNameHint": "Entre 1 y 50 caracteres.",
+      "email": "Correo electrónico",
+      "twoFactor": "Verificación en dos pasos",
+      "twoFactorOn": "Activada",
+      "twoFactorOff": "Desactivada",
+      "submit": "Guardar perfil",
+      "pending": "Guardando…"
+    },
+    "preferences": {
+      "title": "Preferencias",
+      "description": "Valores por defecto en toda la app.",
+      "defaultRateType": "Cotización por defecto",
+      "displayCurrency": "Moneda para mostrar",
+      "timeZone": "Zona horaria",
+      "language": "Idioma",
+      "submit": "Guardar preferencias",
+      "pending": "Guardando…"
+    },
+    "rateTypes": {
+      "oficial": "Oficial",
+      "blue": "Blue",
+      "mep": "MEP (bolsa)",
+      "ccl": "CCL (contado con liquidación)",
+      "mayorista": "Mayorista",
+      "cripto": "Cripto",
+      "tarjeta": "Tarjeta"
+    },
+    "currencies": {
+      "ARS": "Peso argentino (ARS)",
+      "USD": "Dólar estadounidense (USD)"
+    },
+    "languages": {
+      "es": "Español",
+      "en": "English"
+    },
+    "errors": {
+      "displayNameRequired": "Ingresa un nombre para mostrar.",
+      "displayNameTooLong": "El nombre para mostrar puede tener como máximo 50 caracteres.",
+      "timeZoneInvalid": "Elige una zona horaria de la lista."
     }
   }
 }

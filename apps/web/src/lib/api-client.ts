@@ -4,6 +4,7 @@ import {
   listAccountsResponseSchema,
   passwordResetConfirmResponseSchema,
   passwordResetResponseSchema,
+  profileResponseSchema,
   refreshResponseSchema,
   registerResponseSchema,
   resendVerificationResponseSchema,
@@ -23,6 +24,7 @@ import {
   type PasswordResetConfirmResponse,
   type PasswordResetRequest,
   type PasswordResetResponse,
+  type ProfileResponse,
   type RegisterRequest,
   type RegisterResponse,
   type RenameAccountRequest,
@@ -37,6 +39,7 @@ import {
   type TwoFactorEnableResponse,
   type TwoFactorSetupResponse,
   type TwoFactorStatusResponse,
+  type UpdateProfileRequest,
   type VerifyEmailRequest,
   type VerifyEmailResponse,
 } from '@argent/shared';
@@ -167,6 +170,8 @@ export interface ApiClient {
   archiveAccount(id: string): Promise<ApiResult<AccountResponse>>;
   unarchiveAccount(id: string): Promise<ApiResult<AccountResponse>>;
   deleteAccount(id: string): Promise<ApiResult<undefined>>;
+  getProfile(): Promise<ApiResult<ProfileResponse>>;
+  updateProfile(body: UpdateProfileRequest): Promise<ApiResult<ProfileResponse>>;
 }
 
 /**
@@ -409,5 +414,20 @@ export function createApiClient({
           refreshOnUnauthenticated: true,
         }),
       ),
+    getProfile: () =>
+      request({
+        method: 'GET',
+        path: '/profile',
+        response: profileResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    updateProfile: (body) =>
+      request({
+        method: 'PATCH',
+        path: '/profile',
+        body,
+        response: profileResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
   };
 }

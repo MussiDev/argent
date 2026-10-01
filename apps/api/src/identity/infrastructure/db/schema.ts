@@ -61,11 +61,17 @@ export const users = pgTable(
     /** Bumped by every password change; sessions created with an older value are dead (AC-10). */
     credentialsVersion: integer('credentials_version').notNull().default(0),
     passwordChangedAt: timestamptz('password_changed_at'),
+    /** Null until the user sets one; 1 to 50 characters (PRD 01d). */
+    displayName: text('display_name'),
   },
   (table) => [
     check('users_default_rate_type_check', oneOf(table.defaultRateType, RATE_TYPES)),
     check('users_display_currency_check', oneOf(table.displayCurrency, DISPLAY_CURRENCIES)),
     check('users_language_check', oneOf(table.language, LANGUAGES)),
+    check(
+      'users_display_name_check',
+      sql`${table.displayName} is null or char_length(${table.displayName}) between 1 and 50`,
+    ),
   ],
 );
 

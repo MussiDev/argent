@@ -12,7 +12,14 @@ const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const OWNED_RESOURCES = ['argent-api', 'argent-postgres', 'argent-web', 'argent-worker'];
 const APP_SERVICES = ['argent-api', 'argent-web', 'argent-worker'];
 const DATABASE = 'argent-postgres';
-const SECRETS = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'JWT_SECRET', 'RESEND_API_KEY'];
+const SECRETS = [
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+  'JWT_SECRET',
+  'RESEND_API_KEY',
+  // Encrypts the stored TOTP secrets (DISC-001-01c); losing it makes them unreadable.
+  'TOTP_ENCRYPTION_KEY',
+];
 
 const ALLOWED_LITERALS: Record<string, readonly string[]> = {
   'argent-api': [
@@ -43,7 +50,13 @@ const ALLOWED_REFERENCES: Record<string, Readonly<Record<string, string>>> = {
 };
 
 const SERVICE_SECRETS: Record<string, readonly string[]> = {
-  'argent-api': ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'JWT_SECRET', 'RESEND_API_KEY'],
+  'argent-api': [
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
+    'JWT_SECRET',
+    'RESEND_API_KEY',
+    'TOTP_ENCRYPTION_KEY',
+  ],
   'argent-worker': ['RESEND_API_KEY'],
   'argent-web': [],
 };
@@ -72,6 +85,15 @@ const HEAP_CAPS_MB: Record<string, number> = {
   'argent-worker': 192,
   'argent-web': 320,
 };
+
+/** Container limits (FIX-005): a runaway outside the V8 heap stops here, far below the plan maximum. */
+const CONTAINER_LIMITS: Record<string, { cpu: number; memoryBytes: number }> = {
+  'argent-api': { cpu: 2, memoryBytes: 2_000_000_000 },
+  'argent-worker': { cpu: 1, memoryBytes: 512_000_000 },
+  'argent-web': { cpu: 1, memoryBytes: 1_000_000_000 },
+};
+
+const MIB = 1024 * 1024;
 
 const MIGRATION = 'node apps/api/dist/shared/db/migrate.js';
 
@@ -135,6 +157,25 @@ function heapCapIssues(services: readonly ServiceNode[], caps: Record<string, nu
       issues.push(`${name}: start command has no --max-old-space-size (expected ${cap})`);
     } else if (Number(match[1]) !== cap) {
       issues.push(`${name}: --max-old-space-size=${match[1] ?? ''}, expected ${cap}`);
+    }
+  }
+  return issues;
+}
+
+/** A container memory limit that is missing or below twice the V8 heap cap, naming the service. */
+function containerMemoryIssues(
+  services: readonly ServiceNode[],
+  heapCapsMb: Record<string, number>,
+): string[] {
+  const issues: string[] = [];
+  for (const [name, heapMb] of Object.entries(heapCapsMb)) {
+    const minimum = 2 * heapMb * MIB;
+    const node = services.find((candidate) => candidate.name === name);
+    const limit = node?.deploy?.limitOverride?.containers?.memoryBytes;
+    if (limit == null) {
+      issues.push(`${name}: no container memory limit (expected at least ${minimum} bytes)`);
+    } else if (limit < minimum) {
+      issues.push(`${name}: container memory limit ${limit} bytes, expected at least ${minimum}`);
     }
   }
   return issues;
@@ -217,10 +258,13 @@ describe('Railway Infrastructure as Code definition', () => {
     expect(serviceNamed('argent-api').source?.checkSuites).toBe(true);
   });
 
-  it('caps the API container at 2 vCPU and 2 GB, as production has it', () => {
-    expect(serviceNamed('argent-api').deploy?.limitOverride).toEqual({
-      containers: { cpu: 2, memoryBytes: 2_000_000_000 },
-    });
+  it('caps every application container, at least twice its V8 heap, and leaves the database unset', () => {
+    for (const [name, containers] of Object.entries(CONTAINER_LIMITS)) {
+      expect(serviceNamed(name).deploy?.limitOverride, name).toEqual({ containers });
+    }
+    expect(containerMemoryIssues(services, HEAP_CAPS_MB)).toEqual([]);
+    const database = resources.find((node) => node.name === DATABASE);
+    expect(JSON.stringify(database)).not.toContain('limitOverride');
   });
 
   it('builds each application service with RAILPACK and its build command, watching its paths', () => {
@@ -329,6 +373,22 @@ describe('Railway Infrastructure as Code definition', () => {
 });
 
 describe('Railway definition checks (sad paths)', () => {
+  it('container limit error: a memory limit below twice the heap, or none, names the service and the minimum', () => {
+    const nodes = [
+      service('argent-api', {
+        deploy: { limitOverride: { containers: { cpu: 2, memoryBytes: 2_000_000_000 } } },
+      }),
+      service('argent-worker', {
+        deploy: { limitOverride: { containers: { cpu: 1, memoryBytes: 256_000_000 } } },
+      }),
+      service('argent-web'),
+    ];
+    expect(containerMemoryIssues(nodes, HEAP_CAPS_MB)).toEqual([
+      `argent-worker: container memory limit 256000000 bytes, expected at least ${String(2 * 192 * MIB)}`,
+      `argent-web: no container memory limit (expected at least ${String(2 * 320 * MIB)} bytes)`,
+    ]);
+  });
+
   it('secret error: a secret given a literal value is reported as service.VARIABLE', () => {
     const leaky = service('argent-api', {
       env: { JWT_SECRET: 'not-a-real-secret', RESEND_API_KEY: preserve() },

@@ -5,7 +5,7 @@
 | Ticket | FEAT-001 |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Scope | diff of `feat/FEAT-001-railway-iac` against `3cdd215`: `.railway/railway.ts`, `apps/api/test/deploy/railway-iac.test.ts`, `package.json`, `apps/api/package.json`, `pnpm-lock.yaml`, `tsconfig.json`; deleted `apps/api/railway.json`, `apps/api/railway.worker.json`, `apps/web/railway.json`, `apps/api/test/deploy/railway-config.test.ts`; `docs/ddw/**` |
+| Scope | diff of `feat/FEAT-001-railway-iac` against `3cdd215`: `.railway/railway.ts`, `apps/api/test/deploy/railway-iac.test.ts`, `scripts/railway-config.mjs`, `scripts/railway-config.d.mts`, `apps/api/test/deploy/railway-cli-wrapper.test.ts`, `package.json`, `apps/api/package.json`, `pnpm-lock.yaml`, `tsconfig.json`; deleted `apps/api/railway.json`, `apps/api/railway.worker.json`, `apps/web/railway.json`, `apps/api/test/deploy/railway-config.test.ts`; `docs/ddw/**` |
 | Method | Manual review of the diff against catalog §4, plus `pnpm audit --prod --audit-level high` and `pnpm audit --audit-level high` |
 | Result | PASSED — 0 Critical, 0 High, 0 Medium open; 0 Low |
 
@@ -13,7 +13,7 @@
 
 - ✅ F-SAST-01 Hardcoded secrets (CWE-798): `.railway/railway.ts` declares `JWT_SECRET`, `RESEND_API_KEY`, `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` as `preserve()` and `DATABASE_URL` as a reference to `argent-postgres`; the only literals are public settings (origins, sender, log level). The test's sad-path values (`not-a-real-secret`, `re_fake`) are not credentials. No `railway config pull` output was committed.
 - ✅ F-SAST-02 SQL injection (CWE-89): no query added.
-- ✅ F-SAST-03 OS command injection (CWE-78): the build, start and pre-deploy commands in `.railway/railway.ts` are constants with no interpolated input; no process execution was added to application code.
+- ✅ F-SAST-03 OS command injection (CWE-78): the build, start and pre-deploy commands in `.railway/railway.ts` are constants with no interpolated input. `scripts/railway-config.mjs` accepts only `plan` or `apply` as its subcommand, passes every argument to `spawnSync` as an array with `shell: false`, and resolves npm's `railway.cmd` shim to the `railway.exe` beside it so no `.cmd` file is ever run; its only shell call is the fixed string `command -v railway`, with no input. No process execution was added to application code.
 - ✅ F-SAST-04 Insecure deserialization (CWE-502): the test parses the repository's own `package.json` files only.
 - ✅ F-SAST-05 Path traversal (CWE-22): the test walks `apps/` from a fixed repository root and reads fixed file names; no user input reaches a path.
 - ✅ F-SAST-06 XSS (CWE-79): no HTML output added.

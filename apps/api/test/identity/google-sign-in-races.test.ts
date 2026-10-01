@@ -231,6 +231,47 @@ describe('concurrent Google callbacks', () => {
     expect(result.outcome === 'signed_in' && result.user.id).toBe(winner?.id);
   });
 
+  it('signs in to the account a concurrent callback created between the identity and the email lookups', async () => {
+    let winner: Awaited<ReturnType<CompleteGoogleSignIn['execute']>> | undefined;
+    // The competitor commits the same Google account right after this transaction found no link.
+    const racing = hookedUnitOfWork((repositories) => ({
+      ...repositories,
+      identities: afterFirstCall(repositories.identities, 'findUserByProviderSubject', async () => {
+        winner = await completeWith(new DrizzleUnitOfWork(connection.db, clock)).execute(INPUT);
+      }),
+    }));
+
+    const result = await completeWith(racing).execute(INPUT);
+
+    expect(winner).toMatchObject({ outcome: 'signed_in', via: 'created' });
+    expect(result).toMatchObject({ outcome: 'signed_in', via: 'existing_identity' });
+    expect(result.outcome === 'signed_in' && result.user.id).toBe(
+      winner?.outcome === 'signed_in' && winner.user.id,
+    );
+    expect(await count('users')).toBe(1);
+    expect(await count('user_identities')).toBe(1);
+  });
+
+  it('identity error: still refuses a user whose Google identity has a different subject, creating nothing', async () => {
+    const owner = await seedAccount(CLAIMS.email, { verified: true });
+    await new DrizzleUserIdentityRepository(connection.db).link({
+      userId: owner.id,
+      provider: 'google',
+      subject: 'sub-another-google-account',
+      emailAuthoritative: true,
+    });
+
+    const result = await completeWith(new DrizzleUnitOfWork(connection.db, clock)).execute(INPUT);
+
+    expect(result).toEqual({
+      outcome: 'failed',
+      reason: 'another_identity_linked',
+      language: 'en',
+    });
+    expect(await count('users')).toBe(1);
+    expect(await count('user_identities')).toBe(1);
+  });
+
   it('fails after a second conflict instead of retrying again (sad path)', async () => {
     let runs = 0;
     const alwaysConflicting: UnitOfWork = {

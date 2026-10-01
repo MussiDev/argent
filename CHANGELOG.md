@@ -26,6 +26,11 @@ All notable changes to this project are documented in this file. The format foll
   Workspace), and an unverified password account with that email is taken over (password and
   sessions removed) to prevent account pre-hijacking.
 - DISC-001-01b "Continue with Google" on the sign-in and register screens, in Spanish and English.
+- FEAT-001 The Railway services are defined as Infrastructure as Code in `.railway/railway.ts`, a
+  partial that owns only `argent-api`, `argent-worker`, `argent-web` and `argent-postgres`;
+  secrets stay in Railway, and a test fails if one is given a value. `pnpm railway:plan` and
+  `pnpm railway:apply` run Railway's CLI on Windows, Linux and macOS. The deprecated
+  `railway.json` files are removed, and restart retries go from 10 to 5.
 
 ### Fixed
 

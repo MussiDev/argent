@@ -8,6 +8,7 @@ import { CreateSignInChallenge } from './application/create-sign-in-challenge';
 import { DisableTwoFactor } from './application/disable-two-factor';
 import { EnableTwoFactor } from './application/enable-two-factor';
 import { GetCurrentSession } from './application/get-current-session';
+import { GetProfile } from './application/get-profile';
 import { GetTwoFactorStatus } from './application/get-two-factor-status';
 import { RefreshSession } from './application/refresh-session';
 import { RegisterUser } from './application/register-user';
@@ -19,6 +20,7 @@ import { SignOutAll } from './application/sign-out-all';
 import { StartGoogleSignIn } from './application/start-google-sign-in';
 import { StartSession } from './application/start-session';
 import { StartTwoFactorSetup } from './application/start-two-factor-setup';
+import { UpdateProfile } from './application/update-profile';
 import { VerifyEmail } from './application/verify-email';
 import { VerifySecondFactor } from './application/verify-second-factor';
 import type { AttemptLimiter } from './application/ports/attempt-limiter';
@@ -31,6 +33,7 @@ import type { OAuthStatePurger } from './application/ports/oauth-state-purger';
 import type { OAuthStateRepository } from './application/ports/oauth-state-repository';
 import type { OneTimeTokenRepository } from './application/ports/one-time-token-repository';
 import type { PasswordHasher } from './application/ports/password-hasher';
+import type { ProfileRepository } from './application/ports/profile-repository';
 import type { RecoveryCodeGenerator } from './application/ports/recovery-code-generator';
 import type { RecoveryCodeRepository } from './application/ports/recovery-code-repository';
 import type { SecretBox } from './application/ports/secret-box';
@@ -45,6 +48,7 @@ import type { UserIdentityRepository } from './application/ports/user-identity-r
 import type { UserRepository } from './application/ports/user-repository';
 import { DrizzleOAuthStateRepository } from './infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from './infrastructure/db/drizzle-one-time-token-repository';
+import { DrizzleProfileRepository } from './infrastructure/db/drizzle-profile-repository';
 import { DrizzleRecoveryCodeRepository } from './infrastructure/db/drizzle-recovery-code-repository';
 import { DrizzleSessionRepository } from './infrastructure/db/drizzle-session-repository';
 import { DrizzleSignInChallengeRepository } from './infrastructure/db/drizzle-sign-in-challenge-repository';
@@ -62,6 +66,7 @@ import { createPasswordResetRoutes } from './infrastructure/http/password-reset-
 import { createRegistrationRoutes } from './infrastructure/http/registration-routes';
 import { ACCESS_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
 import { createSessionRoutes } from './infrastructure/http/session-routes';
+import { createProfileRoutes } from './infrastructure/http/profile-routes';
 import { createTwoFactorRoutes } from './infrastructure/http/two-factor-routes';
 import {
   AesGcmSecretBox,
@@ -97,6 +102,7 @@ export * from './application/ports/oauth-state-purger';
 export * from './application/ports/oauth-state-repository';
 export * from './application/ports/one-time-token-repository';
 export * from './application/ports/password-hasher';
+export * from './application/ports/profile-repository';
 export * from './application/ports/recovery-code-generator';
 export * from './application/ports/recovery-code-repository';
 export * from './application/ports/secret-box';
@@ -127,6 +133,7 @@ export interface IdentityInfrastructureDependencies {
 export interface IdentityInfrastructure {
   clock: Clock;
   users: UserRepository;
+  profiles: ProfileRepository;
   sessions: SessionRepository;
   oneTimeTokens: OneTimeTokenRepository;
   identities: UserIdentityRepository;
@@ -162,6 +169,7 @@ export function createIdentityInfrastructure({
   return {
     clock,
     users: new DrizzleUserRepository(db),
+    profiles: new DrizzleProfileRepository(db),
     sessions: new DrizzleSessionRepository(db),
     oneTimeTokens: new DrizzleOneTimeTokenRepository(db),
     identities: new DrizzleUserIdentityRepository(db),
@@ -304,6 +312,11 @@ export function createIdentityModule({
     );
   };
 
+  const getTwoFactorStatus = new GetTwoFactorStatus({
+    twoFactor: identity.twoFactor,
+    recoveryCodes: identity.recoveryCodes,
+  });
+
   const routers = [
     createRegistrationRoutes({
       registerUser: new RegisterUser({
@@ -400,10 +413,7 @@ export function createIdentityModule({
       logger: dependencies.logger,
     }),
     createTwoFactorRoutes({
-      getTwoFactorStatus: new GetTwoFactorStatus({
-        twoFactor: identity.twoFactor,
-        recoveryCodes: identity.recoveryCodes,
-      }),
+      getTwoFactorStatus,
       startTwoFactorSetup: new StartTwoFactorSetup({
         users: identity.users,
         twoFactor: identity.twoFactor,
@@ -459,6 +469,18 @@ export function createIdentityModule({
           );
         },
         reportRecordFailure,
+      }),
+      requireSession: routeSession,
+      logger: dependencies.logger,
+    }),
+    createProfileRoutes({
+      getProfile: new GetProfile({
+        profiles: identity.profiles,
+        twoFactorStatus: getTwoFactorStatus,
+      }),
+      updateProfile: new UpdateProfile({
+        profiles: identity.profiles,
+        twoFactorStatus: getTwoFactorStatus,
       }),
       requireSession: routeSession,
       logger: dependencies.logger,

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createIdentityInfrastructure } from '../../src/identity';
 import { DrizzleOAuthStateRepository } from '../../src/identity/infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from '../../src/identity/infrastructure/db/drizzle-one-time-token-repository';
+import { DrizzleProfileRepository } from '../../src/identity/infrastructure/db/drizzle-profile-repository';
 import { DrizzleRecoveryCodeRepository } from '../../src/identity/infrastructure/db/drizzle-recovery-code-repository';
 import { DrizzleSessionRepository } from '../../src/identity/infrastructure/db/drizzle-session-repository';
 import { DrizzleSignInChallengeRepository } from '../../src/identity/infrastructure/db/drizzle-sign-in-challenge-repository';
@@ -44,6 +45,7 @@ describe('createIdentityInfrastructure', () => {
     });
 
     expect(identity.users).toBeInstanceOf(DrizzleUserRepository);
+    expect(identity.profiles).toBeInstanceOf(DrizzleProfileRepository);
     expect(identity.sessions).toBeInstanceOf(DrizzleSessionRepository);
     expect(identity.oneTimeTokens).toBeInstanceOf(DrizzleOneTimeTokenRepository);
     expect(identity.identities).toBeInstanceOf(DrizzleUserIdentityRepository);

@@ -90,7 +90,7 @@ describe('AuthenticatedShell', () => {
     expect(isDisabled(es.auth.signOut.pending)).toBe(true);
   });
 
-  it('links to the security settings and home in the current locale', () => {
+  it('links to the security settings, the profile and home in the current locale', () => {
     renderApp(
       <AuthenticatedShell
         state={{ kind: 'ready' }}
@@ -106,11 +106,15 @@ describe('AuthenticatedShell', () => {
     expect(screen.getByRole('link', { name: en.app.nav.security }).getAttribute('href')).toBe(
       '/en/settings/security',
     );
+    expect(screen.getByRole('link', { name: en.app.nav.profile }).getAttribute('href')).toBe(
+      '/en/settings/profile',
+    );
     expect(screen.getByRole('link', { name: en.app.nav.home }).getAttribute('href')).toBe('/en');
   });
 
   it.each([
     ['/settings/security', 'security'],
+    ['/settings/profile', 'profile'],
     ['/', 'home'],
   ] as const)(
     'marks the link of the current page (%s) with aria-current',
@@ -128,8 +132,10 @@ describe('AuthenticatedShell', () => {
       );
 
       const security = screen.getByRole('link', { name: es.app.nav.security });
+      const profile = screen.getByRole('link', { name: es.app.nav.profile });
       const home = screen.getByRole('link', { name: es.app.nav.home });
       expect(security.getAttribute('aria-current')).toBe(current === 'security' ? 'page' : null);
+      expect(profile.getAttribute('aria-current')).toBe(current === 'profile' ? 'page' : null);
       expect(home.getAttribute('aria-current')).toBe(current === 'home' ? 'page' : null);
     },
   );

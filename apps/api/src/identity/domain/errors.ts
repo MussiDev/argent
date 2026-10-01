@@ -133,3 +133,10 @@ export class SecondFactorExpired extends AppError {
     super('SECOND_FACTOR_EXPIRED');
   }
 }
+
+/** The profile update carries an email that is not the account's; the email cannot be changed here. */
+export class EmailChangeNotAllowed extends AppError {
+  constructor() {
+    super('VALIDATION_FAILED', 'The email cannot be changed here');
+  }
+}

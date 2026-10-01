@@ -1,6 +1,9 @@
+import { DISPLAY_CURRENCY_VALUES, LANGUAGE_VALUES } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TIME_ZONE,
+  DISPLAY_CURRENCIES,
+  LANGUAGES,
   newAccountDefaults,
   resolveLanguage,
   resolveTimeZone,
@@ -59,6 +62,19 @@ describe('account defaults', () => {
       displayCurrency: 'ARS',
       timeZone: 'America/Argentina/Buenos_Aires',
       language: 'es',
+    });
+  });
+});
+
+describe('account defaults share the profile lists', () => {
+  it('uses the shared display currency and language lists (FR-05)', () => {
+    expect(DISPLAY_CURRENCIES).toBe(DISPLAY_CURRENCY_VALUES);
+    expect(LANGUAGES).toBe(LANGUAGE_VALUES);
+    expect(newAccountDefaults({ timeZone: 'America/Cordoba', language: 'en-US' })).toEqual({
+      defaultRateType: 'mep',
+      displayCurrency: 'ARS',
+      timeZone: 'America/Cordoba',
+      language: 'en',
     });
   });
 });

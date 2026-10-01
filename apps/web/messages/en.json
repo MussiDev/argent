@@ -12,7 +12,8 @@
     "retry": "Try again",
     "nav": {
       "home": "Home",
-      "security": "Security"
+      "security": "Security",
+      "profile": "Profile"
     }
   },
   "auth": {
@@ -163,6 +164,54 @@
       "submit": "Turn off",
       "pending": "Turning off…",
       "cancel": "Cancel"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "saved": "Saved.",
+    "account": {
+      "title": "Your profile",
+      "description": "How you appear in Pesly.",
+      "displayName": "Display name",
+      "displayNameHint": "Between 1 and 50 characters.",
+      "email": "Email",
+      "twoFactor": "Two-step verification",
+      "twoFactorOn": "On",
+      "twoFactorOff": "Off",
+      "submit": "Save profile",
+      "pending": "Saving…"
+    },
+    "preferences": {
+      "title": "Preferences",
+      "description": "Defaults used across the app.",
+      "defaultRateType": "Default exchange rate",
+      "displayCurrency": "Display currency",
+      "timeZone": "Time zone",
+      "language": "Language",
+      "submit": "Save preferences",
+      "pending": "Saving…"
+    },
+    "rateTypes": {
+      "oficial": "Official",
+      "blue": "Blue",
+      "mep": "MEP (bolsa)",
+      "ccl": "CCL (contado con liquidación)",
+      "mayorista": "Wholesale",
+      "cripto": "Crypto",
+      "tarjeta": "Card"
+    },
+    "currencies": {
+      "ARS": "Argentine peso (ARS)",
+      "USD": "US dollar (USD)"
+    },
+    "languages": {
+      "es": "Español",
+      "en": "English"
+    },
+    "errors": {
+      "displayNameRequired": "Enter a display name.",
+      "displayNameTooLong": "The display name can be at most 50 characters long.",
+      "timeZoneInvalid": "Choose a time zone from the list."
     }
   }
 }

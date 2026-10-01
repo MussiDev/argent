@@ -1,9 +1,9 @@
-import type { RateType } from '@pesly/shared';
+import { DISPLAY_CURRENCY_VALUES, LANGUAGE_VALUES, type RateType } from '@pesly/shared';
 
-export const DISPLAY_CURRENCIES = ['ARS', 'USD'] as const;
+export const DISPLAY_CURRENCIES = DISPLAY_CURRENCY_VALUES;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 
-export const LANGUAGES = ['es', 'en'] as const;
+export const LANGUAGES = LANGUAGE_VALUES;
 export type Language = (typeof LANGUAGES)[number];
 
 export const DEFAULT_RATE_TYPE: RateType = 'mep';

@@ -2,6 +2,7 @@ import {
   errorResponseSchema,
   passwordResetConfirmResponseSchema,
   passwordResetResponseSchema,
+  profileResponseSchema,
   refreshResponseSchema,
   registerResponseSchema,
   resendVerificationResponseSchema,
@@ -17,6 +18,7 @@ import {
   type PasswordResetConfirmResponse,
   type PasswordResetRequest,
   type PasswordResetResponse,
+  type ProfileResponse,
   type RegisterRequest,
   type RegisterResponse,
   type ResendVerificationResponse,
@@ -30,6 +32,7 @@ import {
   type TwoFactorEnableResponse,
   type TwoFactorSetupResponse,
   type TwoFactorStatusResponse,
+  type UpdateProfileRequest,
   type VerifyEmailRequest,
   type VerifyEmailResponse,
 } from '@pesly/shared';
@@ -99,7 +102,7 @@ const REQUESTED_WITH = 'argent';
 const REFRESH_LOCK = 'argent-refresh';
 
 interface RequestOptions<T> {
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PATCH';
   path: string;
   body?: unknown;
   /** `null` for answers without a body (204). */
@@ -135,6 +138,8 @@ export interface ApiClient {
   verifySecondFactor(
     body: SecondFactorVerifyRequest,
   ): Promise<ApiResult<SecondFactorVerifyResponse>>;
+  getProfile(): Promise<ApiResult<ProfileResponse>>;
+  updateProfile(body: UpdateProfileRequest): Promise<ApiResult<ProfileResponse>>;
 }
 
 /**
@@ -299,6 +304,21 @@ export function createApiClient({
         path: '/auth/2fa/verify',
         body,
         response: secondFactorVerifyResponseSchema,
+      }),
+    getProfile: () =>
+      request({
+        method: 'GET',
+        path: '/profile',
+        response: profileResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    updateProfile: (body) =>
+      request({
+        method: 'PATCH',
+        path: '/profile',
+        body,
+        response: profileResponseSchema,
+        refreshOnUnauthenticated: true,
       }),
   };
 }

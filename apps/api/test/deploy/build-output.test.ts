@@ -15,7 +15,8 @@ const builtMigration = path.join(distDir, 'shared', 'db', 'migrate.js');
 /** Set while building; the bundle must never carry it, because nothing inlines environment values. */
 const BUILD_CANARY = 'build-canary-4f1c9e27d8';
 
-const IDENTITY_TABLES = [
+const ALL_TABLES = [
+  'accounts',
   'auth_attempts',
   'email_outbox',
   'oauth_states',
@@ -31,7 +32,9 @@ const IDENTITY_TABLES = [
 /** A throwaway database, so the built migration runs on a truly empty one. */
 const emptyDatabaseUrl = (() => {
   const url = new URL(testDatabaseUrl);
-  url.pathname = '/argent_build_test';
+  // Derived from the test database name so parallel worktrees on one server do not share it.
+  const testName = url.pathname.replace(/^\//, '').replace(/_test$/, '');
+  url.pathname = `/${testName}_build_test`;
   return url.toString();
 })();
 
@@ -106,7 +109,7 @@ describe('API build output', () => {
     const result = await client.query<{ tablename: string }>(
       "select tablename from pg_tables where schemaname = 'public' order by tablename",
     );
-    expect(result.rows.map((row) => row.tablename)).toEqual(IDENTITY_TABLES);
+    expect(result.rows.map((row) => row.tablename)).toEqual(ALL_TABLES);
   });
 
   it('missing DATABASE_URL error: the built migration exits with code 1 and names the variable', () => {

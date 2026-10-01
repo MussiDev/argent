@@ -5,7 +5,7 @@
 | Ticket | DISC-001-07a |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 1 |
+| PRD loops | 2 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -162,8 +162,8 @@ ID to its new one.
 - 2026-10-01: User decision: ticker is unique per portfolio, case-insensitive; adding an existing
   ticker merges into the existing holding, summing quantity and total cost and keeping the
   existing price (FR-18).
-- 2026-10-01: PENDING HUMAN CONFIRMATION — conservative defaults applied for cases the user did
-  not decide: (a) a merge across different valuation currencies is rejected, nothing merged
-  (FR-19); (b) a merge where at least one holding has no total cost leaves the total cost empty,
-  so no misleading gain or loss is shown (FR-20); (c) a merge keeps the existing instrument name
-  and type, which are not edited by FR-04.
+- 2026-10-01: User decision (confirmed after the defaults were proposed): (a) a merge across
+  different valuation currencies is rejected, nothing merged (FR-19); (b) a merge where at least
+  one holding has no total cost leaves the total cost empty, so no misleading gain or loss is
+  shown (FR-20); (c) a merge keeps the existing instrument name and type, which FR-04 does not
+  edit.

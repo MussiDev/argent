@@ -5,8 +5,8 @@
 | Ticket | DISC-001-02a |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 2 |
-| Loops since last human decision | 1 |
+| PRD loops | 3 |
+| Loops since last human decision | 0 |
 
 ## Context and Problem
 First sub-ticket of Accounts & Categories (parent index: `prd-DISC-001-02.md`). Every movement in
@@ -41,6 +41,11 @@ decision). Requirement IDs were renumbered; the parent index maps every original
 - FR-11: The system must reject an account name that already exists among that user's accounts
   (case-insensitive).
 - FR-12: The system must let a user read, edit, archive and delete only the accounts they own.
+- FR-13: The system must reject an opening balance whose absolute value is greater than 10^13
+  major units (10^15 minor units) with a validation error that names the opening balance field.
+- FR-14: The system must reject an account name that contains a Unicode control or format
+  character (categories Cc and Cf, including zero-width and bidirectional override characters)
+  with a validation error that names the name field.
 
 ## Non-Functional Requirements
 - NFR-01: Amounts (opening balance, balances, totals) must be stored as 64-bit integers in minor
@@ -53,6 +58,10 @@ decision). Requirement IDs were renumbered; the parent index maps every original
 - NFR-04: Every account must belong to exactly one user, and 100% of queries on accounts must be
   filtered by the owner (PRD 01, FR-23).
 - NFR-05: Account names must be between 1 and 50 characters.
+- NFR-06: Balances and totals must be computed and returned without integer overflow for a user
+  with up to 100,000 accounts each holding the maximum opening balance (a total of 10^20 minor
+  units, above the signed 64-bit limit), so that 0 account list requests fail with a server error
+  because of arithmetic.
 
 ## Acceptance Criteria
 - AC-01 (FR-01): WHEN a user submits a new account with a valid name, type, currency and opening
@@ -91,6 +100,18 @@ decision). Requirement IDs were renumbered; the parent index maps every original
   opening balance, THE system SHALL create it with an opening balance of 0.
 - AC-17 (FR-01): WHEN a user submits a new account with a negative opening balance, THE system
   SHALL create it and show that negative balance in the account list.
+- AC-18 (FR-13): IF a user submits a new account with an opening balance above 10^15 minor units
+  or below -10^15 minor units, THEN THE system SHALL reject it with a 400 validation error naming
+  the opening balance field and SHALL NOT create the account.
+- AC-19 (FR-13): WHEN a user submits a new account with an opening balance of exactly 10^15 minor
+  units or exactly -10^15 minor units, THE system SHALL create it.
+- AC-20 (FR-14): IF a user creates or renames an account with a name that contains a control or
+  format character, THEN THE system SHALL reject it with a 400 validation error naming the name
+  field and SHALL leave the account unchanged.
+- AC-21 (FR-14): IF a user creates or renames an account with a name made only of whitespace,
+  control or format characters, THEN THE system SHALL reject it as an empty name.
+- AC-22 (FR-10): WHEN the active accounts of one currency add up to more than the signed 64-bit
+  maximum, THE system SHALL show the exact total in the account list instead of failing.
 
 ## Out of Scope
 - Statement cycles, closing and due dates, and installment purchases on credit cards (PRD 10).
@@ -127,5 +148,12 @@ decision). Requirement IDs were renumbered; the parent index maps every original
   decision.
 - 2026-10-01: Human decision during PLAN: the opening balance may be negative (any signed 64-bit
   value, including zero), and it is optional: when omitted the API stores 0 (FR-01, AC-16, AC-17).
+- 2026-10-01: Human decision after VERIFY (L-1): the opening balance is bounded to an absolute
+  value of 10^13 major units (10^15 minor units); a value outside the bound is a validation error,
+  never a server error, and balances and totals cannot overflow (FR-13, NFR-06, AC-18, AC-19,
+  AC-22).
+- 2026-10-01: Human decision after VERIFY (I-2): account names reject Unicode control and format
+  characters (Cc and Cf, including zero-width and bidirectional override characters); a name that
+  is empty once those are ignored is an empty name (FR-14, AC-20, AC-21).
 - 2026-10-01: Human decision during PLAN: there is no cap on the number of accounts per user and
   no extra write-rate limit; do not re-raise it in reviews.

@@ -200,6 +200,12 @@ export class CompleteGoogleSignIn {
       if (!authoritative) return { outcome: 'refused', reason: 'email_not_authoritative' };
       // One Google account per user: a second one with the same email is refused, not relinked.
       if (await identities.hasProviderIdentity(existing.id, 'google')) {
+        // A concurrent callback may have committed this same Google account after the lookup
+        // above; each statement sees the latest commit, so look again before refusing.
+        const sameAccount = await identities.findUserByProviderSubject('google', claims.subject);
+        if (sameAccount?.id === existing.id) {
+          return { outcome: 'resolved', via: 'existing_identity', user: sameAccount };
+        }
         return { outcome: 'refused', reason: 'another_identity_linked' };
       }
       if (existing.emailVerifiedAt) {

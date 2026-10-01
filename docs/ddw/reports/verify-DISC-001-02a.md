@@ -1,11 +1,15 @@
 # Verification DISC-001-02a
 
+Two runs are recorded here. Run 1 passed on commit `fa8dfaf`; after it the human decided L-1 and I-2, the ticket went through a corrective loop (VERIFY to CODE to PLAN to DEFINE and back) and Run 2, at the end of this file, is the verdict on commit `3bb752a`. Where the two differ, Run 2 supersedes Run 1 (the coverage numbers in the table below are Run 2's).
+
+## Run 1 (commit fa8dfaf)
+
 | Field | Value |
 |---|---|
 | Module | `apps/api/src/accounts/**`, `packages/shared/src/money.ts` and `accounts/**`, `apps/web/src/features/accounts/**` |
-| Line coverage | 96.55% (new and modified code; whole project 96.59%) |
-| Branch coverage | 87.5% (new and modified code; whole project 92.38%) |
-| Function coverage | 96.85% (new and modified code; whole project 93.75%) |
+| Line coverage | 96.77% (new and modified code, run 2; whole project 96.62%) |
+| Branch coverage | 88.14% (new and modified code, run 2; whole project 92.4%) |
+| Function coverage | 96.92% (new and modified code, run 2; whole project 93.78%) |
 | Coverage floor | 80% lines, branches and functions (AGENTS.md, "Testing") |
 | Lint | `pnpm exec eslint apps packages` — clean, 0 findings; `pnpm typecheck` — clean; `pnpm exec prettier --check --end-of-line auto .` — clean |
 
@@ -75,5 +79,66 @@ Every API test asserts the response body and the persisted state, not only the s
 ## Open items owned by the human (not blocking, not acted on)
 - L-1: two accounts at the int64 maximum overflow the per-currency total; the accounts screen then answers 500 for that user in both views. No AC or NFR is violated because the PRD allows any signed 64-bit opening balance. Recommendation: a bound on the opening balance, through the PRD.
 - I-2: names accept control and bidirectional-control characters. Only NFR-05 (length) applies; React escapes the output and the data is self-owned until PRD 05.
+
+## Run 2 (commit 3bb752a, after the corrective loop for L-1 and I-2)
+
+Cross-verification by a second independent `ddw-module-verifier` (sonnet), which re-ran 342 tests of
+the new code, `eslint`, `typecheck`, `prettier --check --end-of-line auto` and a literal
+invisible-character grep (clean). e2e (53/53) and perf (5/5) are the account in
+`docs/ddw/reports/tests-DISC-001-02a.md`, not re-run by the verifier.
+
+### Acceptance criteria (run 2)
+- ✅ AC-01 — `account-routes.test.ts` "creates an account and lists it with its opening balance (AC-01)"; the repository precision test now runs at the bound
+- ✅ AC-02 — `account-routes.test.ts` "rejects a missing %s naming the field (AC-02)"
+- ✅ AC-03 — `accounts-components.test.tsx` "offers exactly the five account types and the two currencies (AC-03)"
+- ✅ AC-04 — `account-routes.test.ts` "rejects currency EUR (AC-04)"
+- ✅ AC-05 — `account-routes.test.ts` "rejects %o and leaves the account unchanged (AC-05)"; the immutability trigger survived the migration regeneration
+- ✅ AC-06 — `account-routes.test.ts` "renames, visible in GET and in the list (AC-06)"
+- ✅ AC-07 — `account-routes.test.ts` "archive hides from the default list, keeps GET, lists under archived=true (AC-07)"
+- ✅ AC-08 — `account-routes.test.ts` "unarchive restores the account, idempotently (AC-08)"
+- ✅ AC-09 — `account-routes.test.ts` "answers 204 for an account without movements (AC-09)"
+- ✅ AC-10 — `account-routes.test.ts` "answers 409 ACCOUNT_HAS_MOVEMENTS when movements exist and keeps the account (AC-10)"
+- ✅ AC-11 — `account-routes.test.ts` "adds the movements sum to the opening balance (AC-11)"; `account-use-cases.test.ts` balance exact and without a range limit
+- ✅ AC-12 — `account-routes.test.ts` "totals per currency cover every active account across pages (AC-12)"
+- ✅ AC-13 — `account-routes.test.ts` duplicate name on create and PATCH (409)
+- ✅ AC-14 — `account-routes.test.ts` "answers another user account exactly like a missing id, and changes nothing (AC-14)"
+- ✅ AC-15 — `account-routes.test.ts` "lists only the caller accounts (AC-15)"
+- ✅ AC-16 — `account-routes.test.ts` "defaults an omitted opening balance to "0" (AC-16)"; `accounts-containers.test.tsx` "sends an empty opening balance as omitted (AC-16)"
+- ✅ AC-17 — `account-routes.test.ts` "accepts a negative opening balance and lists it (AC-17)"
+- ✅ AC-18 — `account-routes.test.ts` "rejects the opening balance %s beyond 10^15 naming body.openingBalance and creates nothing (AC-18)" (400, field, empty list, zero rows); `account-contracts.test.ts` exact message; `account-repository.test.ts` CHECK 23514; `accounts-containers.test.tsx` out-of-range message with the formatted limit; e2e "the form refuses an opening balance beyond the limit and creates nothing (AC-18, AC-19)"
+- ✅ AC-19 — `account-routes.test.ts` "accepts exactly the opening balance %s (AC-19)" for plus and minus 10^15; `account-contracts.test.ts`; `account-repository.test.ts`; `accounts-containers.test.tsx` sends the limits
+- ✅ AC-20 — `account-routes.test.ts` "rejects a name with %s naming body.name and creates nothing (AC-20)" and the PATCH variant (zero-width space, right-to-left override, NUL); `account-contracts.test.ts` ten cases for create and rename including soft hyphen, byte order mark, newline and tab; `accounts-containers.test.tsx` and e2e
+- ✅ AC-21 — `account-routes.test.ts` "rejects a name made of %s (AC-21)" for create and PATCH; `account-contracts.test.ts` "rejects a name of %s as empty (AC-21)"; `accounts-containers.test.tsx` name-required message; e2e
+- ✅ AC-22 — `account-routes.test.ts` "answers 200 with the exact ARS total for 9,300 accounts at 10^15 (AC-22, NFR-06)"; `account-use-cases.test.ts` exact totals above the int64 maximum; `account-contracts.test.ts` response schemas; `accounts-components.test.tsx` "formats balances and totals beyond int64 without throwing (AC-22, NFR-06)"
+
+NFR-06 — the proof in the spec (Q8) was checked against the code: no derived sum passes through the
+int64 helpers or int64 response schemas; the exact response schemas are capped at 40 digits.
+
+### Spec blocks (run 2)
+- ✅ Block 1 — every task done, tests as in run 1 (its int64 opening-balance extreme is superseded by Block 9)
+- ✅ Block 2 — every task done, tests as in run 1
+- ✅ Block 3 — every task done, tests as in run 1
+- ✅ Block 4 — every task done, tests as in run 1 (migration 0006 regenerated in place; journal `when`, snapshot and rollback agree)
+- ✅ Block 5 — every task done, tests as in run 1
+- ✅ Block 6 — every task done, tests as in run 1
+- ✅ Block 7 — every task done, tests as in run 1
+- ✅ Block 8 — every task done, tests as in run 1 (e2e 53/53, perf 5/5). Test-only table `perf_movements` is still created by the benchmark, dropped in its teardown and never part of a migration
+- ✅ Block 9 — every task done (4 files, 4 exports), 6 of 6 required tests (bound, exact bound, names for create and rename, empty names, response schemas, exact sums)
+- ✅ Block 10 — every task done (5 of 5), 8 of 8 required tests (use cases at 9,300 accounts, repository CHECK, routes 400 and 201, names, empty names, 9,300 accounts over HTTP, migration CHECK)
+- ✅ Block 11 — every task done, 6 of 6 required tests (message mapping, containers, out-of-range amount, copy, e2e)
+
+### Tests (run 2)
+- ✅ Sad-path tests for the new inputs: opening balances one unit beyond the bound (both signs) and the int64 extremes are rejected, names with each Cc or Cf character and with only invisible or blank content are rejected for create and rename, non-integer and 41-digit amounts fail the exact schemas, the CHECK rejects out-of-range rows with 23514
+- ✅ Coverage per file: no new file is below 80% in lines or functions apart from the Drizzle table definition `schema.ts` (its callbacks only run under drizzle-kit; the CHECK is proven by the migration and repository tests); branches below 80% only in defensive paths (`account-routes.ts` fail-closed guard, `delete-account.ts` find-then-delete race, `accounts-container.tsx`)
+- ✅ TDD evidence for Blocks 9 to 11 (supplied from the implementer reports; the commits bundle code with tests): Block 9 red 17 of 17 new or rewritten tests (`TypeError: sumExact is not a function`, `expected true to be false` for the bound and name rules, `expected false to be true` for a balance beyond int64) plus a fix round with red `expected true to be false` for a leading byte order mark, trailing newline and leading tab; Block 10 red 5 tests (`RangeError: Amount is outside the signed 64-bit range` in `balanceOf` and the 9,300 use-case test, `expected undefined to be '23514'` in the repository and migration tests, `expected 500 to be 200` for the 9,300-account list), the remaining route and name tests were guards because Block 9 already enforced them; Block 11 red 9 tests (`nameErrorMessage` returned `nameRequired` instead of `nameInvalidCharacters`, `IntlError: MISSING_MESSAGE` for the new keys) and a follow-up red `ZodError` formatting a total of 9300000000000000000 and a balance of 9223372036854775808
+
+### Warnings (run 2, non-blocking)
+- ⚠️ The loop replaced the only test that read back a value above 2^53 (the 2^53 plus 1 repository test) by tests at 10^15; the derived-value tests use multiples of 10^15, which a float64 can represent exactly, so they would not catch a regression to float arithmetic. A cheap follow-up is a use-case test with a fake port sum of 2^53 plus 1 and an odd opening balance.
+- ⚠️ Spec drift: Block 9 and Q9 say the Cc and Cf check runs after trimming; the code checks before trimming (so a name with a trailing newline or a leading tab is refused), which is stricter, matches FR-14 ("contains") and is asserted by the tests. The spec text should be amended.
+- ⚠️ The web form shows the generic invalid-amount message, not the out-of-range message, for amounts above about 9.2 times 10^16 major units, because `parseAmountInput` returns null beyond int64; the API answers 400 naming the field in every case and no test covers that band.
+- ⚠️ W-VER-01: `sumMinorUnits`, `addMinorUnits` and `parseMinorUnits` are now used only by tests (public shared helpers).
+- ⚠️ W-VER-02: branches under 80% are defensive (`account-routes.ts:49`, `delete-account.ts:23`, `accounts-container.tsx`).
+- ⚠️ W-VER-03: shared fixed e2e ports 3000, 4000 and 4100, a 9,300-row seeding test with a 60 second timeout, and the CRLF working tree make plain `pnpm lint` fail locally; all environmental.
+- ⚠️ Info: `account-form.tsx`, `account-list.tsx` and `account-presenter.ts` changed without being in the Block 10 and 11 file lists (the presenter change is a comment); the Cc and Cf rule is enforced by the API schema, not by a database CHECK, which the spec does not require; any local database that applied the earlier 0006 migration must be dropped, because the unmerged migration was regenerated in place.
 
 Result: PASSED

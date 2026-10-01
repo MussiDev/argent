@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["vitest.config.ts", "playwright.config.ts", ".railway/railway.ts"]
+  "include": ["vitest.config.ts", "playwright.config.ts", ".railway/railway.ts", "scripts/*.d.mts"]
 }

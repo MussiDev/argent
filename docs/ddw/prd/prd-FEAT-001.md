@@ -5,7 +5,7 @@
 | Ticket | FEAT-001 |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -25,7 +25,9 @@ The Pesly services share the Railway project with unrelated services (nortear, b
 portfolio and others), which this change must not touch.
 
 User decisions (2026-10-01): migrate to Infrastructure as Code (option A) rather than delete the
-files; declare the non-secret variables in the file and keep every secret out of the repository.
+files; declare the non-secret variables in the file and keep every secret out of the repository;
+install the Railway CLI globally instead of pinning it in the repository, so no install downloads
+its binary.
 
 ## Goals
 
@@ -97,8 +99,9 @@ files; declare the non-secret variables in the file and keep every secret out of
 - **The first apply recreates a service, losing its domain or data.** Mitigation: the existing
   services are adopted (`railway config pull`) and the plan must show 0 creations or deletions
   before applying (NFR-01).
-- **The DSL or CLI changes.** Mitigation: versions are pinned in the lockfile as development
-  dependencies.
+- **The DSL or CLI changes.** Mitigation: the `railway` SDK is pinned in the lockfile as a
+  development dependency. The Railway CLI is installed globally by the user and is not pinned in the
+  repository; a minimum CLI version is checked before any plan runs.
 
 ## Dependencies
 

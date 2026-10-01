@@ -26,9 +26,20 @@ const ALLOWED_LITERALS: Record<string, readonly string[]> = {
     'WEB_BASE_URL',
     'WEB_ORIGIN',
   ],
-  // Only what parseWorkerEnv reads besides DATABASE_URL and RESEND_API_KEY (FIX-003).
-  'argent-worker': ['EMAIL_FROM', 'EMAIL_PROVIDER', 'LOG_LEVEL', 'NODE_ENV', 'WEB_BASE_URL'],
-  'argent-web': ['API_ORIGIN', 'NODE_ENV'],
+  // With its references and secrets, exactly what parseWorkerEnv reads (FIX-003).
+  'argent-worker': ['EMAIL_PROVIDER', 'LOG_LEVEL', 'NODE_ENV'],
+  'argent-web': ['NODE_ENV'],
+};
+
+/** Variables that follow another resource's value, as production has them: `resource.OUTPUT`. */
+const ALLOWED_REFERENCES: Record<string, Readonly<Record<string, string>>> = {
+  'argent-api': { DATABASE_URL: `database.${DATABASE}.DATABASE_URL` },
+  'argent-worker': {
+    DATABASE_URL: `database.${DATABASE}.DATABASE_URL`,
+    EMAIL_FROM: 'service.argent-api.EMAIL_FROM',
+    WEB_BASE_URL: 'service.argent-api.WEB_BASE_URL',
+  },
+  'argent-web': { API_ORIGIN: 'service.argent-api.API_ORIGIN' },
 };
 
 const SERVICE_SECRETS: Record<string, readonly string[]> = {
@@ -37,26 +48,20 @@ const SERVICE_SECRETS: Record<string, readonly string[]> = {
   'argent-web': [],
 };
 
-const USES_DATABASE: Record<string, boolean> = {
-  'argent-api': true,
-  'argent-worker': true,
-  'argent-web': false,
-};
-
 const BUILDS = {
   'argent-api': {
     buildCommand: 'pnpm --filter @argent/api build',
-    watchPatterns: ['apps/api/**', 'packages/shared/**', 'pnpm-lock.yaml'],
+    watchPatterns: ['/apps/api/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     startCommand: 'node --max-old-space-size=320 apps/api/dist/server.js',
   },
   'argent-worker': {
     buildCommand: 'pnpm --filter @argent/api build',
-    watchPatterns: ['apps/api/**', 'packages/shared/**', 'pnpm-lock.yaml'],
+    watchPatterns: ['/apps/api/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     startCommand: 'node --max-old-space-size=192 apps/api/dist/worker.js',
   },
   'argent-web': {
     buildCommand: 'pnpm --filter @argent/web build',
-    watchPatterns: ['apps/web/**', 'packages/shared/**', 'pnpm-lock.yaml'],
+    watchPatterns: ['/apps/web/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     startCommand:
       'node --max-old-space-size=320 apps/web/node_modules/next/dist/bin/next start apps/web',
   },
@@ -91,22 +96,21 @@ function literalSecrets(
   return found;
 }
 
-/** Variables outside a service's allowed literal set that are neither preserved nor the DB reference. */
+/** Variables outside a service's allowed literals and references that are not preserved. */
 function unprotectedVariables(
   services: readonly ServiceNode[],
   allowedLiterals: Record<string, readonly string[]>,
+  allowedReferences: Record<string, Readonly<Record<string, string>>>,
 ): string[] {
   const found: string[] = [];
   for (const node of services) {
-    const allowed = allowedLiterals[node.name] ?? [];
+    const literals = allowedLiterals[node.name] ?? [];
+    const references = allowedReferences[node.name] ?? {};
     for (const [name, value] of Object.entries(node.variables ?? {})) {
-      if (allowed.includes(name) || value.type === 'preserve') continue;
-      const isDatabaseReference =
-        name === 'DATABASE_URL' &&
-        value.type === 'reference' &&
-        value.resource === DATABASE_REFERENCE.resource &&
-        value.output === 'DATABASE_URL';
-      if (!isDatabaseReference) found.push(`${node.name}.${name} is ${value.type}`);
+      if (literals.includes(name) || value.type === 'preserve') continue;
+      const isAllowedReference =
+        value.type === 'reference' && references[name] === `${value.resource}.${value.output}`;
+      if (!isAllowedReference) found.push(`${node.name}.${name} is ${value.type}`);
     }
   }
   return found;
@@ -210,6 +214,13 @@ describe('Railway Infrastructure as Code definition', () => {
         branch: 'main',
       });
     }
+    expect(serviceNamed('argent-api').source?.checkSuites).toBe(true);
+  });
+
+  it('caps the API container at 2 vCPU and 2 GB, as production has it', () => {
+    expect(serviceNamed('argent-api').deploy?.limitOverride).toEqual({
+      containers: { cpu: 2, memoryBytes: 2_000_000_000 },
+    });
   });
 
   it('builds each application service with RAILPACK and its build command, watching its paths', () => {
@@ -222,11 +233,12 @@ describe('Railway Infrastructure as Code definition', () => {
     }
   });
 
-  it('each application service restarts ON_FAILURE with at most 10 retries', () => {
+  it('each application service keeps the ON_FAILURE default and restarts at most 5 times', () => {
     for (const name of APP_SERVICES) {
       const deploy = serviceNamed(name).deploy;
-      expect(deploy?.restartPolicyType, name).toBe('ON_FAILURE');
-      expect(deploy?.restartPolicyMaxRetries, name).toBe(10);
+      // Unset means Railway's default policy, ON_FAILURE; any declared type would override it.
+      expect(deploy?.restartPolicyType, name).toBeUndefined();
+      expect(deploy?.restartPolicyMaxRetries, name).toBe(5);
     }
   });
 
@@ -252,14 +264,14 @@ describe('Railway Infrastructure as Code definition', () => {
     expect(serviceNamed('argent-web').deploy?.preDeployCommand).toBeUndefined();
   });
 
-  it('declares each service non-secret variables as literals, and nothing else beyond its secrets', () => {
+  it('declares each service non-secret variables as literals or references, and nothing else beyond its secrets', () => {
     for (const name of APP_SERVICES) {
       const variables = serviceNamed(name).variables ?? {};
       const literals = ALLOWED_LITERALS[name] ?? [];
       const expectedNames = [
         ...literals,
         ...(SERVICE_SECRETS[name] ?? []),
-        ...(USES_DATABASE[name] ? ['DATABASE_URL'] : []),
+        ...Object.keys(ALLOWED_REFERENCES[name] ?? {}),
       ].sort();
       expect(Object.keys(variables).sort(), name).toEqual(expectedNames);
 
@@ -271,16 +283,16 @@ describe('Railway Infrastructure as Code definition', () => {
     }
   });
 
-  it('gives the services one production configuration: same shared values, https origins', () => {
+  it('gives the services one production configuration: shared values follow the API, https origins', () => {
     const literal = (name: string, variable: string): string | null | undefined => {
       const value = serviceNamed(name).variables?.[variable];
       return value?.type === 'literal' ? value.value : undefined;
     };
     for (const name of APP_SERVICES) expect(literal(name, 'NODE_ENV'), name).toBe('production');
-    for (const variable of ['LOG_LEVEL', 'WEB_BASE_URL', 'EMAIL_PROVIDER', 'EMAIL_FROM']) {
+    for (const variable of ['LOG_LEVEL', 'EMAIL_PROVIDER']) {
       expect(literal('argent-worker', variable), variable).toBe(literal('argent-api', variable));
     }
-    expect(literal('argent-web', 'API_ORIGIN')).toBe(literal('argent-api', 'API_ORIGIN'));
+    expect(unprotectedVariables(services, ALLOWED_LITERALS, ALLOWED_REFERENCES)).toEqual([]);
     for (const variable of ['WEB_BASE_URL', 'WEB_ORIGIN', 'API_ORIGIN']) {
       expect(literal('argent-api', variable) ?? '', variable).toMatch(/^https:\/\//);
     }
@@ -294,7 +306,7 @@ describe('Railway Infrastructure as Code definition', () => {
 
   it('every secret is preserved, and every variable outside the literal set is preserved or a reference', () => {
     expect(literalSecrets(services, SECRETS)).toEqual([]);
-    expect(unprotectedVariables(services, ALLOWED_LITERALS)).toEqual([]);
+    expect(unprotectedVariables(services, ALLOWED_LITERALS, ALLOWED_REFERENCES)).toEqual([]);
     for (const [name, secrets] of Object.entries(SERVICE_SECRETS)) {
       for (const secret of secrets) {
         expect(serviceNamed(name).variables?.[secret], `${name}.${secret}`).toEqual(preserve());
@@ -339,9 +351,20 @@ describe('Railway definition checks (sad paths)', () => {
       },
     });
     expect(literalSecrets([leaky], SECRETS)).toEqual([]);
-    expect(unprotectedVariables([leaky], ALLOWED_LITERALS)).toEqual([
+    expect(unprotectedVariables([leaky], ALLOWED_LITERALS, ALLOWED_REFERENCES)).toEqual([
       'argent-worker.SOME_NEW_SECRET is literal',
       'argent-worker.OTHER_DATABASE_URL is reference',
+    ]);
+  });
+
+  it('secret error: a reference that hands the worker another service secret is reported', () => {
+    const api = service('argent-api', { env: { JWT_SECRET: preserve() } });
+    const worker = service('argent-worker', {
+      env: { JWT_SECRET: api.env.JWT_SECRET, EMAIL_FROM: api.env.JWT_SECRET },
+    });
+    expect(unprotectedVariables([worker], ALLOWED_LITERALS, ALLOWED_REFERENCES)).toEqual([
+      'argent-worker.JWT_SECRET is reference',
+      'argent-worker.EMAIL_FROM is reference',
     ]);
   });
 

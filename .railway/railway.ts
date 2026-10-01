@@ -5,9 +5,13 @@ export const partial = 'pesly';
 
 const source = github('MussiDev/pesly', { branch: 'main' });
 
-const restart = { restartPolicyType: 'ON_FAILURE', restartPolicyMaxRetries: 10 } as const;
+// Railway stores its defaults (ON_FAILURE, 10 retries) as null, and the plan reports a declared
+// default as a change forever. The type is left at Railway's ON_FAILURE default; the retries go
+// below it, which keeps them explicit and costs fewer restarts in a crash loop.
+const restart = { restartPolicyMaxRetries: 5 } as const;
 
-const apiWatchPatterns = ['apps/api/**', 'packages/shared/**', 'pnpm-lock.yaml'];
+// Railway stores watch patterns rooted at the repository, with a leading slash.
+const apiWatchPatterns = ['/apps/api/**', '/packages/shared/**', '/pnpm-lock.yaml'];
 
 const WEB_ORIGIN = 'https://pesly.com.ar';
 
@@ -26,7 +30,8 @@ export default defineRailway((_ctx, project) => {
   const db = postgres('argent-postgres');
 
   const api = service('argent-api', {
-    source,
+    // Deploys wait for the GitHub checks (CI) to pass.
+    source: github('MussiDev/pesly', { branch: 'main', checkSuites: true }),
     build: {
       builder: 'RAILPACK',
       buildCommand: 'pnpm --filter @argent/api build',
@@ -34,7 +39,10 @@ export default defineRailway((_ctx, project) => {
     },
     start: 'node --max-old-space-size=320 apps/api/dist/server.js',
     preDeploy: ['node apps/api/dist/shared/db/migrate.js'],
-    deploy: restart,
+    deploy: {
+      ...restart,
+      limitOverride: { containers: { cpu: 2, memoryBytes: 2_000_000_000 } },
+    },
     env: {
       ...shared,
       WEB_ORIGIN,
@@ -59,8 +67,13 @@ export default defineRailway((_ctx, project) => {
     },
     start: 'node --max-old-space-size=192 apps/api/dist/worker.js',
     deploy: restart,
+    // Shared settings follow the API's values instead of repeating them.
     env: {
-      ...shared,
+      NODE_ENV: shared.NODE_ENV,
+      LOG_LEVEL: shared.LOG_LEVEL,
+      EMAIL_PROVIDER: shared.EMAIL_PROVIDER,
+      WEB_BASE_URL: api.env.WEB_BASE_URL,
+      EMAIL_FROM: api.env.EMAIL_FROM,
       DATABASE_URL: db.env.DATABASE_URL,
       RESEND_API_KEY: preserve(),
     },
@@ -72,13 +85,13 @@ export default defineRailway((_ctx, project) => {
     build: {
       builder: 'RAILPACK',
       buildCommand: 'pnpm --filter @argent/web build',
-      watchPatterns: ['apps/web/**', 'packages/shared/**', 'pnpm-lock.yaml'],
+      watchPatterns: ['/apps/web/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     },
     start: 'node --max-old-space-size=320 apps/web/node_modules/next/dist/bin/next start apps/web',
     deploy: restart,
     env: {
       NODE_ENV: 'production',
-      API_ORIGIN,
+      API_ORIGIN: api.env.API_ORIGIN,
     },
   });
 

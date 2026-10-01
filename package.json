@@ -15,8 +15,8 @@
     "test:perf": "pnpm --filter @argent/api test:perf",
     "e2e": "playwright test --pass-with-no-tests",
     "db:migrate": "pnpm --filter @argent/api db:migrate",
-    "railway:plan": "railway config plan --environment production",
-    "railway:apply": "railway config apply --environment production"
+    "railway:plan": "railway config plan",
+    "railway:apply": "railway config apply"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

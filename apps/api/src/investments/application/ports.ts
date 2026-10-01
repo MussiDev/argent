@@ -39,6 +39,8 @@ export interface PortfolioRepository {
 export interface HoldingRepository {
   /** All holdings of the caller across portfolios. */
   listByOwner(scope: AccessScope): Promise<Holding[]>;
+  /** The holdings of one portfolio, filtered in the same scoped statement. */
+  listByPortfolio(scope: AccessScope, portfolioId: string): Promise<Holding[]>;
   findById(scope: AccessScope, id: string): Promise<Holding | null>;
   /** SELECT FOR UPDATE; only meaningful inside a unit of work. */
   findForUpdate(scope: AccessScope<'write'>, id: string): Promise<Holding | null>;

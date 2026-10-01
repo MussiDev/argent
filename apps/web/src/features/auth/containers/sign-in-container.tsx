@@ -5,15 +5,26 @@ import { useEffect, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { useApiClient } from '@/lib/api-client-provider';
 import { SignInForm, type SignInFormValues } from '../components/sign-in-form';
-import { toFormErrors, toValidationErrors, type FormErrors } from '../form-errors';
+import {
+  toFormErrors,
+  toValidationErrors,
+  type FormErrors,
+  type RedirectErrorKey,
+} from '../form-errors';
 import { useGoogleStartUrl } from '../google-start-url';
+
+const MESSAGE_BY_SIGN_IN_ERROR: Record<SignInError, RedirectErrorKey> = {
+  google_failed: 'googleFailed',
+  second_factor_expired: 'secondFactorExpired',
+};
 
 function isSignInError(value: string | null): value is SignInError {
   return SIGN_IN_ERRORS.some((known) => known === value);
 }
 
 /**
- * The API sends a failed Google sign-in back here with `?error=google_failed`. The parameter is
+ * The API sends a failed Google sign-in back here with `?error=google_failed`, and the
+ * second-factor screen an expired challenge with `?error=second_factor_expired`. The parameter is
  * removed from the address bar so a reload does not show the error again; other values are ignored.
  */
 function takeSignInError(): SignInError | null {
@@ -33,8 +44,8 @@ export function SignInContainer() {
   const [errors, setErrors] = useState<FormErrors>({});
 
   useEffect(() => {
-    // `second_factor_expired` gets its own message with the second-factor screen (01c Block 4).
-    if (takeSignInError() === 'google_failed') setErrors({ form: 'googleFailed' });
+    const error = takeSignInError();
+    if (error) setErrors({ form: MESSAGE_BY_SIGN_IN_ERROR[error] });
   }, []);
 
   async function signIn(values: SignInFormValues) {

@@ -5,8 +5,12 @@ import {
   refreshResponseSchema,
   registerResponseSchema,
   resendVerificationResponseSchema,
+  secondFactorVerifyResponseSchema,
   sessionResponseSchema,
   signInResponseSchema,
+  twoFactorEnableResponseSchema,
+  twoFactorSetupResponseSchema,
+  twoFactorStatusResponseSchema,
   verifyEmailResponseSchema,
   type ErrorCode,
   type PasswordResetConfirmRequest,
@@ -16,9 +20,16 @@ import {
   type RegisterRequest,
   type RegisterResponse,
   type ResendVerificationResponse,
+  type SecondFactorVerifyRequest,
+  type SecondFactorVerifyResponse,
   type SessionResponse,
   type SignInRequest,
   type SignInResponse,
+  type TwoFactorDisableRequest,
+  type TwoFactorEnableRequest,
+  type TwoFactorEnableResponse,
+  type TwoFactorSetupResponse,
+  type TwoFactorStatusResponse,
   type VerifyEmailRequest,
   type VerifyEmailResponse,
 } from '@argent/shared';
@@ -37,7 +48,12 @@ export type ApiErrorKey =
   | 'unexpected'
   | 'unauthenticated'
   | 'emailNotVerified'
-  | 'validationFailed';
+  | 'validationFailed'
+  | 'codeInvalid'
+  | 'secondFactorExpired'
+  | 'twoFactorAlreadyEnabled'
+  | 'twoFactorNotEnabled'
+  | 'twoFactorSetupRequired';
 
 /** `NETWORK`: the request never got an HTTP answer (offline, DNS, CORS, aborted). */
 export type ApiFailureCode = ErrorCode | 'NETWORK';
@@ -63,14 +79,13 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
   VALIDATION_FAILED: 'validationFailed',
   NOT_FOUND: 'unexpected',
   INTERNAL: 'unexpected',
-  // Two-factor codes: no screen uses them yet; their own message keys come with those screens.
-  TOTP_INVALID: 'unexpected',
-  TWO_FACTOR_ALREADY_ENABLED: 'unexpected',
-  TWO_FACTOR_NOT_ENABLED: 'unexpected',
-  TWO_FACTOR_SETUP_REQUIRED: 'unexpected',
+  TOTP_INVALID: 'codeInvalid',
+  TWO_FACTOR_ALREADY_ENABLED: 'twoFactorAlreadyEnabled',
+  TWO_FACTOR_NOT_ENABLED: 'twoFactorNotEnabled',
+  TWO_FACTOR_SETUP_REQUIRED: 'twoFactorSetupRequired',
   TWO_FACTOR_UNAVAILABLE: 'retryLater',
-  SECOND_FACTOR_INVALID: 'unexpected',
-  SECOND_FACTOR_EXPIRED: 'unexpected',
+  SECOND_FACTOR_INVALID: 'codeInvalid',
+  SECOND_FACTOR_EXPIRED: 'secondFactorExpired',
 };
 
 function failure(code: ApiFailureCode): ApiFailure {
@@ -110,6 +125,16 @@ export interface ApiClient {
   confirmPasswordReset(
     body: PasswordResetConfirmRequest,
   ): Promise<ApiResult<PasswordResetConfirmResponse>>;
+  getTwoFactorStatus(): Promise<ApiResult<TwoFactorStatusResponse>>;
+  startTwoFactorSetup(): Promise<ApiResult<TwoFactorSetupResponse>>;
+  /** Answers with new session cookies: every other session of the user ends (FR-05). */
+  enableTwoFactor(body: TwoFactorEnableRequest): Promise<ApiResult<TwoFactorEnableResponse>>;
+  /** Answers with new session cookies: every other session of the user ends (FR-05). */
+  disableTwoFactor(body: TwoFactorDisableRequest): Promise<ApiResult<undefined>>;
+  /** The second step of a sign-in; the challenge travels in its own cookie, not a session. */
+  verifySecondFactor(
+    body: SecondFactorVerifyRequest,
+  ): Promise<ApiResult<SecondFactorVerifyResponse>>;
 }
 
 /**
@@ -235,6 +260,45 @@ export function createApiClient({
         path: '/auth/password-reset/confirm',
         body,
         response: passwordResetConfirmResponseSchema,
+      }),
+    getTwoFactorStatus: () =>
+      request({
+        method: 'GET',
+        path: '/auth/2fa',
+        response: twoFactorStatusResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    startTwoFactorSetup: () =>
+      request({
+        method: 'POST',
+        path: '/auth/2fa/setup',
+        body: {},
+        response: twoFactorSetupResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    enableTwoFactor: (body) =>
+      request({
+        method: 'POST',
+        path: '/auth/2fa/enable',
+        body,
+        response: twoFactorEnableResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    disableTwoFactor: (body) =>
+      request({
+        method: 'POST',
+        path: '/auth/2fa/disable',
+        body,
+        response: null,
+        refreshOnUnauthenticated: true,
+      }),
+    // No refresh: before the second step there is no session to recover.
+    verifySecondFactor: (body) =>
+      request({
+        method: 'POST',
+        path: '/auth/2fa/verify',
+        body,
+        response: secondFactorVerifyResponseSchema,
       }),
   };
 }

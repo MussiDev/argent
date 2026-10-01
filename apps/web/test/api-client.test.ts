@@ -303,3 +303,131 @@ describe('api client', () => {
     });
   });
 });
+
+describe('api client: two-factor authentication', () => {
+  const RECOVERY_CODES = Array.from({ length: 10 }, (_, index) => `ABCDE-FGH${index}J`);
+  const SIGNED_IN = {
+    status: 'signed_in',
+    user: { id: 'u1', email: 'ana@example.com', emailVerified: true, language: 'es' },
+  };
+
+  it.each([
+    [400, 'TOTP_INVALID', 'codeInvalid'],
+    [401, 'SECOND_FACTOR_INVALID', 'codeInvalid'],
+    [401, 'SECOND_FACTOR_EXPIRED', 'secondFactorExpired'],
+    [409, 'TWO_FACTOR_ALREADY_ENABLED', 'twoFactorAlreadyEnabled'],
+    [409, 'TWO_FACTOR_NOT_ENABLED', 'twoFactorNotEnabled'],
+    [409, 'TWO_FACTOR_SETUP_REQUIRED', 'twoFactorSetupRequired'],
+    [503, 'TWO_FACTOR_UNAVAILABLE', 'retryLater'],
+    [429, 'RATE_LIMITED', 'retryLater'],
+  ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
+    const { client } = clientWith(jsonResponse(status, { code }));
+
+    const result = await client.disableTwoFactor({ code: '123456' });
+
+    expect(result).toEqual({ ok: false, code, messageKey });
+  });
+
+  it('reads the status, starts a setup, enables and disables with the session cookies', async () => {
+    const { client, fetch } = clientWith(
+      jsonResponse(200, { enabled: false, recoveryCodesRemaining: 0 }),
+      jsonResponse(200, { otpauthUri: 'otpauth://totp/Pesly:ana', secret: 'JBSWY3DPEHPK3PXP' }),
+      jsonResponse(200, { recoveryCodes: RECOVERY_CODES }),
+      new Response(null, { status: 204 }),
+    );
+
+    expect(await client.getTwoFactorStatus()).toEqual({
+      ok: true,
+      data: { enabled: false, recoveryCodesRemaining: 0 },
+    });
+    expect(await client.startTwoFactorSetup()).toEqual({
+      ok: true,
+      data: { otpauthUri: 'otpauth://totp/Pesly:ana', secret: 'JBSWY3DPEHPK3PXP' },
+    });
+    expect(await client.enableTwoFactor({ code: '123456' })).toEqual({
+      ok: true,
+      data: { recoveryCodes: RECOVERY_CODES },
+    });
+    expect(await client.disableTwoFactor({ code: 'abcde-fghij' })).toEqual({
+      ok: true,
+      data: undefined,
+    });
+
+    const sent = fetch.mock.calls.map(([url, init]) => ({
+      url,
+      method: init?.method,
+      credentials: init?.credentials,
+      body: typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+    }));
+    expect(sent).toEqual([
+      { url: `${BASE_URL}/auth/2fa`, method: 'GET', credentials: 'include', body: undefined },
+      { url: `${BASE_URL}/auth/2fa/setup`, method: 'POST', credentials: 'include', body: {} },
+      {
+        url: `${BASE_URL}/auth/2fa/enable`,
+        method: 'POST',
+        credentials: 'include',
+        body: { code: '123456' },
+      },
+      {
+        url: `${BASE_URL}/auth/2fa/disable`,
+        method: 'POST',
+        credentials: 'include',
+        body: { code: 'abcde-fghij' },
+      },
+    ]);
+  });
+
+  type Client = ReturnType<typeof clientWith>['client'];
+  const SETTINGS_CALLS: [string, string, (client: Client) => Promise<unknown>][] = [
+    ['getTwoFactorStatus', '/auth/2fa', (client) => client.getTwoFactorStatus()],
+    ['startTwoFactorSetup', '/auth/2fa/setup', (client) => client.startTwoFactorSetup()],
+    ['enableTwoFactor', '/auth/2fa/enable', (client) => client.enableTwoFactor({ code: '123456' })],
+    [
+      'disableTwoFactor',
+      '/auth/2fa/disable',
+      (client) => client.disableTwoFactor({ code: '123456' }),
+    ],
+  ];
+
+  it.each(SETTINGS_CALLS)(
+    '%s refreshes the session once when the access token is refused',
+    async (_name, path, call) => {
+      const { client, fetch } = clientWith(
+        jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+        jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+        jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+      );
+
+      const result = await call(client);
+
+      expect(result).toMatchObject({ ok: false, code: 'UNAUTHENTICATED' });
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+        `${BASE_URL}${path}`,
+        `${BASE_URL}${path}`,
+        `${BASE_URL}/auth/refresh`,
+      ]);
+    },
+  );
+
+  it('verifies the second factor with the challenge cookie and returns the signed-in user', async () => {
+    const { client, fetch } = clientWith(jsonResponse(200, SIGNED_IN));
+
+    const result = await client.verifySecondFactor({ code: '123456' });
+
+    expect(result).toEqual({ ok: true, data: SIGNED_IN });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/auth/2fa/verify`);
+    expect(init.method).toBe('POST');
+    expect(init.credentials).toBe('include');
+    expect(JSON.parse(init.body as string)).toEqual({ code: '123456' });
+  });
+
+  it('never refreshes a session for the second step: there is none yet (sad path)', async () => {
+    const { client, fetch } = clientWith(jsonResponse(401, { code: 'UNAUTHENTICATED' }));
+
+    const result = await client.verifySecondFactor({ code: '123456' });
+
+    expect(result).toEqual({ ok: false, code: 'UNAUTHENTICATED', messageKey: 'unauthenticated' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

@@ -120,3 +120,42 @@ flow (`:555`), recovery code absent from logs (`:311`). After: 800 passed, 2 ski
 
 Block verifier: PASSED (0 FAIL, 5 WARN). Architecture auditor: PASSED (0 FAIL, 5 WARN); the lock
 order fix above addresses its deadlock warning.
+
+## Block 4 — Web: security settings and second-factor screen
+
+| Required test | File:line | Failure in the red run |
+|---|---|---|
+| e2e: enable from settings, codes shown once, second browser signed out (AC-01, AC-02, AC-07) | `apps/web/e2e/two-factor.spec.ts:111` | `TypeError` reading `es.app.nav.security` (UI absent) |
+| e2e: password sign-in with second factor; wrong code; recovery code once (AC-04, AC-05) | `two-factor.spec.ts:160` | same |
+| e2e: Google sign-in through the second-factor screen (AC-06) | `two-factor.spec.ts:201` | same |
+| e2e: disable with a recovery code; next sign-in one step (AC-03) | `two-factor.spec.ts:223` | same |
+| e2e: expired challenge returns to sign-in with the message | `two-factor.spec.ts:248` | `TypeError` reading `es.auth.secondFactor.code` |
+| API client methods, refresh flags, error mapping | `apps/web/test/api-client.test.ts:314, 331, 392, 412, 425` | `client.<method> is not a function` |
+| security link in the shell | `apps/web/test/auth-components.test.tsx:93` | `Cannot read properties of undefined (reading 'security')` |
+| `second_factor_expired` message on sign-in | `apps/web/test/sign-in-container.test.tsx:135` | missing catalog key |
+| new routes render | `apps/web/test/routes.test.tsx:44, 70` | `Failed to resolve import` |
+| settings container (setup rejects non-numeric code, etc.) | `apps/web/test/security-settings-container.test.tsx:36–254` | `Failed to resolve import` |
+| second-factor container (`SECOND_FACTOR_EXPIRED` → sign-in) | `apps/web/test/second-factor-container.test.tsx:29–103` | `Failed to resolve import` |
+| components: recovery codes copy and download, forms | `apps/web/test/two-factor-components.test.tsx:30–287` | `Failed to resolve import` |
+| every new screen in es and en with no missing keys | `apps/web/test/two-factor-i18n.test.tsx:126` | `Cannot find module` |
+
+72/72 red before (component suites red as missing modules; every assertion then confirmed against
+the implementation; the i18n test was shown to catch a removed key). After: 876 unit tests, 44 e2e,
+coverage 96.34% lines, 92.75% branches, 92.83% functions.
+
+### Block 4 review round 2
+
+| Item | Test (`apps/web/test/`) | Failure in the red run |
+|---|---|---|
+| failed QR render resets and shows the error | `security-settings-container.test.tsx:271` | message not found; unhandled `Error: cannot render` |
+| offline enable keeps the setup | `security-settings-container.test.tsx:287` | secret text not found (setup discarded) |
+| rate-limited / offline disable keeps the form | `security-settings-container.test.tsx:310` | disable heading not found |
+| focus moves to the new view's heading | `security-settings-container.test.tsx:350` | `expected <body> to be <h2 data-slot="card-title">` |
+| `aria-current="page"` on the current nav link | `auth-components.test.tsx:116`, `authenticated-shell-container.test.tsx:130` | `expected null to be 'page'` |
+
+Characterisation tests added green: `second-factor-container.test.tsx:103` (503), `:115` (offline),
+`security-settings-container.test.tsx:333` (401 after refresh). E2E now asserts the enabled and
+disabled notice emails by subject. After: 886 passed, 2 skipped; 44 e2e; coverage 96.45% lines,
+92.89% branches, 92.85% functions.
+
+Block verifier: PASSED (0 FAIL, 4 WARN). Architecture auditor: PASSED (0 FAIL, 7 WARN).

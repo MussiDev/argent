@@ -132,6 +132,16 @@ describe('SignInContainer', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('shows the expired second-step message for error=second_factor_expired (sad path)', async () => {
+    window.history.replaceState(null, '', '/es/sign-in?error=second_factor_expired');
+    stubApi({});
+    renderApp(<SignInContainer />);
+
+    expect(await screen.findByText(es.errors.secondFactorExpired)).toBeDefined();
+    expect(screen.queryByText(es.errors.googleFailed)).toBeNull();
+    expect(window.location.search).toBe('');
+  });
+
   it('clears the Google error once the user signs in with a password', async () => {
     window.history.replaceState(null, '', '/es/sign-in?error=google_failed');
     stubApi({ 'POST /auth/sign-in': { status: 401, body: { code: 'INVALID_CREDENTIALS' } } });

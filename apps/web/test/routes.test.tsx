@@ -10,6 +10,8 @@ import AuthLayout from '../src/app/[locale]/(auth)/layout';
 import RegisterPage from '../src/app/[locale]/(auth)/register/page';
 import ResetPasswordPage from '../src/app/[locale]/(auth)/reset-password/page';
 import SignInPage from '../src/app/[locale]/(auth)/sign-in/page';
+import SecondFactorPage from '../src/app/[locale]/(auth)/sign-in/second-factor/page';
+import SecurityPage from '../src/app/[locale]/(app)/settings/security/page';
 import VerifyEmailPage from '../src/app/[locale]/(auth)/verify-email/page';
 import { CATALOGS, renderApp, stubApi, VALID_TOKEN } from './support/render-app';
 
@@ -22,7 +24,21 @@ const AUTH_PAGES: [string, ComponentType, string][] = [
   ['/reset-password', ResetPasswordPage, es.auth.resetPassword.title],
   ['/check-your-email', CheckYourEmailPage, es.auth.checkYourEmail.title],
   ['/verify-email', VerifyEmailPage, es.auth.verifyEmail.title],
+  ['/sign-in/second-factor', SecondFactorPage, es.auth.secondFactor.title],
 ];
+
+const SESSION = {
+  status: 200,
+  body: {
+    user: {
+      id: 'u1',
+      email: 'ana@example.com',
+      emailVerified: true,
+      language: 'es',
+      timeZone: 'UTC',
+    },
+  },
+};
 
 describe('routes', () => {
   it.each(AUTH_PAGES)('%s shows its screen inside the public auth layout', (path, Page, title) => {
@@ -39,20 +55,7 @@ describe('routes', () => {
   });
 
   it('the home page is only shown behind the session guard', async () => {
-    stubApi({
-      'GET /auth/session': {
-        status: 200,
-        body: {
-          user: {
-            id: 'u1',
-            email: 'ana@example.com',
-            emailVerified: true,
-            language: 'es',
-            timeZone: 'UTC',
-          },
-        },
-      },
-    });
+    stubApi({ 'GET /auth/session': SESSION });
     renderApp(
       <AppLayout>
         <HomePage />
@@ -62,5 +65,21 @@ describe('routes', () => {
     expect(screen.queryByRole('heading', { name: es.home.title })).toBeNull();
     expect(await screen.findByRole('heading', { level: 1, name: es.home.title })).toBeDefined();
     expect(screen.getByText(es.home.tagline)).toBeDefined();
+  });
+
+  it('the security settings are only shown behind the session guard', async () => {
+    const { calls } = stubApi({
+      'GET /auth/session': SESSION,
+      'GET /auth/2fa': { status: 200, body: { enabled: false, recoveryCodesRemaining: 0 } },
+    });
+    renderApp(
+      <AppLayout>
+        <SecurityPage />
+      </AppLayout>,
+    );
+
+    expect(await screen.findByRole('heading', { level: 1, name: es.security.title })).toBeDefined();
+    expect(await screen.findByText(es.security.twoFactor.off)).toBeDefined();
+    expect(calls.map((call) => call.path)).toEqual(['/auth/session', '/auth/2fa']);
   });
 });

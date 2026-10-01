@@ -1,8 +1,10 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { House, ShieldCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Link } from '@/i18n/navigation';
 import type { ErrorMessageKey } from '../form-errors';
 import { FormAlert } from './form-alert';
 import { SignOutButton } from './sign-out-button';
@@ -12,6 +14,8 @@ export type ShellState =
 
 export interface AuthenticatedShellProps {
   state: ShellState;
+  /** The current path without the locale, e.g. `/settings/security`; marks its nav link. */
+  currentPath?: string;
   signingOut: boolean;
   signOutError: ErrorMessageKey | undefined;
   onRetry: () => void;
@@ -22,6 +26,7 @@ export interface AuthenticatedShellProps {
 /** The frame of the authenticated area: session check progress, its failure, or the app. */
 export function AuthenticatedShell({
   state,
+  currentPath,
   signingOut,
   signOutError,
   onRetry,
@@ -51,7 +56,25 @@ export function AuthenticatedShell({
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex items-center justify-end gap-2 border-b px-4 py-2">
+      <header className="flex items-center gap-2 border-b px-4 py-2">
+        <nav className="flex flex-1 items-center gap-1">
+          <Link
+            href="/"
+            aria-current={currentPath === '/' ? 'page' : undefined}
+            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+          >
+            <House aria-hidden />
+            {t('nav.home')}
+          </Link>
+          <Link
+            href="/settings/security"
+            aria-current={currentPath === '/settings/security' ? 'page' : undefined}
+            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+          >
+            <ShieldCheck aria-hidden />
+            {t('nav.security')}
+          </Link>
+        </nav>
         <SignOutButton pending={signingOut} onSignOut={onSignOut} />
       </header>
       {signOutError ? (

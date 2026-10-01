@@ -1,5 +1,6 @@
 import { cleanup, render, type RenderResult } from '@testing-library/react';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
+import { PathnameContext } from 'next/dist/shared/lib/hooks-client-context.shared-runtime';
 import { NextIntlClientProvider } from 'next-intl';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, vi, type Mock } from 'vitest';
@@ -81,11 +82,16 @@ export interface RenderedApp extends RenderResult {
  * Renders a screen the way `app/[locale]/layout.tsx` does: catalogs of `locale`, one API client
  * for `API_ORIGIN`, and next-intl navigation on top of a fake Next.js app router that records
  * where the screen navigates to. `strict` renders under a root StrictMode, which (unlike a nested
- * `<StrictMode>`) makes React mount, unmount and remount effects as in development.
+ * `<StrictMode>`) makes React mount, unmount and remount effects as in development. `pathname` is
+ * what Next.js' `usePathname()` reports (with the locale prefix), `null` as outside Next.js.
  */
 export function renderApp(
   ui: ReactElement,
-  { locale = 'es', strict = false }: { locale?: TestLocale; strict?: boolean } = {},
+  {
+    locale = 'es',
+    strict = false,
+    pathname = null,
+  }: { locale?: TestLocale; strict?: boolean; pathname?: string | null } = {},
 ): RenderedApp {
   const router: FakeRouter = {
     push: vi.fn(),
@@ -100,9 +106,11 @@ export function renderApp(
   function Providers({ children }: { children: ReactNode }) {
     return (
       <AppRouterContext.Provider value={router}>
-        <NextIntlClientProvider locale={locale} timeZone="UTC" messages={CATALOGS[locale]}>
-          <ApiClientProvider apiOrigin={API_ORIGIN}>{children}</ApiClientProvider>
-        </NextIntlClientProvider>
+        <PathnameContext.Provider value={pathname}>
+          <NextIntlClientProvider locale={locale} timeZone="UTC" messages={CATALOGS[locale]}>
+            <ApiClientProvider apiOrigin={API_ORIGIN}>{children}</ApiClientProvider>
+          </NextIntlClientProvider>
+        </PathnameContext.Provider>
       </AppRouterContext.Provider>
     );
   }

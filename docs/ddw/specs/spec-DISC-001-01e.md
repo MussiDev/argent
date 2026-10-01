@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01e.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 1 |
-| Loops since last human decision | 1 |
+| Spec loops | 2 |
+| Loops since last human decision | 0 |
 
 ## Summary
 Every account gets a display name when it is created. For email and password, the registration
@@ -18,9 +18,11 @@ already registered email ignores the name and answers exactly as before. For Goo
 also asks for the `profile` scope (without it Google never puts `name` in the ID token), the adapter
 reads the ID token's `name` claim as an optional value that can never fail a sign-in, and a pure
 domain function turns it into the stored name (missing or empty gives `null`, NUL characters are
-removed, longer than 50 code points is truncated to its first 50). Only the account-creation branch
-of the Google flow stores it, so linking Google to an existing account or signing in again never
-changes a name. The `display_name` column and the profile screen already exist (DISC-001-01d,
+removed, longer than 50 code points is truncated to its first 50). The account-creation branch of the
+Google flow stores it, and so does the supersede branch (a Google sign-in taking over an unverified
+password account replaces that account's name with the Google value, so a name typed by whoever
+registered it does not survive); linking Google to an existing verified account or signing in again
+never changes a name. The `display_name` column and the profile screen already exist (DISC-001-01d,
 migration `0007`), so there is no schema change and no migration. The registration screen gets a
 required display name field. Block 1 adds the shared schema field, the NUL rule and the pure Google
 name rule; Block 2 the registration path; Block 3 the Google scope, claim and account-creation path;
@@ -35,6 +37,7 @@ Block 4 the web screen and the end-to-end helpers.
 | FR-04 | Block 3 |
 | FR-05 | Block 1, Block 3 |
 | FR-06 | Block 3 |
+| FR-07 | Block 3 |
 | NFR-01 | Strategy: the registration use case adds no query and no hashing: the name is one more column in the existing `INSERT INTO users`, so the work per request is unchanged. The existing registration benchmark in `apps/api/test/perf/auth-latency.perf.test.ts` (500 requests over 8 connections, p95 limit 500 ms) sends the new required field, and its p95 assertion is the proof (Block 2). |
 | NFR-02 | Strategy: `displayName` is validated by the shared schema in the `validate` middleware, before `RegisterUser.execute` runs, so a missing or invalid name answers 400 without any lookup of the email, whether or not it exists; for a valid name the use case's two branches are unchanged (the existing-email branch ignores the name, never stores it and still verifies the dummy hash and enqueues the discard row), so the 202 status and body stay identical. A side effect, identical for new and existing emails and therefore not a leak: a request rejected for its name does not record a `register_ip` attempt. A test registers a new email and an existing email with a valid name and compares status and body byte for byte, and a second test sends an invalid name for both and compares the two 400 answers (Block 2). |
 
@@ -60,23 +63,17 @@ were ever needed, the coordinator assigned `0009` to this ticket: 0006 is 02a, 0
 is 07a.) This branch is based on DISC-001-01d's branch, whose PR is not merged yet, and it rebases
 onto main once that PR merges.
 
-Open decisions for the human (the spec carries the recommended answer; none blocks CODE except as
-noted, and each can be changed in a new loop):
-- O-1 (Google scope): to receive the `name` claim the API must request the `profile` scope next to
-  `openid email` (DISC-001-01b's spec fixed `openid email`; its scope test changes). Google lists
-  `profile` with `openid` and `email` as basic, non-sensitive scopes, but the OAuth consent screen
-  of the Google Cloud client "Argent API" must include it; to be checked in the console before this
-  ships. Recommended: add the scope.
-- O-2 (unverified account taken over by Google): DISC-001-01b's supersede path (a Google sign-in for
-  the email of an unverified password account) reuses that account's row. With this ticket that row
-  can carry a name typed by whoever registered it, and AC-08 says a linked account's name stays
-  unchanged, so the attacker's text would become the victim's display name (shown only to the
-  victim today). Recommended: on supersede, replace the name with the Google claim's value (or null),
-  a one-line change in `supersedeUnverified` plus a PRD wording change of AC-08 ("linked to an
-  existing verified account"). This spec implements AC-08 as written (the name stays) and records the
-  risk as R-08 of the threat model until the human decides.
-- O-3 (accepted risk R-05): impersonation through a free-text name needs the owner's approval; see
-  the threat model.
+Decided by the human on 2026-10-01 after the PLAN review (recorded in the PRD's decision log):
+- O-1: the API requests the `profile` scope next to `openid email`, so Google includes the `name`
+  claim (DISC-001-01b's scope test changes). **Deploy prerequisite:** the human adds the
+  `https://www.googleapis.com/auth/userinfo.profile` scope to the consent screen of the Google Cloud
+  client "Argent API" before this ships; the PR body repeats it.
+- O-2: on the supersede path of DISC-001-01b (a Google sign-in taking over an unverified password
+  account) the display name is replaced with the Google `name` claim under the same rules; the PRD
+  now says so (AC-08 reworded to "existing verified account", FR-07 and AC-10 added).
+- O-3: the risk of impersonation through a free-text display name (R-05 of the threat model) is
+  accepted by the owner and is revisited in PRD 05 (groups), where names become visible to others
+  and should be shown with the email.
 
 Assumptions of this spec (interpretations of the PRD wording, not decisions of the human):
 - A-1: The name is trimmed before validation, "empty" includes a name of only spaces, and
@@ -183,19 +180,22 @@ All tests above pass; every existing API test that registers sends a display nam
 **Files**
 - `apps/api/src/identity/application/ports/google-identity-provider.ts` (modified) — `GoogleClaims` gains `name: string | null`.
 - `apps/api/src/identity/infrastructure/security/google-oidc-identity-provider.ts` (modified) — `authorizationUrl` requests `openid email profile` (O-1); the ID-token claims schema reads `name` apart and leniently, as `z.string().optional().catch(undefined)`, so a non-string `name` never fails the parse while `sub`, `email`, `email_verified`, `hd` and `nonce` stay strictly validated; the mapping puts the string or `null` in `GoogleClaims.name`.
-- `apps/api/src/identity/application/complete-google-sign-in.ts` (modified) — the account-creation branch stores `displayNameFromGoogleClaim(claims.name)`; the other branches do not touch the name.
+- `apps/api/src/identity/application/ports/user-repository.ts` (modified) — `supersedeUnverified(id, at, displayName)` gains the new name, `string | null`.
+- `apps/api/src/identity/infrastructure/db/drizzle-user-repository.ts` (modified) — `supersedeUnverified` sets `display_name` in the same `UPDATE` that clears the password.
+- `apps/api/src/identity/application/complete-google-sign-in.ts` (modified) — the account-creation branch stores `displayNameFromGoogleClaim(claims.name)`, the supersede branch passes the same value to `supersedeUnverified`, and the linking and existing-identity branches do not touch the name.
 - `apps/api/test/fixtures/fake-google-oidc.ts` (modified) — `FakeGoogleIdentity` gains an optional `name`; `fakeGoogleLoginHint` and `parseLoginHint` carry it; `signIdToken` puts `name` in the claims only when the requested scope includes `profile`; the scope strings in the approve redirect and the token response include `profile`.
-- Tests: `apps/api/test/identity/google-oidc-identity-provider.test.ts` (the scope assertion becomes `openid email profile`; the exact claims `toEqual` gains `name`), `apps/api/test/identity/fake-google-oidc.test.ts`, `apps/api/test/identity/google-sign-in.test.ts`, `apps/api/test/identity/google-persistence.test.ts`, `apps/api/test/perf/google-callback.perf.test.ts` (scope in its query), and the `GoogleClaims` literals that need `name: null`: `google-sign-in-races.test.ts` (two places) and `two-factor-enrollment.test.ts`.
+- Tests: `apps/api/test/identity/google-oidc-identity-provider.test.ts` (the scope assertion becomes `openid email profile`; the exact claims `toEqual` gains `name`), `apps/api/test/identity/fake-google-oidc.test.ts`, `apps/api/test/identity/google-sign-in.test.ts`, `apps/api/test/identity/google-persistence.test.ts` (its two `supersedeUnverified` tests), `apps/api/test/identity/google-sign-in-races.test.ts` (its repository wrapper at the `supersedeUnverified` call takes the new argument), `apps/api/test/perf/google-callback.perf.test.ts` (scope in its query), and the `GoogleClaims` literals that need `name: null`: `google-sign-in-races.test.ts` (two places) and `two-factor-enrollment.test.ts`.
 
 **Logic**
 - The adapter is the layer that coerces the claim to `string | null`; the application and domain never see another type.
-- `CompleteGoogleSignIn.resolveAccount` calls `users.create({ ..., displayName: displayNameFromGoogleClaim(claims.name) })` only where it creates a user (the `created` path); `existing_identity`, `linked` and `superseded` do not write the name, so a name the user set in the profile is never overwritten (the `superseded` consequence is open decision O-2).
-- The claim is untrusted: only the domain function's output (a valid name or `null`) reaches the database, and the claim is never logged.
+- `CompleteGoogleSignIn.resolveAccount` calls `users.create({ ..., displayName: displayNameFromGoogleClaim(claims.name) })` only where it creates a user (the `created` path); `existing_identity` and `linked` do not write the name, so a name the user set in the profile is never overwritten. The `superseded` branch passes `displayNameFromGoogleClaim(claims.name)` to `supersedeUnverified`, which writes it (possibly `null`) in the same statement as the password removal, so the text a registrant typed for that account is gone once Google takes it over (O-2).
+- The claim is untrusted: only the domain function's output (a valid name or `null`) reaches the database (in both the create and the supersede statements), and the claim is never logged.
 
 **Data model**
 - No schema change: the column `users.display_name` (nullable text, check `users_display_name_check` of 1 to 50 characters) already exists from migration `0007`; the account-creation branch writes it with the other columns of the existing insert. No new table, index or migration.
 
 **Error handling**
+- A supersede of an account that was verified in the meantime returns null and changes nothing, name included (the existing race handling then links it as a verified account).
 - A `name` claim that is missing or empty creates the account with no display name and does not fail the sign-in.
 - A `name` claim that is not a string is read as missing and does not fail the sign-in, while a malformed `sub`, `email`, `email_verified` or `nonce` still gives `claims_malformed`.
 - A repository failure while creating the account follows the existing path of the flow (conflict retry, then 500) and stores no partial name.
@@ -204,7 +204,9 @@ All tests above pass; every existing API test that registers sends a display nam
 - [ ] a Google sign-up with a `name` claim of 1 to 50 characters creates the account with that display name, visible in `GET /profile` — validates AC-05
 - [ ] a Google sign-up with a missing or empty `name` claim creates the account with a null display name and succeeds (error path) — validates AC-06
 - [ ] a Google sign-up with a `name` over 50 code points stores its first 50 code points — validates AC-07
-- [ ] linking Google to an existing verified account, and a repeat Google sign-in of a linked account, leave a display name set earlier unchanged; a supersede of an unverified account also leaves its name as it was (as AC-08 is written, see O-2) — validates AC-08
+- [ ] linking Google to an existing verified account, and a repeat Google sign-in of a linked account, leave a display name set earlier unchanged — validates AC-08
+- [ ] a Google sign-in that takes over an unverified password account replaces the name typed at registration with the Google `name` claim, with null when the claim is missing or empty, and with its first 50 code points when longer — validates AC-10
+- [ ] `supersedeUnverified` sets the display name together with the password removal, and returns null and changes nothing (name included) for an already verified account (error path) — validates FR-07
 - [ ] an ID token whose `name` claim is not a string still signs the user in with no display name (error path), while a malformed required claim still fails with `claims_malformed` — validates FR-05
 - [ ] a failure while creating the account stores no display name and follows the existing conflict path (error) — validates FR-04
 - [ ] the OIDC adapter requests the `profile` scope, maps the `name` claim to `GoogleClaims.name` and to null when absent — validates FR-04
@@ -263,8 +265,8 @@ them. A client that still sends `displayName` after a revert is accepted because
 strips unknown keys.
 
 ## Final verification
-- Registration requires a display name and stores it trimmed; a Google sign-up stores the `name` claim (missing or empty gives none, longer than 50 code points is truncated); linking or signing in again never changes a name; registering an already registered email answers exactly as before.
-- Each of the PRD's 9 acceptance criteria has at least one passing test.
+- Registration requires a display name and stores it trimmed; a Google sign-up stores the `name` claim (missing or empty gives none, longer than 50 code points is truncated); a Google sign-in that takes over an unverified password account replaces its name; linking to a verified account or signing in again never changes a name; registering an already registered email answers exactly as before.
+- Each of the PRD's 10 acceptance criteria has at least one passing test.
 - `pnpm test`, `pnpm e2e`, `pnpm lint`, `pnpm typecheck` and `pnpm audit --prod --audit-level high` pass; coverage stays at or above 80% lines, branches and functions.
 - No UI string is hard-coded, the name and the Google claim are never logged, and no new dependency was added.
-- Assumptions A-1 to A-7 are accepted or changed in a new loop, and open decisions O-1 to O-3 are answered, before the branch is merged.
+- Assumptions A-1 to A-7 are accepted or changed in a new loop before the branch is merged, and the Google Cloud consent screen includes the `userinfo.profile` scope before it ships.

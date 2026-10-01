@@ -1,6 +1,7 @@
 import type { CookieOptions } from 'express';
 import type { ResponseFacade } from '../../../shared/http/validate';
 import { SESSION_IDLE_LIMIT_MS } from '../../application/get-current-session';
+import { SIGN_IN_CHALLENGE_TTL_MS } from '../../application/create-sign-in-challenge';
 import type { SessionTokens } from '../../application/start-session';
 
 /** `__Host-`: the browser enforces Secure, Path=/ and no Domain, so it stays host-only (NFR-11). */
@@ -25,6 +26,28 @@ export const OAUTH_BINDING_COOKIE_OPTIONS: CookieOptions = {
   sameSite: 'lax',
   path: '/auth/google',
 };
+
+/**
+ * Binds a sign-in waiting for its second factor to the browser that passed the first one (threat
+ * R-43). `Strict`, and sent only to `/auth/2fa`, where the verify route reads it.
+ */
+export const SIGN_IN_CHALLENGE_COOKIE = '__Secure-argent_mfa';
+export const SIGN_IN_CHALLENGE_COOKIE_OPTIONS: CookieOptions = {
+  ...BASE_OPTIONS,
+  path: '/auth/2fa',
+};
+
+/** Lives as long as the challenge it carries. */
+export function setSignInChallengeCookie<TBody>(res: ResponseFacade<TBody>, token: string): void {
+  res.cookie(SIGN_IN_CHALLENGE_COOKIE, token, {
+    ...SIGN_IN_CHALLENGE_COOKIE_OPTIONS,
+    maxAge: SIGN_IN_CHALLENGE_TTL_MS,
+  });
+}
+
+export function clearSignInChallengeCookie<TBody>(res: ResponseFacade<TBody>): void {
+  res.clearCookie(SIGN_IN_CHALLENGE_COOKIE, SIGN_IN_CHALLENGE_COOKIE_OPTIONS);
+}
 
 export function setSessionCookies<TBody>(res: ResponseFacade<TBody>, tokens: SessionTokens): void {
   res

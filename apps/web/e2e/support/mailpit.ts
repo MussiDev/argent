@@ -7,6 +7,7 @@ export type EmailPage = 'verify-email' | 'reset-password';
 
 interface MailpitSummary {
   ID: string;
+  Subject: string;
 }
 
 interface MailpitSearch {
@@ -54,4 +55,14 @@ export async function emailLink(address: string, page: EmailPage, count = 1): Pr
   );
   if (!match) throw new Error(`no ${page} link in the email to ${address}`);
   return new URL(match[0]);
+}
+
+/** Waits until an email with exactly `subject` reaches `address`. */
+export async function waitForSubject(address: string, subject: string): Promise<void> {
+  await expect
+    .poll(async () => (await messagesTo(address)).map((message) => message.Subject), {
+      timeout: 30_000,
+      message: `waiting for "${subject}" to ${address}`,
+    })
+    .toContain(subject);
 }

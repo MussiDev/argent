@@ -9,7 +9,11 @@
   },
   "app": {
     "loading": "Cargando…",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "nav": {
+      "home": "Inicio",
+      "security": "Seguridad"
+    }
   },
   "auth": {
     "fields": {
@@ -78,6 +82,18 @@
     "signOut": {
       "label": "Cerrar sesión",
       "pending": "Cerrando sesión…"
+    },
+    "secondFactor": {
+      "title": "Verificación en dos pasos",
+      "description": "Ingresa el código de 6 dígitos que muestra tu app de autenticación.",
+      "recoveryDescription": "Ingresa uno de tus códigos de recuperación. Cada uno sirve una sola vez.",
+      "code": "Código de verificación",
+      "recoveryCode": "Código de recuperación",
+      "submit": "Verificar",
+      "pending": "Verificando…",
+      "useRecoveryCode": "Usar un código de recuperación",
+      "useAuthenticator": "Usar la app de autenticación",
+      "backToSignIn": "Volver a iniciar sesión"
     }
   },
   "errors": {
@@ -95,6 +111,58 @@
     "unauthenticated": "Tu sesión terminó. Vuelve a iniciar sesión.",
     "emailNotVerified": "Verifica tu correo para continuar.",
     "validationFailed": "Revisa los datos ingresados y vuelve a intentarlo.",
-    "googleFailed": "No pudimos iniciar sesión con Google. Vuelve a intentarlo."
+    "googleFailed": "No pudimos iniciar sesión con Google. Vuelve a intentarlo.",
+    "codeInvalid": "El código no es válido o ya se usó. Vuelve a intentarlo.",
+    "secondFactorExpired": "La verificación venció. Vuelve a iniciar sesión.",
+    "twoFactorAlreadyEnabled": "La verificación en dos pasos ya está activada.",
+    "twoFactorNotEnabled": "La verificación en dos pasos ya está desactivada.",
+    "twoFactorSetupRequired": "La activación cambió en otra sesión. Vuelve a empezar.",
+    "totpCodeFormat": "Ingresa los 6 dígitos del código.",
+    "secondFactorCodeFormat": "Ingresa un código de 6 dígitos o un código de recuperación."
+  },
+  "security": {
+    "title": "Seguridad",
+    "enabledNotice": "Activaste la verificación en dos pasos. Cerramos tus otras sesiones.",
+    "disabledNotice": "Desactivaste la verificación en dos pasos. Cerramos tus otras sesiones.",
+    "twoFactor": {
+      "title": "Verificación en dos pasos",
+      "description": "Además de tu contraseña o de Google, te pediremos un código de tu app de autenticación al iniciar sesión.",
+      "on": "Activada",
+      "off": "Desactivada",
+      "recoveryCodesRemaining": "{count, plural, =0 {No te quedan códigos de recuperación.} one {Te queda # código de recuperación.} other {Te quedan # códigos de recuperación.}}",
+      "enable": "Activar",
+      "starting": "Preparando…",
+      "disable": "Desactivar"
+    },
+    "setup": {
+      "title": "Activa la verificación en dos pasos",
+      "scan": "Escanea este código QR con tu app de autenticación.",
+      "qrAlt": "Código QR para tu app de autenticación",
+      "manual": "Si no puedes escanearlo, ingresa esta clave en la app:",
+      "code": "Código de 6 dígitos",
+      "codeHint": "Ingresa el código que muestra la app para confirmar.",
+      "submit": "Confirmar y activar",
+      "pending": "Activando…",
+      "cancel": "Cancelar"
+    },
+    "recoveryCodes": {
+      "title": "Guarda tus códigos de recuperación",
+      "description": "Si pierdes tu app de autenticación, cada código te permite iniciar sesión una sola vez. No volveremos a mostrarlos.",
+      "copy": "Copiar códigos",
+      "copied": "Copiamos los códigos.",
+      "copyFailed": "No pudimos copiarlos. Descárgalos o anótalos.",
+      "download": "Descargar como texto",
+      "fileName": "argent-codigos-de-recuperacion.txt",
+      "fileHeader": "Códigos de recuperación de Argent. Cada uno sirve una sola vez.",
+      "done": "Ya los guardé"
+    },
+    "disable": {
+      "title": "Desactiva la verificación en dos pasos",
+      "description": "Ingresa un código de tu app de autenticación o un código de recuperación sin usar.",
+      "code": "Código",
+      "submit": "Desactivar",
+      "pending": "Desactivando…",
+      "cancel": "Cancelar"
+    }
   }
 }

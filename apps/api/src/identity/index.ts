@@ -4,7 +4,11 @@ import { createRequireSession } from '../shared/http/require-session';
 import type { Logger } from '../shared/logging/logger';
 import { CompleteGoogleSignIn } from './application/complete-google-sign-in';
 import { ConfirmPasswordReset } from './application/confirm-password-reset';
+import { CreateSignInChallenge } from './application/create-sign-in-challenge';
+import { DisableTwoFactor } from './application/disable-two-factor';
+import { EnableTwoFactor } from './application/enable-two-factor';
 import { GetCurrentSession } from './application/get-current-session';
+import { GetTwoFactorStatus } from './application/get-two-factor-status';
 import { RefreshSession } from './application/refresh-session';
 import { RegisterUser } from './application/register-user';
 import { RequestPasswordReset } from './application/request-password-reset';
@@ -14,7 +18,9 @@ import { SignOut } from './application/sign-out';
 import { SignOutAll } from './application/sign-out-all';
 import { StartGoogleSignIn } from './application/start-google-sign-in';
 import { StartSession } from './application/start-session';
+import { StartTwoFactorSetup } from './application/start-two-factor-setup';
 import { VerifyEmail } from './application/verify-email';
+import { VerifySecondFactor } from './application/verify-second-factor';
 import type { AttemptLimiter } from './application/ports/attempt-limiter';
 import type { AttemptPurger } from './application/ports/attempt-purger';
 import type { BreachedPasswordChecker } from './application/ports/breached-password-checker';
@@ -25,14 +31,24 @@ import type { OAuthStatePurger } from './application/ports/oauth-state-purger';
 import type { OAuthStateRepository } from './application/ports/oauth-state-repository';
 import type { OneTimeTokenRepository } from './application/ports/one-time-token-repository';
 import type { PasswordHasher } from './application/ports/password-hasher';
+import type { RecoveryCodeGenerator } from './application/ports/recovery-code-generator';
+import type { RecoveryCodeRepository } from './application/ports/recovery-code-repository';
+import type { SecretBox } from './application/ports/secret-box';
 import type { SessionRepository } from './application/ports/session-repository';
+import type { SignInChallengePurger } from './application/ports/sign-in-challenge-purger';
+import type { SignInChallengeRepository } from './application/ports/sign-in-challenge-repository';
 import type { TokenGenerator } from './application/ports/token-generator';
+import type { TotpEngine } from './application/ports/totp';
+import type { TwoFactorRepository } from './application/ports/two-factor-repository';
 import type { UnitOfWork } from './application/ports/unit-of-work';
 import type { UserIdentityRepository } from './application/ports/user-identity-repository';
 import type { UserRepository } from './application/ports/user-repository';
 import { DrizzleOAuthStateRepository } from './infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from './infrastructure/db/drizzle-one-time-token-repository';
+import { DrizzleRecoveryCodeRepository } from './infrastructure/db/drizzle-recovery-code-repository';
 import { DrizzleSessionRepository } from './infrastructure/db/drizzle-session-repository';
+import { DrizzleSignInChallengeRepository } from './infrastructure/db/drizzle-sign-in-challenge-repository';
+import { DrizzleTwoFactorRepository } from './infrastructure/db/drizzle-two-factor-repository';
 import { DrizzleUnitOfWork } from './infrastructure/db/drizzle-unit-of-work';
 import { DrizzleUserIdentityRepository } from './infrastructure/db/drizzle-user-identity-repository';
 import { DrizzleUserRepository } from './infrastructure/db/drizzle-user-repository';
@@ -46,15 +62,22 @@ import { createPasswordResetRoutes } from './infrastructure/http/password-reset-
 import { createRegistrationRoutes } from './infrastructure/http/registration-routes';
 import { ACCESS_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
 import { createSessionRoutes } from './infrastructure/http/session-routes';
+import { createTwoFactorRoutes } from './infrastructure/http/two-factor-routes';
+import {
+  AesGcmSecretBox,
+  UnavailableSecretBox,
+} from './infrastructure/security/aes-gcm-secret-box';
 import {
   Argon2idPasswordHasher,
   DUMMY_PASSWORD_HASH,
 } from './infrastructure/security/argon2id-password-hasher';
+import { CryptoRecoveryCodeGenerator } from './infrastructure/security/crypto-recovery-code-generator';
 import { CryptoTokenGenerator } from './infrastructure/security/crypto-token-generator';
 import { FakeBreachedPasswordChecker } from './infrastructure/security/fake-breached-password-checker';
 import { GoogleOidcIdentityProvider } from './infrastructure/security/google-oidc-identity-provider';
 import { HibpBreachedPasswordChecker } from './infrastructure/security/hibp-breached-password-checker';
 import { JoseAccessTokenIssuer } from './infrastructure/security/jose-access-token-issuer';
+import { RfcTotpEngine } from './infrastructure/security/totp';
 import { UnconfiguredGoogleIdentityProvider } from './infrastructure/security/unconfigured-google-identity-provider';
 import { systemClock } from './infrastructure/system-clock';
 
@@ -62,6 +85,7 @@ export * from './domain/account-defaults';
 export * from './domain/email';
 export * from './domain/errors';
 export * from './domain/password-rules';
+export * from './domain/recovery-code';
 export * from './application/ports/access-token-issuer';
 export * from './application/ports/attempt-limiter';
 export * from './application/ports/attempt-purger';
@@ -73,8 +97,15 @@ export * from './application/ports/oauth-state-purger';
 export * from './application/ports/oauth-state-repository';
 export * from './application/ports/one-time-token-repository';
 export * from './application/ports/password-hasher';
+export * from './application/ports/recovery-code-generator';
+export * from './application/ports/recovery-code-repository';
+export * from './application/ports/secret-box';
 export * from './application/ports/session-repository';
+export * from './application/ports/sign-in-challenge-purger';
+export * from './application/ports/sign-in-challenge-repository';
 export * from './application/ports/token-generator';
+export * from './application/ports/totp';
+export * from './application/ports/two-factor-repository';
 export * from './application/ports/unit-of-work';
 export * from './application/ports/user-identity-repository';
 export * from './application/ports/user-repository';
@@ -88,7 +119,7 @@ export type { EmailWorker } from './infrastructure/email/email-worker';
 export interface IdentityInfrastructureDependencies {
   /** The application database; a transaction is accepted too. */
   db: IdentityDb;
-  env: Pick<Env, 'BREACH_CHECKER'>;
+  env: Pick<Env, 'BREACH_CHECKER' | 'TOTP_ENCRYPTION_KEY'>;
   logger: Logger;
   clock?: Clock;
 }
@@ -108,6 +139,14 @@ export interface IdentityInfrastructure {
   tokenGenerator: TokenGenerator;
   emailSender: EmailSender;
   unitOfWork: UnitOfWork;
+  twoFactor: TwoFactorRepository;
+  recoveryCodes: RecoveryCodeRepository;
+  signInChallenges: SignInChallengeRepository;
+  signInChallengePurger: SignInChallengePurger;
+  totp: TotpEngine;
+  /** Seals TOTP secrets; unavailable (every call throws) when no key is configured. */
+  secretBox: SecretBox;
+  recoveryCodeGenerator: RecoveryCodeGenerator;
 }
 
 /** Composition root of the identity module's adapters. */
@@ -119,6 +158,7 @@ export function createIdentityInfrastructure({
 }: IdentityInfrastructureDependencies): IdentityInfrastructure {
   const attemptLimiter = new PostgresAttemptLimiter(db, clock);
   const oauthStates = new DrizzleOAuthStateRepository(db);
+  const signInChallenges = new DrizzleSignInChallengeRepository(db);
   return {
     clock,
     users: new DrizzleUserRepository(db),
@@ -137,6 +177,15 @@ export function createIdentityInfrastructure({
     tokenGenerator: new CryptoTokenGenerator(),
     emailSender: new OutboxEmailSender(db, clock),
     unitOfWork: new DrizzleUnitOfWork(db, clock),
+    twoFactor: new DrizzleTwoFactorRepository(db),
+    recoveryCodes: new DrizzleRecoveryCodeRepository(db),
+    signInChallenges,
+    signInChallengePurger: signInChallenges,
+    totp: new RfcTotpEngine(),
+    secretBox: env.TOTP_ENCRYPTION_KEY
+      ? new AesGcmSecretBox(env.TOTP_ENCRYPTION_KEY)
+      : new UnavailableSecretBox(),
+    recoveryCodeGenerator: new CryptoRecoveryCodeGenerator(),
   };
 }
 
@@ -156,6 +205,7 @@ export interface IdentityModuleDependencies extends Omit<
     | 'GOOGLE_TOKEN_URL'
     | 'GOOGLE_JWKS_URL'
     | 'GOOGLE_ISSUER'
+    | 'TOTP_ENCRYPTION_KEY'
   >;
   /**
    * Test seam: replaces the real `requireSession` on the identity module's authenticated routes.
@@ -235,6 +285,24 @@ export function createIdentityModule({
     clock: identity.clock,
   });
   const google = createGoogleIdentityProvider(env, identity.tokenGenerator);
+  const createSignInChallenge = new CreateSignInChallenge({
+    signInChallenges: identity.signInChallenges,
+    tokenGenerator: identity.tokenGenerator,
+    clock: identity.clock,
+  });
+  const reportRecordFailure = (error: unknown) => {
+    dependencies.logger.warn(
+      { err: error },
+      'failed second-factor code not recorded on the sign-in limit',
+    );
+  };
+  // After 2FA is turned on or off every session has ended; without a new one the user signs in again.
+  const reportReissueFailure = (change: 'enable' | 'disable') => (error: unknown) => {
+    dependencies.logger.error(
+      { err: error, change },
+      'session re-issue after a two-factor change failed; the user must sign in again',
+    );
+  };
 
   const routers = [
     createRegistrationRoutes({
@@ -267,6 +335,8 @@ export function createIdentityModule({
         passwordHasher: identity.passwordHasher,
         dummyPasswordHash: DUMMY_PASSWORD_HASH,
         startSession,
+        twoFactor: identity.twoFactor,
+        createSignInChallenge,
         reportRefundFailure: (error) => {
           // `err` goes through the logger's safe serializer (no query params or row values).
           dependencies.logger.warn(
@@ -323,9 +393,74 @@ export function createIdentityModule({
         tokenGenerator: identity.tokenGenerator,
         unitOfWork: identity.unitOfWork,
         startSession,
+        createSignInChallenge,
         clock: identity.clock,
       }),
       webBaseUrl: env.WEB_BASE_URL,
+      logger: dependencies.logger,
+    }),
+    createTwoFactorRoutes({
+      getTwoFactorStatus: new GetTwoFactorStatus({
+        twoFactor: identity.twoFactor,
+        recoveryCodes: identity.recoveryCodes,
+      }),
+      startTwoFactorSetup: new StartTwoFactorSetup({
+        users: identity.users,
+        twoFactor: identity.twoFactor,
+        totp: identity.totp,
+        secretBox: identity.secretBox,
+      }),
+      enableTwoFactor: new EnableTwoFactor({
+        users: identity.users,
+        twoFactor: identity.twoFactor,
+        totp: identity.totp,
+        secretBox: identity.secretBox,
+        recoveryCodeGenerator: identity.recoveryCodeGenerator,
+        passwordHasher: identity.passwordHasher,
+        unitOfWork: identity.unitOfWork,
+        startSession,
+        clock: identity.clock,
+        reportReissueFailure: reportReissueFailure('enable'),
+      }),
+      disableTwoFactor: new DisableTwoFactor({
+        users: identity.users,
+        twoFactor: identity.twoFactor,
+        recoveryCodes: identity.recoveryCodes,
+        totp: identity.totp,
+        secretBox: identity.secretBox,
+        passwordHasher: identity.passwordHasher,
+        attemptLimiter: identity.attemptLimiter,
+        unitOfWork: identity.unitOfWork,
+        startSession,
+        clock: identity.clock,
+        reportRefundFailure: (error) => {
+          dependencies.logger.warn(
+            { err: error },
+            'two-factor disable limit refund failed; the reserved units stay counted',
+          );
+        },
+        reportRecordFailure,
+        reportReissueFailure: reportReissueFailure('disable'),
+      }),
+      verifySecondFactor: new VerifySecondFactor({
+        signInChallenges: identity.signInChallenges,
+        tokenGenerator: identity.tokenGenerator,
+        attemptLimiter: identity.attemptLimiter,
+        unitOfWork: identity.unitOfWork,
+        startSession,
+        totp: identity.totp,
+        secretBox: identity.secretBox,
+        passwordHasher: identity.passwordHasher,
+        clock: identity.clock,
+        reportRefundFailure: (error) => {
+          dependencies.logger.warn(
+            { err: error },
+            'second-factor limit refund failed; the reserved units stay counted',
+          );
+        },
+        reportRecordFailure,
+      }),
+      requireSession: routeSession,
       logger: dependencies.logger,
     }),
   ];
@@ -343,8 +478,8 @@ export interface EmailWorkerFactoryDependencies {
 }
 
 /**
- * The outbox worker, with the PostgreSQL attempt and OAuth-state purgers and the crypto token
- * generator.
+ * The outbox worker, with the PostgreSQL attempt, OAuth-state and sign-in challenge purgers and the
+ * crypto token generator.
  */
 export function createEmailWorker({
   db,
@@ -360,6 +495,7 @@ export function createEmailWorker({
     tokenGenerator: new CryptoTokenGenerator(),
     attemptPurger: new PostgresAttemptLimiter(db, clock),
     oauthStatePurger: new DrizzleOAuthStateRepository(db),
+    signInChallengePurger: new DrizzleSignInChallengeRepository(db),
     clock,
     logger,
     webBaseUrl: env.WEB_BASE_URL,

@@ -9,7 +9,10 @@ import type {
 } from '../../src/identity/application/ports/attempt-limiter';
 import type { OneTimeTokenRepository } from '../../src/identity/application/ports/one-time-token-repository';
 import type { SessionRepository } from '../../src/identity/application/ports/session-repository';
-import type { UnitOfWork } from '../../src/identity/application/ports/unit-of-work';
+import type {
+  TransactionalRepositories,
+  UnitOfWork,
+} from '../../src/identity/application/ports/unit-of-work';
 import type { UserIdentityRepository } from '../../src/identity/application/ports/user-identity-repository';
 import type { User, UserRepository } from '../../src/identity/application/ports/user-repository';
 import {
@@ -175,6 +178,9 @@ function buildConfirm(options: { consumes?: boolean; breachCheck?: () => Promise
         sessions,
         identities,
         emailSender: new InMemoryEmailSender(),
+        twoFactor: {} as TransactionalRepositories['twoFactor'],
+        recoveryCodes: {} as TransactionalRepositories['recoveryCodes'],
+        signInChallenges: {} as TransactionalRepositories['signInChallenges'],
       });
       committed = true;
       return result;

@@ -10,7 +10,10 @@ const { es, en } = CATALOGS;
 function signedIn(emailVerified: boolean, language: 'es' | 'en') {
   return {
     status: 200,
-    body: { user: { id: 'u1', email: 'ana@example.com', emailVerified, language } },
+    body: {
+      status: 'signed_in',
+      user: { id: 'u1', email: 'ana@example.com', emailVerified, language },
+    },
   };
 }
 
@@ -48,6 +51,19 @@ describe('SignInContainer', () => {
 
     await waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith('/es/check-your-email');
+    });
+  });
+
+  it('goes to the second-factor screen when the password needs a second factor (AC-04)', async () => {
+    stubApi({
+      'POST /auth/sign-in': { status: 200, body: { status: 'second_factor_required' } },
+    });
+    const { router } = renderApp(<SignInContainer />);
+
+    await signInAs('ana@example.com', 'correct horse battery');
+
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/es/sign-in/second-factor');
     });
   });
 
@@ -114,6 +130,16 @@ describe('SignInContainer', () => {
     // A reload must not show the error again.
     expect(window.location.search).toBe('');
     expect(calls).toHaveLength(0);
+  });
+
+  it('shows the expired second-step message for error=second_factor_expired (sad path)', async () => {
+    window.history.replaceState(null, '', '/es/sign-in?error=second_factor_expired');
+    stubApi({});
+    renderApp(<SignInContainer />);
+
+    expect(await screen.findByText(es.errors.secondFactorExpired)).toBeDefined();
+    expect(screen.queryByText(es.errors.googleFailed)).toBeNull();
+    expect(window.location.search).toBe('');
   });
 
   it('clears the Google error once the user signs in with a password', async () => {

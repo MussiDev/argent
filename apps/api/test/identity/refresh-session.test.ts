@@ -113,6 +113,9 @@ function buildRefresh(
         oneTimeTokens: {} as TransactionalRepositories['oneTimeTokens'],
         emailSender: {} as TransactionalRepositories['emailSender'],
         identities: {} as TransactionalRepositories['identities'],
+        twoFactor: {} as TransactionalRepositories['twoFactor'],
+        recoveryCodes: {} as TransactionalRepositories['recoveryCodes'],
+        signInChallenges: {} as TransactionalRepositories['signInChallenges'],
       });
       committed.push(...staged);
       return result;

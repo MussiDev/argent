@@ -6,6 +6,10 @@ export const ATTEMPT_KINDS = [
   'reset_email',
   'resend_account',
   'google_start_ip',
+  'second_factor_user_15m',
+  'second_factor_user_24h',
+  'two_factor_disable_user',
+  'two_factor_disable_user_24h',
 ] as const;
 export type AttemptKind = (typeof ATTEMPT_KINDS)[number];
 

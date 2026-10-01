@@ -3,6 +3,17 @@ import en from './messages/en.json';
 import es from './messages/es.json';
 
 export type TokenEmailKind = 'verification' | 'password_reset';
+/** Emails that only inform: no token, no link (FR-05). */
+export type NoticeEmailKind = 'two_factor_enabled' | 'two_factor_disabled';
+
+export const NOTICE_EMAIL_KINDS: readonly NoticeEmailKind[] = [
+  'two_factor_enabled',
+  'two_factor_disabled',
+];
+
+export function isNoticeEmailKind(kind: string): kind is NoticeEmailKind {
+  return (NOTICE_EMAIL_KINDS as readonly string[]).includes(kind);
+}
 
 interface EmailCopy {
   subject: string;
@@ -12,7 +23,13 @@ interface EmailCopy {
   ignore: string;
 }
 
-type Catalog = Record<TokenEmailKind, EmailCopy>;
+interface NoticeCopy {
+  subject: string;
+  body: string;
+  advice: string;
+}
+
+type Catalog = Record<TokenEmailKind, EmailCopy> & Record<NoticeEmailKind, NoticeCopy>;
 
 const CATALOGS: Record<Language, Catalog> = { es, en };
 
@@ -72,4 +89,15 @@ export function renderEmail({
   ].join('\n');
 
   return { subject: copy.subject, text, html };
+}
+
+/** Subject and bodies of a notice email, in the recipient's language; they carry no link. */
+export function renderNotice(kind: NoticeEmailKind, language: Language): RenderedEmail {
+  const copy = CATALOGS[language][kind];
+  const paragraphs = [copy.body, copy.advice];
+  return {
+    subject: copy.subject,
+    text: paragraphs.join('\n\n'),
+    html: paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('\n'),
+  };
 }

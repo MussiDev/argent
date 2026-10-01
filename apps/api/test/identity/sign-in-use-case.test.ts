@@ -8,6 +8,7 @@ import type {
   SessionRepository,
 } from '../../src/identity/application/ports/session-repository';
 import type { User, UserRepository } from '../../src/identity/application/ports/user-repository';
+import { CreateSignInChallenge } from '../../src/identity/application/create-sign-in-challenge';
 import { SignIn } from '../../src/identity/application/sign-in';
 import { StartSession } from '../../src/identity/application/start-session';
 import { RateLimited } from '../../src/identity/domain/errors';
@@ -66,6 +67,7 @@ function buildSignIn(options: {
     markEmailVerified: () => Promise.resolve(),
     changePassword: () => Promise.resolve(),
     supersedeUnverified: () => Promise.reject(new Error('unused')),
+    bumpCredentialsVersion: () => Promise.reject(new Error('unused')),
   };
   const passwordHasher: PasswordHasher = {
     hash: () => Promise.reject(new Error('unused')),
@@ -109,6 +111,26 @@ function buildSignIn(options: {
       sessions,
       tokenGenerator: { generate: () => 'refresh-token', hash: (token) => `hash:${token}` },
       accessTokens,
+      clock: options.clock,
+    }),
+    // No 2FA: these tests are about the limiter around the password check.
+    twoFactor: {
+      findByUserId: () => Promise.resolve(null),
+      savePending: () => Promise.reject(new Error('unused')),
+      activate: () => Promise.reject(new Error('unused')),
+      advanceLastUsedStep: () => Promise.reject(new Error('unused')),
+      delete: () => Promise.reject(new Error('unused')),
+    },
+    createSignInChallenge: new CreateSignInChallenge({
+      signInChallenges: {
+        create: () => Promise.reject(new Error('unused')),
+        findLive: () => Promise.reject(new Error('unused')),
+        lockLive: () => Promise.reject(new Error('unused')),
+        recordAttempt: () => Promise.reject(new Error('unused')),
+        consume: () => Promise.reject(new Error('unused')),
+        deleteForUser: () => Promise.reject(new Error('unused')),
+      },
+      tokenGenerator: { generate: () => 'challenge-token', hash: (token) => `hash:${token}` },
       clock: options.clock,
     }),
     reportRefundFailure: options.reportRefundFailure ?? (() => undefined),

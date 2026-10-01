@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { useRouter } from '@/i18n/navigation';
+import { usePathname, useRouter } from '@/i18n/navigation';
 import { useApiClient } from '@/lib/api-client-provider';
 import { AuthenticatedShell, type ShellState } from '../components/authenticated-shell';
 import type { ErrorMessageKey } from '../form-errors';
@@ -14,6 +14,8 @@ import type { ErrorMessageKey } from '../form-errors';
 export function AuthenticatedShellContainer({ children }: { children: ReactNode }) {
   const api = useApiClient();
   const router = useRouter();
+  // Outside Next.js (unit tests) there is no pathname; nothing is marked as current then.
+  const pathname = usePathname() as string | null;
   const [state, setState] = useState<ShellState>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
@@ -51,6 +53,7 @@ export function AuthenticatedShellContainer({ children }: { children: ReactNode 
   return (
     <AuthenticatedShell
       state={state}
+      currentPath={pathname ?? undefined}
       signingOut={signingOut}
       signOutError={signOutError}
       onRetry={() => {

@@ -5,10 +5,6 @@ import { LANGUAGE_INPUT_MAX_LENGTH, TIME_ZONE_INPUT_MAX_LENGTH } from './registe
 export const GOOGLE_CALLBACK_VALUE_MAX_LENGTH = 2048;
 export const GOOGLE_CALLBACK_MAX_REPEATS = 5;
 
-/** The only error the API reports to the web app after a Google sign-in (`?error=`). */
-export const GOOGLE_SIGN_IN_ERRORS = ['google_failed'] as const;
-export type GoogleSignInError = (typeof GOOGLE_SIGN_IN_ERRORS)[number];
-
 /** An empty query value (`?hd=`) means the same as an absent one. */
 function emptyAsMissing<T>(value: T | ''): T | undefined {
   return value === '' ? undefined : value;

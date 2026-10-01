@@ -89,6 +89,50 @@ describe('AuthenticatedShell', () => {
     expect(screen.getByText(es.errors.network)).toBeDefined();
     expect(isDisabled(es.auth.signOut.pending)).toBe(true);
   });
+
+  it('links to the security settings and home in the current locale', () => {
+    renderApp(
+      <AuthenticatedShell
+        state={{ kind: 'ready' }}
+        signingOut={false}
+        signOutError={undefined}
+        {...handlers()}
+      >
+        <p>private content</p>
+      </AuthenticatedShell>,
+      { locale: 'en' },
+    );
+
+    expect(screen.getByRole('link', { name: en.app.nav.security }).getAttribute('href')).toBe(
+      '/en/settings/security',
+    );
+    expect(screen.getByRole('link', { name: en.app.nav.home }).getAttribute('href')).toBe('/en');
+  });
+
+  it.each([
+    ['/settings/security', 'security'],
+    ['/', 'home'],
+  ] as const)(
+    'marks the link of the current page (%s) with aria-current',
+    (currentPath, current) => {
+      renderApp(
+        <AuthenticatedShell
+          state={{ kind: 'ready' }}
+          currentPath={currentPath}
+          signingOut={false}
+          signOutError={undefined}
+          {...handlers()}
+        >
+          <p>private content</p>
+        </AuthenticatedShell>,
+      );
+
+      const security = screen.getByRole('link', { name: es.app.nav.security });
+      const home = screen.getByRole('link', { name: es.app.nav.home });
+      expect(security.getAttribute('aria-current')).toBe(current === 'security' ? 'page' : null);
+      expect(home.getAttribute('aria-current')).toBe(current === 'home' ? 'page' : null);
+    },
+  );
 });
 
 describe('VerifyEmailNotice', () => {

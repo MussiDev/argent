@@ -31,6 +31,13 @@ All notable changes to this project are documented in this file. The format foll
   secrets stay in Railway, and a test fails if one is given a value. `pnpm railway:plan` and
   `pnpm railway:apply` run Railway's CLI on Windows, Linux and macOS. The deprecated
   `railway.json` files are removed, and restart retries go from 10 to 5.
+- DISC-001-01c Optional two-factor authentication with an authenticator app (TOTP, RFC 6238):
+  enrollment from a new security settings screen with a QR code, 10 one-time recovery codes shown
+  once and stored only as Argon2id hashes, and disabling with a code or a recovery code.
+- DISC-001-01c A second step after any sign-in (password or Google) for users with 2FA, through a
+  short-lived single-use challenge; failed codes count toward the sign-in limit and are also
+  limited per user, so a known email cannot lock its owner out of the second step.
+- DISC-001-01c Enabling or disabling 2FA ends every other session and emails the owner a notice.
 
 ### Fixed
 

@@ -10,6 +10,7 @@ import {
   OAUTH_BINDING_COOKIE,
   OAUTH_BINDING_COOKIE_OPTIONS,
   setSessionCookies,
+  setSignInChallengeCookie,
 } from './session-cookies';
 
 export interface GoogleRoutesDependencies {
@@ -67,6 +68,16 @@ export function createGoogleRoutes({
         if (result.outcome === 'failed') {
           logger.warn({ requestId, ip, reason: result.reason }, 'google sign-in failed');
           res.redirect(failureUrl(result.language ?? DEFAULT_LANGUAGE));
+          return;
+        }
+        if (result.outcome === 'second_factor_required') {
+          logger.info(
+            { requestId, ip, userId: result.user.id, via: result.via },
+            'google sign-in needs a second factor',
+          );
+          // Set on the callback response like the session cookies; no session exists yet.
+          setSignInChallengeCookie(res, result.challengeToken);
+          res.redirect(`${base}/${result.user.language}/sign-in/second-factor`);
           return;
         }
         const { user, session, via } = result;

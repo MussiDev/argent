@@ -5,12 +5,20 @@ import type { AttemptPurger } from '../../application/ports/attempt-purger';
 import type { Clock } from '../../application/ports/clock';
 import type { OAuthStatePurger } from '../../application/ports/oauth-state-purger';
 import type { OneTimeTokenPurpose } from '../../application/ports/one-time-token-repository';
+import type { SignInChallengePurger } from '../../application/ports/sign-in-challenge-purger';
 import type { TokenGenerator } from '../../application/ports/token-generator';
 import { DrizzleOneTimeTokenRepository } from '../db/drizzle-one-time-token-repository';
 import { DrizzleUserRepository } from '../db/drizzle-user-repository';
 import { emailOutbox, type IdentityDb } from '../db/schema';
 import type { EmailTransport, SendResult } from './email-transport';
-import { renderEmail, type TokenEmailKind } from './render-email';
+import {
+  isNoticeEmailKind,
+  renderEmail,
+  renderNotice,
+  type NoticeEmailKind,
+  type RenderedEmail,
+  type TokenEmailKind,
+} from './render-email';
 
 export const EMAIL_POLL_INTERVAL_MS = 2_000;
 /** After this many failed attempts a row is left unsent for good and logged as failed. */
@@ -36,6 +44,7 @@ export interface EmailWorkerDependencies {
   tokenGenerator: TokenGenerator;
   attemptPurger: AttemptPurger;
   oauthStatePurger: OAuthStatePurger;
+  signInChallengePurger: SignInChallengePurger;
   clock: Clock;
   logger: Logger;
   webBaseUrl: string;
@@ -85,6 +94,7 @@ type FailureRecord = { attempts: number; permanent: boolean } | undefined;
  * row lock (`FOR UPDATE SKIP LOCKED`), so any number of workers can run without sending a row
  * twice (NFR-09). For token emails the token is issued inside that transaction, at send time, and
  * exists in plaintext only in this process's memory (threat R-05, user decision 2026-09-26 A).
+ * Notice emails (two-factor changes) carry no token and are sent as they are.
  *
  * The retry schedule lives in the table (`next_attempt_at`), not in worker memory, so every worker
  * and every restart sees the same backoff and a row cannot burn its attempts in seconds.
@@ -158,17 +168,26 @@ export class EmailWorker {
     const now = this.deps.clock.now().getTime();
     if (this.lastPurgeAt !== undefined && now - this.lastPurgeAt < PURGE_INTERVAL_MS) return;
     this.lastPurgeAt = now;
-    // A failed purge must not stop delivery; it is retried at the next purge interval.
-    try {
-      const attempts = await this.deps.attemptPurger.purgeOlderThan(
-        new Date(now - ATTEMPTS_RETENTION_MS),
-      );
-      const outboxRows = await this.purgeOutbox(new Date(now - OUTBOX_RETENTION_MS));
-      const oauthStates = await this.deps.oauthStatePurger.purgeExpired(new Date(now));
-      this.deps.logger.debug({ attempts, outboxRows, oauthStates }, 'retention purge done');
-    } catch (error) {
-      this.deps.logger.error({ err: error }, 'retention purge failed');
+    const purges: [string, () => Promise<number>][] = [
+      [
+        'attempts',
+        () => this.deps.attemptPurger.purgeOlderThan(new Date(now - ATTEMPTS_RETENTION_MS)),
+      ],
+      ['outboxRows', () => this.purgeOutbox(new Date(now - OUTBOX_RETENTION_MS))],
+      ['oauthStates', () => this.deps.oauthStatePurger.purgeExpired(new Date(now))],
+      ['signInChallenges', () => this.deps.signInChallengePurger.purgeExpired(new Date(now))],
+    ];
+    const deleted: Record<string, number> = {};
+    // A failed purge must neither stop delivery nor skip the other purges; it is retried at the
+    // next purge interval.
+    for (const [purge, run] of purges) {
+      try {
+        deleted[purge] = await run();
+      } catch (error) {
+        this.deps.logger.error({ err: error, purge }, 'retention purge failed');
+      }
     }
+    this.deps.logger.debug(deleted, 'retention purge done');
   }
 
   /** Deletes rows that are done (sent, or failed for good) and older than `cutoff`. */
@@ -223,6 +242,9 @@ export class EmailWorker {
     if (!userId || !row.toEmail) return drop('no recipient');
     const user = await new DrizzleUserRepository(tx).findById(userId);
     if (!user) return drop('user deleted');
+    if (isNoticeEmailKind(row.kind)) {
+      return this.deliverNotice(tx, row, row.kind, userId, row.toEmail);
+    }
     if (row.kind === 'verification' && user.emailVerifiedAt) return drop('already verified');
     // Requested before the password was last reset: that reset already answered it.
     if (
@@ -235,11 +257,10 @@ export class EmailWorker {
 
     const kind = row.kind;
     const to = row.toEmail;
-    const now = this.deps.clock.now();
-    try {
-      // Savepoint: if the transport fails, the token issued here is rolled back with it, while
-      // the outer transaction keeps the row lock to count the attempt.
-      const result = await tx.transaction(async (savepoint): Promise<SendResult> => {
+    // Savepoint: if the transport fails, the token issued here is rolled back with it, while the
+    // outer transaction keeps the row lock to count the attempt.
+    return this.deliver(tx, row, userId, () =>
+      tx.transaction(async (savepoint): Promise<SendResult> => {
         const token = await issueEmailToken(
           {
             oneTimeTokens: new DrizzleOneTimeTokenRepository(savepoint),
@@ -255,26 +276,38 @@ export class EmailWorker {
           token,
           webBaseUrl: this.deps.webBaseUrl,
         });
-        let sent: SendResult;
-        try {
-          // One key per attempt: each attempt carries a new token (a different body), and a
-          // provider rejects a reused key with a different payload (Resend: 409).
-          const attempt = row.attempts + 1;
-          sent = await this.deps.transport.send({
-            idempotencyKey: `${row.id}:${attempt}`,
-            to,
-            ...rendered,
-          });
-        } catch (error) {
-          throw new TransportFailure(error);
-        }
-        // The address is no longer needed once delivered (PII retention).
-        await savepoint
-          .update(emailOutbox)
-          .set({ sentAt: now, attempts: row.attempts + 1, toEmail: null })
-          .where(eq(emailOutbox.id, row.id));
+        const sent = await this.send(row, to, rendered);
+        await this.markSent(savepoint, row);
         return sent;
-      });
+      }),
+    );
+  }
+
+  /** A notice issues no token, so nothing needs rolling back when the transport fails. */
+  private deliverNotice(
+    tx: Transaction,
+    row: OutboxRow,
+    kind: NoticeEmailKind,
+    userId: string,
+    to: string,
+  ): Promise<RowOutcome> {
+    return this.deliver(tx, row, userId, async () => {
+      const sent = await this.send(row, to, renderNotice(kind, row.language));
+      await this.markSent(tx, row);
+      return sent;
+    });
+  }
+
+  /** Runs one delivery; a transport failure is counted on the row, which stays locked by `tx`. */
+  private async deliver(
+    tx: Transaction,
+    row: OutboxRow,
+    userId: string,
+    delivery: () => Promise<SendResult>,
+  ): Promise<RowOutcome> {
+    const log = { outboxId: row.id, kind: row.kind };
+    try {
+      const result = await delivery();
       this.deps.logger.info({ ...log, userId, messageId: result.messageId }, 'email sent');
       return 'sent';
     } catch (error) {
@@ -293,6 +326,28 @@ export class EmailWorker {
       }
       return 'failed';
     }
+  }
+
+  private async send(row: OutboxRow, to: string, rendered: RenderedEmail): Promise<SendResult> {
+    try {
+      // One key per attempt: each attempt of a token email carries a new token (a different
+      // body), and a provider rejects a reused key with a different payload (Resend: 409).
+      return await this.deps.transport.send({
+        idempotencyKey: `${row.id}:${row.attempts + 1}`,
+        to,
+        ...rendered,
+      });
+    } catch (error) {
+      throw new TransportFailure(error);
+    }
+  }
+
+  /** The address is no longer needed once delivered (PII retention). */
+  private async markSent(db: IdentityDb, row: OutboxRow): Promise<void> {
+    await db
+      .update(emailOutbox)
+      .set({ sentAt: this.deps.clock.now(), attempts: row.attempts + 1, toEmail: null })
+      .where(eq(emailOutbox.id, row.id));
   }
 
   /**

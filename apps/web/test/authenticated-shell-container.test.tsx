@@ -126,4 +126,20 @@ describe('AuthenticatedShellContainer', () => {
       screen.getByRole('button', { name: es.auth.signOut.label }).hasAttribute('disabled'),
     ).toBe(false);
   });
+
+  it('marks the security link as the current page on the security settings', async () => {
+    stubApi({ 'GET /auth/session': session(true) });
+    renderApp(
+      <AuthenticatedShellContainer>
+        <p>private content</p>
+      </AuthenticatedShellContainer>,
+      { pathname: '/es/settings/security' },
+    );
+
+    const link = await screen.findByRole('link', { name: es.app.nav.security });
+    expect(link.getAttribute('aria-current')).toBe('page');
+    expect(
+      screen.getByRole('link', { name: es.app.nav.home }).getAttribute('aria-current'),
+    ).toBeNull();
+  });
 });

@@ -1,26 +1,13 @@
 import { Email } from '../domain/email';
 import { RateLimited } from '../domain/errors';
 import { UNKNOWN_IP } from './client-ip';
-import type { AttemptLimiter, AttemptPolicy, AttemptResult } from './ports/attempt-limiter';
+import { SIGN_IN_ACCOUNT_POLICY, SIGN_IN_IP_POLICY } from './attempt-policies';
+import type { CreateSignInChallenge } from './create-sign-in-challenge';
+import type { AttemptLimiter, AttemptResult } from './ports/attempt-limiter';
 import type { PasswordHasher } from './ports/password-hasher';
+import type { TwoFactorRepository } from './ports/two-factor-repository';
 import type { User, UserRepository } from './ports/user-repository';
 import type { SessionTokens, StartSession } from './start-session';
-
-const FIFTEEN_MINUTES = 15 * 60;
-
-/** NFR-03 / threat R-01: 5 failed sign-ins per account (normalized email) per 15 minutes. */
-export const SIGN_IN_ACCOUNT_POLICY: AttemptPolicy = {
-  kind: 'sign_in_account',
-  limit: 5,
-  windowSeconds: FIFTEEN_MINUTES,
-};
-
-/** NFR-03 / threat R-01: 20 failed sign-ins per client IP per 15 minutes. */
-export const SIGN_IN_IP_POLICY: AttemptPolicy = {
-  kind: 'sign_in_ip',
-  limit: 20,
-  windowSeconds: FIFTEEN_MINUTES,
-};
 
 export interface SignInDependencies {
   attemptLimiter: AttemptLimiter;
@@ -29,6 +16,9 @@ export interface SignInDependencies {
   /** A real hash of an unknown password, verified for unknown emails so both paths cost the same. */
   dummyPasswordHash: string;
   startSession: StartSession;
+  /** Whether the user has 2FA on (PRD 01c FR-04). */
+  twoFactor: TwoFactorRepository;
+  createSignInChallenge: CreateSignInChallenge;
   /**
    * Told when a refund fails, after a successful sign-in or a rate-limited refusal. The outcome is
    * unchanged (signed in, or 429): the leaked units only make the limiter stricter (fail safe).
@@ -45,10 +35,12 @@ export interface SignInInput {
 
 /**
  * `invalid_credentials` carries the user id only for logging: the HTTP answer is the same whether
- * or not the email exists (R-02).
+ * or not the email exists (R-02). `second_factor_required` starts no session: the challenge token
+ * goes to the browser in a cookie, and the user only to the logs.
  */
 export type SignInResult =
   | { outcome: 'signed_in'; user: User; session: SessionTokens }
+  | { outcome: 'second_factor_required'; user: User; challengeToken: string }
   | { outcome: 'invalid_credentials'; userId: string | null };
 
 /** The two units a sign-in attempt holds until it knows whether it counts. */
@@ -103,6 +95,19 @@ export class SignIn {
       await this.refund(reservations);
     } catch (error) {
       this.deps.reportRefundFailure(error);
+    }
+
+    // Read after the user row: a 2FA enable that bumped the version after that read makes the
+    // session or the challenge below stale, never a new version paired with "no 2FA" (01c).
+    const twoFactor = await this.deps.twoFactor.findByUserId(user.id);
+    if (twoFactor?.enabledAt) {
+      const challengeToken = await this.deps.createSignInChallenge.execute({
+        userId: user.id,
+        credentialsVersion: user.credentialsVersion,
+        via: 'password',
+        language: user.language,
+      });
+      return { outcome: 'second_factor_required', user, challengeToken };
     }
 
     // Unverified users get a session too: they need one to resend the verification email. The

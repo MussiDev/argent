@@ -19,7 +19,9 @@ import {
   clearSessionCookies,
   REFRESH_TOKEN_COOKIE,
   setSessionCookies,
+  setSignInChallengeCookie,
 } from './session-cookies';
+import { signedInUser } from './signed-in-user';
 
 export interface SessionRoutesDependencies {
   signIn: SignIn;
@@ -58,20 +60,19 @@ export function createSessionRoutes({
           // Same status and body for an unknown email and a wrong password (R-02).
           throw new InvalidCredentials();
         }
+        if (result.outcome === 'second_factor_required') {
+          logger.info({ requestId, ip, userId: result.user.id }, 'sign-in needs a second factor');
+          setSignInChallengeCookie(res, result.challengeToken);
+          res.status(200).json({ status: 'second_factor_required' });
+          return;
+        }
         const { user, session } = result;
         logger.info(
           { requestId, ip, userId: user.id, sessionId: session.sessionId },
           'sign-in succeeded',
         );
         setSessionCookies(res, session);
-        res.status(200).json({
-          user: {
-            id: user.id,
-            email: user.email,
-            emailVerified: user.emailVerifiedAt !== null,
-            language: user.language,
-          },
-        });
+        res.status(200).json({ status: 'signed_in', user: signedInUser(user) });
       },
     ),
   );

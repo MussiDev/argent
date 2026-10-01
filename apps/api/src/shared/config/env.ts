@@ -5,6 +5,20 @@ const LOCAL_EMAIL_FROM = 'Argent <no-reply@argent.local>';
 
 const jwtSecretSchema = z.string().min(32, 'must be at least 32 characters (256 bits)');
 
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+const TOTP_KEY_BYTES = 32;
+
+/** Standard base64 of exactly 32 bytes (an AES-256 key); never padded or truncated to fit. */
+const totpEncryptionKeySchema = z
+  .string()
+  .refine(
+    (value) =>
+      BASE64.test(value) &&
+      value.length % 4 === 0 &&
+      Buffer.from(value, 'base64').length === TOTP_KEY_BYTES,
+    `must be base64 of exactly ${TOTP_KEY_BYTES} bytes`,
+  );
+
 /** Google's OpenID Connect endpoints; only a local fake OIDC server replaces them, never in production. */
 export const GOOGLE_ENDPOINT_DEFAULTS = {
   GOOGLE_AUTHORIZATION_URL: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -71,6 +85,7 @@ interface RawEnv extends RawWorkerEnv {
   GOOGLE_TOKEN_URL: string;
   GOOGLE_JWKS_URL: string;
   GOOGLE_ISSUER: string;
+  TOTP_ENCRYPTION_KEY?: string | undefined;
 }
 
 function httpsIssue(name: string, value: string): Issue[] {
@@ -124,7 +139,7 @@ function productionIssues(env: RawEnv): Issue[] {
       message: 'must be at least 1 in production (TLS ends at the hosting proxy)',
     });
   }
-  for (const name of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] as const) {
+  for (const name of ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'TOTP_ENCRYPTION_KEY'] as const) {
     if (!env[name]) issues.push({ path: [name], message: 'required in production' });
   }
   // A misconfigured endpoint would send the client secret, or accept ID tokens, somewhere else.
@@ -152,6 +167,11 @@ const envSchema = z
     GOOGLE_TOKEN_URL: googleEndpoint('GOOGLE_TOKEN_URL'),
     GOOGLE_JWKS_URL: googleEndpoint('GOOGLE_JWKS_URL'),
     GOOGLE_ISSUER: googleEndpoint('GOOGLE_ISSUER'),
+    /**
+     * Encrypts TOTP secrets at rest (AES-256-GCM). Unset outside production makes 2FA unavailable.
+     * The email worker parses this environment too, so production needs it on both services.
+     */
+    TOTP_ENCRYPTION_KEY: optionalSetting(totpEncryptionKeySchema),
   })
   .superRefine((env, ctx) => {
     for (const issue of emailIssues(env)) ctx.addIssue({ code: 'custom', ...issue });

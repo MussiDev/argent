@@ -9,7 +9,11 @@
   },
   "app": {
     "loading": "Loading…",
-    "retry": "Try again"
+    "retry": "Try again",
+    "nav": {
+      "home": "Home",
+      "security": "Security"
+    }
   },
   "auth": {
     "fields": {
@@ -78,6 +82,18 @@
     "signOut": {
       "label": "Sign out",
       "pending": "Signing out…"
+    },
+    "secondFactor": {
+      "title": "Two-step verification",
+      "description": "Enter the 6-digit code shown by your authenticator app.",
+      "recoveryDescription": "Enter one of your recovery codes. Each one works only once.",
+      "code": "Verification code",
+      "recoveryCode": "Recovery code",
+      "submit": "Verify",
+      "pending": "Verifying…",
+      "useRecoveryCode": "Use a recovery code",
+      "useAuthenticator": "Use the authenticator app",
+      "backToSignIn": "Back to sign in"
     }
   },
   "errors": {
@@ -95,6 +111,58 @@
     "unauthenticated": "Your session has ended. Sign in again.",
     "emailNotVerified": "Verify your email to continue.",
     "validationFailed": "Check the data you entered and try again.",
-    "googleFailed": "Google sign-in failed. Please try again."
+    "googleFailed": "Google sign-in failed. Please try again.",
+    "codeInvalid": "The code is not valid or was already used. Try again.",
+    "secondFactorExpired": "The verification expired. Sign in again.",
+    "twoFactorAlreadyEnabled": "Two-step verification is already on.",
+    "twoFactorNotEnabled": "Two-step verification is already off.",
+    "twoFactorSetupRequired": "The setup changed in another session. Start again.",
+    "totpCodeFormat": "Enter the 6 digits of the code.",
+    "secondFactorCodeFormat": "Enter a 6-digit code or a recovery code."
+  },
+  "security": {
+    "title": "Security",
+    "enabledNotice": "You turned on two-step verification. We signed you out of your other sessions.",
+    "disabledNotice": "You turned off two-step verification. We signed you out of your other sessions.",
+    "twoFactor": {
+      "title": "Two-step verification",
+      "description": "Besides your password or Google, we will ask for a code from your authenticator app when you sign in.",
+      "on": "On",
+      "off": "Off",
+      "recoveryCodesRemaining": "{count, plural, =0 {No recovery codes left.} one {# recovery code left.} other {# recovery codes left.}}",
+      "enable": "Turn on",
+      "starting": "Preparing…",
+      "disable": "Turn off"
+    },
+    "setup": {
+      "title": "Turn on two-step verification",
+      "scan": "Scan this QR code with your authenticator app.",
+      "qrAlt": "QR code for your authenticator app",
+      "manual": "If you cannot scan it, enter this key in the app:",
+      "code": "6-digit code",
+      "codeHint": "Enter the code shown by the app to confirm.",
+      "submit": "Confirm and turn on",
+      "pending": "Turning on…",
+      "cancel": "Cancel"
+    },
+    "recoveryCodes": {
+      "title": "Save your recovery codes",
+      "description": "If you lose your authenticator app, each code lets you sign in once. We will not show them again.",
+      "copy": "Copy codes",
+      "copied": "Codes copied.",
+      "copyFailed": "We could not copy them. Download them or write them down.",
+      "download": "Download as text",
+      "fileName": "argent-recovery-codes.txt",
+      "fileHeader": "Argent recovery codes. Each one works only once.",
+      "done": "I saved them"
+    },
+    "disable": {
+      "title": "Turn off two-step verification",
+      "description": "Enter a code from your authenticator app or an unused recovery code.",
+      "code": "Code",
+      "submit": "Turn off",
+      "pending": "Turning off…",
+      "cancel": "Cancel"
+    }
   }
 }

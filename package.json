@@ -14,7 +14,9 @@
     "test:coverage": "vitest run --coverage",
     "test:perf": "pnpm --filter @argent/api test:perf",
     "e2e": "playwright test --pass-with-no-tests",
-    "db:migrate": "pnpm --filter @argent/api db:migrate"
+    "db:migrate": "pnpm --filter @argent/api db:migrate",
+    "railway:plan": "node scripts/railway-config.mjs plan",
+    "railway:apply": "node scripts/railway-config.mjs apply"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -24,6 +26,7 @@
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
     "prettier": "^3.9.9",
+    "railway": "3.12.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1",
     "vite": "^8.3.1",

@@ -20,7 +20,7 @@
 - Browser → API: TOTP codes, recovery codes, the challenge cookie and session cookies over TLS; the enable response carries the recovery codes once.
 - Authenticator app ↔ user: the secret leaves the system once, as a QR code and text on the settings screen, into the user's device.
 - API → PostgreSQL: the sealed TOTP secret, recovery code hashes, challenge token hashes.
-- Environment secrets → API and email worker: `TOTP_ENCRYPTION_KEY`, separate from the database.
+- Environment secrets → API: `TOTP_ENCRYPTION_KEY`, separate from the database (since FIX-003 the email worker parses only its own settings and never receives it).
 
 ## STRIDE analysis
 ### `apps/api/src/identity/infrastructure/security/totp.ts` + `aes-gcm-secret-box.ts`
@@ -69,7 +69,7 @@
 | TOTP secret | credentials | AES-256-GCM sealed with `TOTP_ENCRYPTION_KEY` (environment secret); database volume encrypted with AES-256 | TLS 1.2+; shown once on the settings screen |
 | recovery codes | credentials | Argon2id hashes only; database volume encrypted with AES-256 | TLS 1.2+; returned once by enable |
 | sign-in challenge token | credentials | SHA-256 hash only, deleted on use or after 5 minutes; database volume encrypted with AES-256 | TLS 1.2+; `HttpOnly` `Secure` `SameSite=Strict` cookie |
-| `TOTP_ENCRYPTION_KEY` | credentials | environment secret of the API and email worker services only | never transmitted by the application |
+| `TOTP_ENCRYPTION_KEY` | credentials | environment secret of the API service only (FIX-003: not given to the email worker) | never transmitted by the application |
 
 ## Risks and mitigations
 | ID | Risk | STRIDE | Likelihood | Impact | Mitigation |

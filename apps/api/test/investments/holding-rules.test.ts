@@ -1,4 +1,4 @@
-import { QUANTITY_MAX, TOTAL_COST_MAX } from '@argent/shared';
+import { QUANTITY_MAX, TOTAL_COST_MAX } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import { InvestmentRuleViolation } from '../../src/investments/domain/errors';
 import {

@@ -1,4 +1,4 @@
-import type { InstrumentType, PriceSource, ValuationCurrency } from '@argent/shared';
+import type { InstrumentType, PriceSource, ValuationCurrency } from '@pesly/shared';
 import type { Holding, HoldingPrice } from '../domain/holding';
 import type { AccessScope } from '../../shared/access';
 

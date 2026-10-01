@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QUANTITY_SCALE, formatScaledDecimal, parseScaledDecimal } from '@argent/shared';
+import { QUANTITY_SCALE, formatScaledDecimal, parseScaledDecimal } from '@pesly/shared';
 
 const SCALE = QUANTITY_SCALE;
 

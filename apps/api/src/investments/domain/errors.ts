@@ -1,4 +1,4 @@
-import { AppError } from '@argent/shared';
+import { AppError } from '@pesly/shared';
 
 /**
  * A stored-state rule of the investments module was broken. The message is only the field names,

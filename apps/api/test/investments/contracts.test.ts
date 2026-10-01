@@ -14,7 +14,7 @@ import {
   portfolioResponseSchema,
   setPriceRequestSchema,
   updateHoldingRequestSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 
 const validHolding = {
   ticker: 'GGAL',

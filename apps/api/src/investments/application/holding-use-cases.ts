@@ -1,4 +1,4 @@
-import type { InstrumentType, ValuationCurrency } from '@argent/shared';
+import type { InstrumentType, ValuationCurrency } from '@pesly/shared';
 import { notFoundUnlessAllowed, ResourceNotFound, type AccessScope } from '../../shared/access';
 import {
   applyHoldingEdit,

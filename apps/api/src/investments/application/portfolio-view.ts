@@ -5,7 +5,7 @@ import {
   totalsByCurrency,
   type GainOrLoss,
   type ValuationCurrency,
-} from '@argent/shared';
+} from '@pesly/shared';
 import type { Holding } from '../domain/holding';
 import type { Portfolio } from './ports';
 

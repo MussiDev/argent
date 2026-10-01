@@ -6,7 +6,7 @@ import {
   holdingValue,
   isPriceStale,
   totalsByCurrency,
-} from '@argent/shared';
+} from '@pesly/shared';
 
 const SCALE = QUANTITY_SCALE;
 

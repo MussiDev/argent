@@ -1,4 +1,4 @@
-import { STALE_PRICE_AFTER_MS } from '@argent/shared';
+import { STALE_PRICE_AFTER_MS } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import {
   buildHoldingView,

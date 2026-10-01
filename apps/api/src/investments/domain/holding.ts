@@ -4,7 +4,7 @@ import {
   type InstrumentType,
   type PriceSource,
   type ValuationCurrency,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { InvestmentRuleViolation } from './errors';
 
 export interface HoldingPrice {

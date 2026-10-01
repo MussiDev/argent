@@ -3,8 +3,8 @@
 ────────────────────────────────────────────────────────────────
   ✅ F-TM-01: all 6 STRIDE categories evaluated for 8 component(s)
   ✅ F-TM-02: trust boundaries are declared
-  ✅ F-TM-03: all 14 identified threats carry a mitigation or an acceptance
-  ✅ F-TM-04: no accepted risks to approve
+  ✅ F-TM-03: all 15 identified threats carry a mitigation or an acceptance
+  ✅ F-TM-04: all 1 accepted risk(s) name who, why and when reviewed
   ✅ F-TM-05: all 7 data item(s) are classified
   ✅ F-TM-07: PII/credentials specify encryption at rest and in transit
   ✅ F-TM-06: the model cites 32 concrete element(s) of the spec

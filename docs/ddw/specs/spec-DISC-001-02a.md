@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-02a.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 1 |
-| Loops since last human decision | 1 |
+| Spec loops | 2 |
+| Loops since last human decision | 0 |
 
 ## Summary
 Adds the `accounts` module to the API, the shared money helpers and account contracts, and the web
@@ -73,17 +73,15 @@ touching accounts code, and no movements table is created here.
 - The real adapter must add a foreign key from movements to accounts with `ON DELETE RESTRICT`;
   the delete use case already maps that violation to `ACCOUNT_HAS_MOVEMENTS`.
 
-## Open decisions for the human (do not block CODE; the defaults below are what this spec builds)
-- **Q5, opening balance sign:** the PRD does not say whether the opening balance may be negative
-  (a credit card or an overdraft). Default built here: any value inside the signed 64-bit range
-  is accepted, including negative and zero, because restricting it would invent a requirement.
-- **Q6, opening balance required:** FR-01 lists it as part of creation. Default built here: the
-  field is required by the API (missing means 400 naming `body.openingBalance`); the web form
-  pre-fills `0`.
-- **Q7, account count cap and write-rate limit:** the PRD sets neither (NFR-02 assumes up to 100
-  accounts). Default built here: no cap and no extra write limiter; cost is bounded by pagination,
-  indexes, aggregate queries and the 500-id chunking. Recommended follow-up: a per-user cap (for
-  example 200 accounts) or a write limiter, added through the PRD first.
+## Human decisions taken during PLAN (settled; do not re-raise in reviews)
+- **Q5, opening balance sign:** the opening balance may be negative; any value inside the signed
+  64-bit range is accepted, including zero and negatives (FR-01, AC-17).
+- **Q6, opening balance optional:** the opening balance is not required; when omitted the API
+  stores `0` and the web form pre-fills `0` (FR-01, AC-16). This amended the PRD through the PLAN to
+  DEFINE corrective loop (PRD loops 2).
+- **Q7, no cap on accounts per user and no extra write-rate limit:** the human decided to keep it as
+  built. Cost is bounded by pagination, indexes, aggregate queries and the 500-id chunking. The
+  threat model records it as accepted risk R-15.
 - Q3 (language for the default categories) and Q4 (categories module layout) concern 02b only.
 
 ## Coverage: PRD → blocks
@@ -144,7 +142,7 @@ Execution order: Block 1 → Block 2 → Block 3 → Block 4 → Block 5 → Blo
 - `ACCOUNT_TYPES = ['cash', 'bank_account', 'digital_wallet', 'credit_card', 'savings']` and
   `ACCOUNT_CURRENCIES = ['ARS', 'USD']`, each with its inferred type.
 - `accountNameSchema`: trims, normalizes to NFC and requires 1 to 50 code points (NFR-05).
-- `createAccountRequestSchema`: `name`, `type`, `currency`, `openingBalance` (all required).
+- `createAccountRequestSchema`: `name`, `type`, `currency` (required) and `openingBalance` (optional; absent becomes the string `"0"`, negatives accepted).
 - `renameAccountRequestSchema`: `name`, plus `type` and `currency` declared as `z.never().optional()`
   so that sending either one is a validation failure instead of being silently stripped (FR-04).
 - `accountIdParamsSchema` (`id` as UUID), `listAccountsQuerySchema` (`archived` as `z.enum(['true', 'false'])` defaulting to `'false'` and transformed to a boolean, `limit` 1 to 100 defaulting to 50, `offset` from 0).
@@ -154,14 +152,14 @@ Execution order: Block 1 → Block 2 → Block 3 → Block 4 → Block 5 → Blo
 
 **Input validation**
 - Names: string, trimmed, NFC, 1 to 50 code points. Type: one of the five values. Currency: `ARS`
-  or `USD` only. Amounts: decimal integer strings inside int64. `limit` at most 100. Unknown keys are
+  or `USD` only. Amounts: decimal integer strings inside int64 (negatives allowed; the opening balance may be omitted). `limit` at most 100. Unknown keys are
   stripped by the shared `validate` middleware, except `type` and `currency` on rename, which fail.
 
 **Error handling**
 - A name that is empty or longer than 50 code points fails validation (`VALIDATION_FAILED` with the field path).
 - A currency other than ARS or USD fails validation.
 - A `type` or `currency` sent on rename fails validation.
-- An opening balance that is not an integer string or leaves the int64 range fails validation.
+- An opening balance that is present but not an integer string, or that leaves the int64 range, fails validation.
 - `limit` above 100 or below 1 fails validation.
 - A sum that leaves the int64 range throws a `RangeError` that is never swallowed.
 - `parseAmountInput` returns `null` for malformed input, more than two decimals or a lone separator.
@@ -178,6 +176,8 @@ Execution order: Block 1 → Block 2 → Block 3 → Block 4 → Block 5 → Blo
 - [ ] The name schema fails on an invalid 51-code-point name and accepts 50, counting emoji as one (validates NFR-05).
 - [ ] The list query schema fails on an invalid `limit` of 101 and accepts 100 (validates NFR-03).
 - [ ] The create schema rejects an opening balance such as `1.5` or `1e3` (invalid amount).
+- [ ] The create schema defaults an omitted opening balance to `"0"` (validates AC-16).
+- [ ] The create schema accepts a negative opening balance such as `"-150000"` and the int64 minimum (validates AC-17).
 
 **Completion criterion**
 `pnpm test` runs the two new test files green, `pnpm typecheck` passes for `packages/shared`, and
@@ -260,6 +260,7 @@ touched test files pass.
 
 **Required tests**
 - [ ] create returns the account with balance equal to the opening balance (validates AC-01).
+- [ ] create with no opening balance stores 0 and a negative opening balance gives a negative balance (validates AC-16, AC-17).
 - [ ] a rename persists and is returned by get and list (validates AC-06).
 - [ ] archive hides the account from the default list, keeps it readable by id and deletes nothing; unarchive shows it again (validates AC-07, AC-08).
 - [ ] delete removes an account with no movements (validates AC-09).
@@ -359,7 +360,7 @@ fixture template; an empty result becomes 404 through `notFoundUnlessAllowed`. T
 factory. `worker.ts` is unchanged.
 
 **API contract**
-- `POST /accounts` — Request body: `name`, `type`, `currency`, `openingBalance` (decimal string). Response 201: `AccountResponse`. Errors: 400 `VALIDATION_FAILED` (with `fields`), 401, 403 `EMAIL_NOT_VERIFIED`, 409 `ACCOUNT_NAME_TAKEN`. Auth: session cookie plus verified email.
+- `POST /accounts` — Request body: `name`, `type`, `currency`, `openingBalance` (optional decimal string, default `"0"`, negatives allowed). Response 201: `AccountResponse`. Errors: 400 `VALIDATION_FAILED` (with `fields`), 401, 403 `EMAIL_NOT_VERIFIED`, 409 `ACCOUNT_NAME_TAKEN`. Auth: session cookie plus verified email.
 - `GET /accounts` — Query: `archived` (`true`/`false`, default false), `limit` (1 to 100, default 50), `offset`. Response 200: `{ items: AccountResponse[], totals: { ARS, USD }, total, limit, offset }`. Errors: 400, 401, 403. Auth: session plus verified email.
 - `GET /accounts/:id` — Params: `id` UUID. Response 200: `AccountResponse` (archived accounts included). Errors: 400, 401, 403, 404. Auth: session plus verified email.
 - `PATCH /accounts/:id` — Params: `id`. Request body: `name` only (`type` or `currency` present means 400). Response 200: `AccountResponse`. Errors: 400, 401, 403, 404, 409 `ACCOUNT_NAME_TAKEN`. Auth: session plus verified email.
@@ -382,6 +383,8 @@ factory. `worker.ts` is unchanged.
 - [ ] create returns 201 and the account appears in the list with its opening balance (validates AC-01).
 - [ ] create rejects a missing name, type or currency with 400 naming `body.name`, `body.type` or `body.currency` (validates AC-02).
 - [ ] create rejects currency `EUR` with 400 (validates AC-04).
+- [ ] create without `openingBalance` returns 201 with `openingBalance` and `balance` equal to `"0"` (validates AC-16).
+- [ ] create with a negative `openingBalance` returns 201 and the list shows the negative balance (validates AC-17).
 - [ ] PATCH with `currency` or `type` returns 400 and the account is unchanged (validates AC-05).
 - [ ] PATCH renames and the new name is returned by GET and the list (validates AC-06).
 - [ ] archive removes the account from the default list, keeps GET by id working and keeps it in `archived=true` (validates AC-07); unarchive restores it (validates AC-08).
@@ -451,8 +454,8 @@ map error codes to message keys already added in Block 2. The query for the list
 
 **Logic**
 - Container/presentational split: components are pure and fetch nothing; containers use `useApiClient`.
-- The create form has name, type (the five types from `ACCOUNT_TYPES`, labelled through the catalog), currency (ARS or USD) and an opening-balance
-  field parsed with `parseAmountInput` for the active locale (pre-filled with `0`); the container validates with `createAccountRequestSchema`
+- The create form has name, type (the five types from `ACCOUNT_TYPES`, labelled through the catalog), currency (ARS or USD) and an optional opening-balance
+  field parsed with `parseAmountInput` for the active locale (pre-filled with `0`; negatives accepted; an empty field is sent as omitted); the container validates with `createAccountRequestSchema`
   and shows per-field messages (AC-02).
 - The list shows each active account with its balance formatted by `formatMoney` and the two totals; a toggle shows archived accounts.
   Rename is inline; archive and unarchive are buttons; delete asks for confirmation inline and, on `accountHasMovements`, shows the message and an
@@ -475,6 +478,7 @@ map error codes to message keys already added in Block 2. The query for the list
 **Required tests**
 - [ ] the form offers exactly the five account types and the two currencies (validates AC-03).
 - [ ] submitting valid values calls `createAccount` once and navigates to the list (validates AC-01).
+- [ ] the opening-balance field is pre-filled with 0, an empty field is sent as omitted, and `-1.500,00` in `es` is sent as a negative amount (validates AC-16, AC-17).
 - [ ] submitting without name, type or currency shows each field error and calls nothing (validates AC-02).
 - [ ] a malformed amount shows an error and calls nothing (invalid input).
 - [ ] rename shows the new name in the list (validates AC-06).
@@ -517,6 +521,7 @@ The three web test files and `i18n-catalogs.test.ts` pass, `pnpm typecheck` and 
 
 **Required tests**
 - [ ] e2e: a user creates an account in each currency and sees both balances and totals (validates AC-01, AC-11, AC-12).
+- [ ] e2e: an account created with the pre-filled 0 and another with a negative opening balance show 0 and the negative amount (validates AC-16, AC-17).
 - [ ] e2e: the create form shows an error for a missing name and the five types are offered (validates AC-02, AC-03).
 - [ ] e2e: rename, archive, unarchive and delete update the list (validates AC-06, AC-07, AC-08, AC-09).
 - [ ] e2e: a duplicate name shows an error message (validates AC-13).

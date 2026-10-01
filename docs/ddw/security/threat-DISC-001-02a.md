@@ -7,7 +7,7 @@
 | Tier | FEATURE |
 | Date | 2026-10-01 |
 
-Risk identifiers are local to this ticket (R-01 to R-14).
+Risk identifiers are local to this ticket (R-01 to R-15).
 
 ## Components
 | Component | Source in the spec |
@@ -115,12 +115,19 @@ Risk identifiers are local to this ticket (R-01 to R-14).
 | R-06 | an account is deleted while a movement is being recorded against it (check-then-act race), destroying history | T | L | H | `hasMovements` check, then a database foreign key `ON DELETE RESTRICT` required of PRD 03 and mapped to `ACCOUNT_HAS_MOVEMENTS`; tested with a test-only referencing table |
 | R-07 | cross-site request forges an archive or delete | S | M | M | origin guard with web origin and `X-Requested-With: argent`, SameSite cookies, tests for the missing header |
 | R-08 | enumeration of other users' accounts or names through differing answers | I | M | L | other users' ids answer 404 before any 409 can be produced; names are unique per owner, so a conflict reveals only the caller's own data |
-| R-09 | oversized lists, huge id batches or heavy aggregates degrade the service (PRD NFR-02, NFR-03) | D | M | M | `limit` at most 100, 16 kb body limit, owner index, aggregate queries, port called in chunks of at most 500 ids, p95 performance test; the open decision on an account-count cap per user is raised to the human in the spec (Q7) |
+| R-09 | oversized lists, huge id batches or heavy aggregates degrade the service (PRD NFR-02, NFR-03) | D | M | M | `limit` at most 100, 16 kb body limit, owner index, aggregate queries, port called in chunks of at most 500 ids, p95 performance test; the unbounded number of accounts per user is accepted separately (R-15) |
 | R-10 | account names or amounts leak through logs, validation messages or error bodies | I | M | M | logs carry routes, ids and statuses only; validation errors list paths only; responses are schema-stripped; web shows message keys only |
 | R-11 | a delete, archive or rename cannot be attributed afterwards | R | L | M | audit log line per mutating route with user id and account id only, plus the existing request log with request id |
 | R-12 | the migration collides in numbering with sibling tickets or cannot be undone, leaving the database out of sync | T | M | M | provisional number `0005` with an explicit renumber procedure, migration tests for apply, rollback and re-apply, a documented rollback script that is destructive and needs an explicit plan |
 | R-13 | a future movements adapter returns or sums movements of other users' accounts | I | L | H | the port only receives scope-filtered account ids and returns data keyed by those ids; the adapter contract and a contract test are PRD 03's obligation, recorded in the spec deferrals |
+| R-15 | a user (or a stolen session) creates an unbounded number of accounts, growing storage and the cost of the list and totals queries (PRD NFR-02 assumes up to 100 accounts) | D | L | M | accepted, see below; bounded in the meantime by pagination, indexes, aggregate queries and the 500-id chunking (R-09) |
 | R-14 | an account name containing markup runs script in the web app (stored XSS) | T | L | H | React renders names as text; no raw HTML sink; the existing CSP blocks inline script; a component test renders a name containing markup as literal text |
+
+## Accepted risks
+### R-15
+- **Accepted by:** project owner (human decision relayed by the orchestrator in the DISC-001-02a session, 2026-10-01: no cap on accounts per user and no extra write-rate limit).
+- **Justification:** the product is a personal finance app with about 10 users, a normal user holds a handful of accounts, and the mitigations of R-09 keep the cost per request bounded; a cap would need a PRD requirement the owner chose not to add.
+- **Review conditions:** before opening registration to more than a few hundred users, when the real movements adapter of PRD 03 is benchmarked, or immediately if an account-count anomaly is seen in production.
 
 ## Supply chain
 No new runtime dependency in any package: Block 7 uses a native `<select>` instead of a Radix select,
@@ -133,5 +140,5 @@ The new routes are authenticated and limited by pagination (100), the 16 kb body
 owner-filtered queries; one batched movements-port call per request keeps latency bounded as
 movements grow (NFR-02, benchmarked in Block 8). If PostgreSQL is unavailable the routes answer 500
 `INTERNAL` and nothing is partially written, because each operation is a single statement. Volumetric
-attacks are handled at the hosting edge. The open question of a per-user account cap and a write-rate
-limit is not decided by the PRD and is raised to the human in the spec (Q7).
+attacks are handled at the hosting edge. The absence of a per-user account cap and of a write-rate limit is
+a human decision, recorded as accepted risk R-15.

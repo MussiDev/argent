@@ -6,7 +6,7 @@
 | PRD | docs/ddw/prd/prd-DISC-001-02a.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 2 |
+| Spec loops | 3 |
 | Loops since last human decision | 0 |
 
 ## Summary
@@ -33,8 +33,9 @@ touching accounts code, and no movements table is created here.
 - **Pagination:** `limit` (1 to 100, default 50) and `offset`; the totals always cover every active
   account, not only the page.
 - **Money in JSON:** integer minor units as decimal strings (`"-150000"`), never JSON numbers.
-- **Migration number:** `0005_accounts` is provisional. DISC-001-01c (`0005_two_factor`),
-  DISC-001-01d and the 07a ticket also claim 0005; whichever merges later renumbers its files
+- **Migration number:** `0006_accounts` after the rebase onto main (DISC-001-01c merged
+  `0005_two_factor`). It stays provisional: DISC-001-01d and the 07a ticket may also claim 0006;
+  whichever merges later renumbers its files
   (SQL, rollback script, `meta/_journal.json` entry and snapshot, regenerated with
   `pnpm --filter @argent/api db:generate`) and the migration-count test constants.
 - **Layering and imports:** domain and application of `accounts` import `AccessScope` and
@@ -284,16 +285,16 @@ touched test files pass.
 
 **Files**
 - `apps/api/src/accounts/infrastructure/db/schema.ts` (new) — Drizzle table `accounts`; imports `users` from `identity/infrastructure/db/schema` for the foreign key.
-- `apps/api/drizzle/0005_accounts.sql` (new, generated, then the trigger appended by hand) — provisional number, see Decisions.
-- `apps/api/drizzle/meta/_journal.json` and `apps/api/drizzle/meta/0005_snapshot.json` (modified / new).
-- `apps/api/drizzle/rollback/0005_accounts.down.sql` (new) — reverse script following the 0004 convention.
+- `apps/api/drizzle/0006_accounts.sql` (new, generated, then the trigger appended by hand) — provisional number, see Decisions.
+- `apps/api/drizzle/meta/_journal.json` and `apps/api/drizzle/meta/0006_snapshot.json` (modified / new).
+- `apps/api/drizzle/rollback/0006_accounts.down.sql` (new) — reverse script following the 0004 and 0005 convention.
 - `apps/api/src/shared/db/pg-errors.ts` (new) — `violatedConstraint(error, code)` for 23505 and 23503 through the cause chain.
 - `apps/api/src/identity/infrastructure/db/unique-violation.ts` (modified) — delegates to the shared helper so there is one copy.
 - `apps/api/src/accounts/infrastructure/db/drizzle-account-repository.ts` (new) — implements the repository port.
 - `apps/api/src/accounts/infrastructure/movements/no-movements-adapter.ts` (new) — returns an empty map and `false`.
 - `apps/api/test/accounts/account-repository.test.ts` (new) — integration tests against PostgreSQL.
-- `apps/api/test/identity/migration.test.ts` (modified) — migration count, rollback chains and a 0005 block.
-- `apps/api/test/deploy/build-output.test.ts` (modified) — expects the `accounts` table after migrations.
+- `apps/api/test/identity/migration.test.ts` (modified) — migration count (7), rollback chains and a 0006 block.
+- `apps/api/test/deploy/build-output.test.ts` (modified) — expects the `accounts` table after migrations (the list now also holds the 01c tables).
 
 **Logic**
 - Table, constraints and indexes as in the data model below.
@@ -303,9 +304,9 @@ touched test files pass.
   `AccountHasMovements`. Sums of opening balances are never done in SQL floats; `bigint` mode is used for reads.
 - A trigger rejects changing `type`, `currency` or `owner_id` after insert (FR-04, defence in depth).
 - `NoMovementsAdapter` is the production adapter until PRD 03.
-- Rollback (the migration is additive, so rolling back only loses accounts): run `0005_accounts.down.sql`, which drops the trigger, the function and the table
-  and deletes the journal row whose `created_at` equals the journal `when` of 0005, then revert the commit. DESTRUCTIVE: every account is lost, so it needs an explicit plan
-  and the API stopped. Apply it before `0004_google_identity.down.sql` when rolling back further.
+- Rollback (the migration is additive, so rolling back only loses accounts): run `0006_accounts.down.sql`, which drops the trigger, the function and the table
+  and deletes the journal row whose `created_at` equals the journal `when` of 0006, then revert the commit. DESTRUCTIVE: every account is lost, so it needs an explicit plan
+  and the API stopped. Apply it before `0005_two_factor.down.sql` when rolling back further.
 
 **Data model**
 - Entity `accounts`: `id` uuid primary key default `gen_random_uuid()`; `owner_id` uuid not null, foreign key to `users.id` on delete cascade;
@@ -335,7 +336,7 @@ touched test files pass.
 - [ ] the check constraints fail on an invalid 51-character name, an empty name, a type outside the five and a currency such as `EUR` (validates NFR-05).
 - [ ] an unexpected driver error propagates unchanged instead of being mapped to a domain error (error path).
 - [ ] the identity helper still reports the violated unique constraint through the shared helper (existing identity tests stay green).
-- [ ] `migration.test.ts`: all migrations apply on an empty database, the 0005 rollback and re-apply work, and the rollback chains run 0005 first.
+- [ ] `migration.test.ts`: all migrations apply on an empty database, the 0006 rollback and re-apply work, and every rollback chain runs `0006_accounts` before `0005_two_factor`.
 - [ ] `build-output.test.ts`: the built migrator creates the `accounts` table.
 
 **Completion criterion**
@@ -540,5 +541,5 @@ test output, and `pnpm test` stays green including the boundary probes.
   and nothing else.
 - `pnpm audit --prod --audit-level high` is unchanged: no runtime dependency is added to any package.
 - No float is used for money anywhere, including tests; no movements table exists in any migration.
-- Rollback: `0005_accounts.down.sql` drops the table and the trigger (destructive, explicit plan required);
+- Rollback: `0006_accounts.down.sql` drops the table and the trigger (destructive, explicit plan required);
   the rest of the change is reverted with the commit.

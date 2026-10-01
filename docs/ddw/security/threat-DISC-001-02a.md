@@ -15,7 +15,7 @@ Risk identifiers are local to this ticket (R-01 to R-15).
 | `packages/shared/src/money.ts` + `packages/shared/src/accounts/account.ts` (bigint helpers, request and response contracts) | Block 1 |
 | `packages/shared/src/errors.ts` + `apps/api/src/shared/http/error-handler.ts` (`ACCOUNT_NAME_TAKEN`, `ACCOUNT_HAS_MOVEMENTS`, 409) | Block 2 |
 | `apps/api/src/accounts/application/accounts-service.ts` + `apps/api/src/accounts/application/ports/account-movements.ts` (use cases and the movements port) | Block 3 |
-| `apps/api/src/accounts/infrastructure/db/schema.ts` + `apps/api/drizzle/0005_accounts.sql` (`accounts` table, unique name index, immutability trigger) + `apps/api/drizzle/rollback/0005_accounts.down.sql` | Block 4 |
+| `apps/api/src/accounts/infrastructure/db/schema.ts` + `apps/api/drizzle/0006_accounts.sql` (`accounts` table, unique name index, immutability trigger) + `apps/api/drizzle/rollback/0006_accounts.down.sql` | Block 4 |
 | `apps/api/src/accounts/infrastructure/db/drizzle-account-repository.ts` + `apps/api/src/accounts/infrastructure/movements/no-movements-adapter.ts` | Block 4 |
 | `apps/api/src/accounts/infrastructure/http/account-routes.ts` (`POST /accounts`, `GET /accounts`, `GET /accounts/:id`, `PATCH /accounts/:id`, `POST /accounts/:id/archive`, `POST /accounts/:id/unarchive`, `DELETE /accounts/:id`) + `apps/api/src/server.ts` wiring | Block 5 |
 | `apps/web/src/lib/api-client.ts` account methods | Block 6 |
@@ -53,7 +53,7 @@ Risk identifiers are local to this ticket (R-01 to R-15).
 - **Denial of Service:** one batched port call per request, in chunks of at most 500 ids, and aggregate queries for totals, so cost does not grow with one round trip per account (R-09).
 - **Elevation of Privilege:** a write needs `AccessScope<'write'>`, a type only the policy can issue; group access is denied until PRD 05 (R-01).
 
-### `apps/api/src/accounts/infrastructure/db/schema.ts` + `apps/api/drizzle/0005_accounts.sql` (`accounts` table, unique name index, immutability trigger) + `apps/api/drizzle/rollback/0005_accounts.down.sql`
+### `apps/api/src/accounts/infrastructure/db/schema.ts` + `apps/api/drizzle/0006_accounts.sql` (`accounts` table, unique name index, immutability trigger) + `apps/api/drizzle/rollback/0006_accounts.down.sql`
 - **Spoofing:** `owner_id` is `NOT NULL` with a foreign key to `users.id`, so a row cannot exist without a real owner.
 - **Tampering:** `CHECK` constraints on name length, type and currency; a trigger refuses any change to `type`, `currency` or `owner_id`; the unique index on (`owner_id`, `lower(name)`) closes the duplicate-name race (R-03, R-05).
 - **Repudiation:** `created_at` and `updated_at` are set by the database.
@@ -118,7 +118,7 @@ Risk identifiers are local to this ticket (R-01 to R-15).
 | R-09 | oversized lists, huge id batches or heavy aggregates degrade the service (PRD NFR-02, NFR-03) | D | M | M | `limit` at most 100, 16 kb body limit, owner index, aggregate queries, port called in chunks of at most 500 ids, p95 performance test; the unbounded number of accounts per user is accepted separately (R-15) |
 | R-10 | account names or amounts leak through logs, validation messages or error bodies | I | M | M | logs carry routes, ids and statuses only; validation errors list paths only; responses are schema-stripped; web shows message keys only |
 | R-11 | a delete, archive or rename cannot be attributed afterwards | R | L | M | audit log line per mutating route with user id and account id only, plus the existing request log with request id |
-| R-12 | the migration collides in numbering with sibling tickets or cannot be undone, leaving the database out of sync | T | M | M | provisional number `0005` with an explicit renumber procedure, migration tests for apply, rollback and re-apply, a documented rollback script that is destructive and needs an explicit plan |
+| R-12 | the migration collides in numbering with sibling tickets or cannot be undone, leaving the database out of sync | T | M | M | provisional number `0006` with an explicit renumber procedure, migration tests for apply, rollback and re-apply, a documented rollback script that is destructive and needs an explicit plan |
 | R-13 | a future movements adapter returns or sums movements of other users' accounts | I | L | H | the port only receives scope-filtered account ids and returns data keyed by those ids; the adapter contract and a contract test are PRD 03's obligation, recorded in the spec deferrals |
 | R-15 | a user (or a stolen session) creates an unbounded number of accounts, growing storage and the cost of the list and totals queries (PRD NFR-02 assumes up to 100 accounts) | D | L | M | accepted, see below; bounded in the meantime by pagination, indexes, aggregate queries and the 500-id chunking (R-09) |
 | R-14 | an account name containing markup runs script in the web app (stored XSS) | T | L | H | React renders names as text; no raw HTML sink; the existing CSP blocks inline script; a component test renders a name containing markup as literal text |

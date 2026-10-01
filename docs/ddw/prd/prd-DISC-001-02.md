@@ -17,8 +17,13 @@
 a → b
 
 ## Pending decisions (not resolved in the sub-PRDs)
-- FR-08 / AC-11 of 02a (original FR-08, AC-11) mention movements, which exist only from PRD 03.
-  The original wording is kept; the human decides how balances behave before PRD 03.
+- RESOLVED (2026-10-01, human decision): FR-08 / AC-10 / AC-11 of 02a (original FR-08, AC-10,
+  AC-11) mention movements, which exist only from PRD 03. Balance = opening balance + sum of
+  movements, where the movement sum and the "account has movements" check sit behind an
+  application port in the accounts module. In 02a the only adapter returns 0 / false (no
+  movements exist yet) and no movements table is created; PRD 03 provides the real adapter
+  without touching accounts code. AC-10 is tested at the use-case level with a fake port that
+  reports movements; its end-to-end test is deferred to PRD 03. The PRD wording is unchanged.
 - FR-11 / AC-14 of 02b (original FR-22, AC-27) depend on the user's interface language at the
   moment the user is created. The original wording is kept; the human decides where the default
   categories hook lives.

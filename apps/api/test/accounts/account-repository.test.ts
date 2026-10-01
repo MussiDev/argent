@@ -69,11 +69,11 @@ async function sqlState(run: () => Promise<unknown>): Promise<string | undefined
 }
 
 describe('DrizzleAccountRepository', () => {
-  it('creates and reads an account with bigint balances beyond 2^53 without losing precision', async () => {
+  it('creates and reads an account with bigint opening balances at the bound without losing precision', async () => {
     const owner = await newUserId('ana@example.com');
     const scope = await writeScope(owner);
-    const big = 9_007_199_254_740_993n; // 2^53 + 1
-    const min = -9_223_372_036_854_775_808n;
+    const big = 999_999_999_999_999n; // 10^15 - 1, an odd value close to the bound
+    const min = -1_000_000_000_000_000n;
 
     const created = await accounts.create(scope, data({ openingBalance: big }));
     const negative = await accounts.create(scope, data({ name: 'Deuda', openingBalance: min }));
@@ -389,6 +389,21 @@ describe('DrizzleAccountRepository', () => {
     expect(await bad({ type: 'crypto' as AccountType })).toBe('23514');
     expect(await bad({ currency: 'EUR' as AccountCurrency })).toBe('23514');
     expect(await bad({ name: 'x'.repeat(50) })).toBeUndefined();
+  });
+
+  it('the opening balance check accepts exactly 10^15 and -10^15 and rejects one more with 23514 (FR-13, AC-19)', async () => {
+    const owner = await newUserId('ana@example.com');
+    const scope = await writeScope(owner);
+    const limit = 10n ** 15n;
+    const bad = (name: string, openingBalance: bigint) =>
+      sqlState(() => accounts.create(scope, data({ name, openingBalance })));
+
+    expect(await bad('Max', limit)).toBeUndefined();
+    expect(await bad('Min', -limit)).toBeUndefined();
+    expect(await bad('Over', limit + 1n)).toBe('23514');
+    expect(await bad('Under', -limit - 1n)).toBe('23514');
+    const names = (await connection.pool.query<{ name: string }>('select name from accounts')).rows;
+    expect(names.map((row) => row.name).sort()).toEqual(['Max', 'Min']);
   });
 
   it('an unexpected driver error propagates unchanged instead of becoming a domain error', async () => {

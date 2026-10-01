@@ -13,6 +13,7 @@ export function presentAccount(account: AccountWithBalance): AccountResponse {
     name: account.name,
     type: account.type,
     currency: account.currency,
+    // Plain bigint toString, no int64 check: derived balance and totals are exact.
     openingBalance: formatMinorUnitsString(account.openingBalance),
     balance: formatMinorUnitsString(account.balance),
     archived: account.archivedAt !== null,

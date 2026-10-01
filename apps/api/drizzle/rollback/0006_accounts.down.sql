@@ -12,4 +12,4 @@ DROP TABLE IF EXISTS "accounts";
 
 -- Forget the migration so `pnpm db:migrate` applies it again; `created_at` is the journal's
 -- `when` for 0006_accounts.
-DELETE FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1790891407186;
+DELETE FROM "drizzle"."__drizzle_migrations" WHERE "created_at" = 1790895423195;

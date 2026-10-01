@@ -1,4 +1,4 @@
-import { addMinorUnits, type AccountCurrency, type AccountType } from '@argent/shared';
+import { addExact, type AccountCurrency, type AccountType } from '@argent/shared';
 
 export interface Account {
   id: string;
@@ -16,7 +16,7 @@ export interface AccountWithBalance extends Account {
   balance: bigint;
 }
 
-/** Throws `RangeError` when the result leaves the signed 64-bit range. */
+/** Exact arbitrary-precision sum of two derived amounts; never throws (NFR-06). */
 export function balanceOf(openingBalance: bigint, movementSum: bigint): bigint {
-  return addMinorUnits(openingBalance, movementSum);
+  return addExact(openingBalance, movementSum);
 }

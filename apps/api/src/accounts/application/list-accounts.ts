@@ -1,9 +1,4 @@
-import {
-  AppError,
-  sumMinorUnits,
-  type AccountCurrency,
-  LIST_ACCOUNTS_MAX_LIMIT,
-} from '@argent/shared';
+import { AppError, sumExact, type AccountCurrency, LIST_ACCOUNTS_MAX_LIMIT } from '@argent/shared';
 import type { AccessScope } from '../../shared/access';
 import type { AccountWithBalance } from '../domain/account';
 import { balanceOf } from '../domain/account';
@@ -57,7 +52,7 @@ export class ListAccounts {
     return {
       items: page.items.map((account) => withBalance(account, sums)),
       total: page.total,
-      totals: { ARS: sumMinorUnits(balances.ARS), USD: sumMinorUnits(balances.USD) },
+      totals: { ARS: sumExact(balances.ARS), USD: sumExact(balances.USD) },
     };
   }
 }

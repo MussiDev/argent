@@ -190,6 +190,57 @@ describe('POST /accounts', () => {
     expect(body.totals.ARS).toBe('-150000');
   });
 
+  it.each(['1000000000000001', '-1000000000000001'])(
+    'rejects the opening balance %s beyond 10^15 naming body.openingBalance and creates nothing (AC-18)',
+    async (openingBalance) => {
+      const s = await setup();
+      const response = await send(s.app, 'post', '/accounts', s.ana, { ...valid, openingBalance });
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      expect((response.body as { fields: string[] }).fields).toContain('body.openingBalance');
+      expect((await list(s)).items).toEqual([]);
+      const rows = await connection.pool.query('select 1 from accounts where owner_id = $1', [
+        s.anaId,
+      ]);
+      expect(rows.rowCount).toBe(0);
+    },
+  );
+
+  it.each(['1000000000000000', '-1000000000000000'])(
+    'accepts exactly the opening balance %s (AC-19)',
+    async (openingBalance) => {
+      const s = await setup();
+      const response = await send(s.app, 'post', '/accounts', s.ana, { ...valid, openingBalance });
+      expect(response.status).toBe(201);
+      expect(response.body).toMatchObject({ openingBalance, balance: openingBalance });
+    },
+  );
+
+  it.each([
+    ['a zero-width space', 'Ca\u200Bja'],
+    ['a right-to-left override', 'Caja\u202E'],
+    ['a NUL character', 'Ca\u0000ja'],
+  ])('rejects a name with %s naming body.name and creates nothing (AC-20)', async (_l, name) => {
+    const s = await setup();
+    const response = await send(s.app, 'post', '/accounts', s.ana, { ...valid, name });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect((response.body as { fields: string[] }).fields).toContain('body.name');
+    expect((await list(s)).items).toEqual([]);
+  });
+
+  it.each([
+    ['only spaces', '   '],
+    ['only zero-width characters', '\u200B\u200B\u2060\uFEFF'],
+  ])('rejects a name made of %s (AC-21)', async (_l, name) => {
+    const s = await setup();
+    const response = await send(s.app, 'post', '/accounts', s.ana, { ...valid, name });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect((response.body as { fields: string[] }).fields).toContain('body.name');
+    expect((await list(s)).items).toEqual([]);
+  });
+
   it('rejects a duplicate name that differs only in case (AC-13)', async () => {
     const s = await setup();
     await create(s, { name: 'Caja' });
@@ -211,6 +262,25 @@ describe('PATCH /accounts/:id', () => {
     expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
     expect((response.body as { fields: string[] }).fields).toContain('body.name');
   });
+
+  it.each([
+    ['a zero-width space', 'Ca\u200Bja'],
+    ['a right-to-left override', 'Caja\u202E'],
+    ['a NUL character', 'Ca\u0000ja'],
+    ['only spaces', '   '],
+    ['only zero-width characters', '\u200B\u200B\u2060\uFEFF'],
+  ])(
+    'rejects a name with %s naming body.name and leaves the account unchanged (AC-20, AC-21)',
+    async (_l, name) => {
+      const s = await setup();
+      const id = await create(s);
+      const response = await send(s.app, 'patch', `/accounts/${id}`, s.ana, { name });
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      expect((response.body as { fields: string[] }).fields).toContain('body.name');
+      expect((await get(s.app, `/accounts/${id}`, s.ana)).body).toMatchObject({ name: 'Caja' });
+    },
+  );
 
   it.each([{ currency: 'USD' }, { type: 'savings' }])(
     'rejects %o and leaves the account unchanged (AC-05)',
@@ -353,6 +423,22 @@ describe('GET /accounts balances, totals and paging', () => {
     expect(first.totals).toEqual(second.totals);
     expect((await list(s, '?archived=true')).total).toBe(1);
   });
+
+  it('answers 200 with the exact ARS total for 9,300 accounts at 10^15 (AC-22, NFR-06)', async () => {
+    const s = await setup();
+    await connection.pool.query(
+      `insert into accounts (owner_id, name, type, currency, opening_balance)
+       select $1, 'Big ' || n, 'cash', 'ARS', 1000000000000000
+         from generate_series(1, $2::int) as n`,
+      [s.anaId, 9300],
+    );
+    const response = await get(s.app, '/accounts?limit=2', s.ana);
+    expect(response.status).toBe(200);
+    const body = response.body as ListBody;
+    expect(body.totals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.total).toBe(9300);
+    expect(BigInt(body.totals.ARS)).toBe(9_300_000_000_000_000_000n);
+  }, 60_000);
 
   it('accepts limit 100 and rejects 101 (NFR-03)', async () => {
     const s = await setup();

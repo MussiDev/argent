@@ -664,11 +664,11 @@ describe('0006_accounts migration', () => {
     const ana = await insertUser('ana@accounts.test');
     const bob = await insertUser('bob@accounts.test');
     const inserted = await client.query<{ id: string; archived_at: Date | null; balance: string }>(
-      `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'Caja', 'cash', 'ARS', -9223372036854775808) returning id, archived_at, opening_balance as balance`,
+      `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'Caja', 'cash', 'ARS', -1000000000000000) returning id, archived_at, opening_balance as balance`,
     );
     expect(inserted.rows[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(inserted.rows[0]?.archived_at).toBeNull();
-    expect(inserted.rows[0]?.balance).toBe('-9223372036854775808');
+    expect(inserted.rows[0]?.balance).toBe('-1000000000000000');
 
     // unique lower(name) per owner; the same name for another owner is fine
     expect(await insertAccount(ana, 'CAJA')).toBe('23505');
@@ -686,6 +686,20 @@ describe('0006_accounts migration', () => {
         `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'C', 'cash', 'EUR', 0)`,
       ),
     ).toBe('23514');
+    // opening balance bound: exactly plus or minus 10^15 is accepted, one more is not (FR-13)
+    const withBalance = (name: string, balance: string) =>
+      sqlState(
+        `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', '${name}', 'cash', 'ARS', ${balance})`,
+      );
+    expect(await withBalance('Max', '1000000000000000')).toBeUndefined();
+    await client.query("delete from accounts where name = 'Max'");
+    expect(await withBalance('Over', '1000000000000001')).toBe('23514');
+    expect(await withBalance('Under', '-1000000000000001')).toBe('23514');
+    expect(
+      await countOf(
+        "select count(*) as n from pg_constraint where conname = 'accounts_opening_balance_range_check'",
+      ),
+    ).toBe(1);
     // owner must exist
     expect(await insertAccount('00000000-0000-4000-8000-000000000000', 'Huerfana')).toBe('23503');
     // immutable fields

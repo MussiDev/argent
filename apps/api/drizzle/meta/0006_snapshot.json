@@ -1,5 +1,5 @@
 {
-  "id": "20363306-0d7b-43ca-9a94-3601cf442870",
+  "id": "8b596e0c-0ef0-446f-b4ba-aad9b2cb64ba",
   "prevId": "f9a13586-ca5e-4ba2-bffd-c606ed3fdbff",
   "version": "7",
   "dialect": "postgresql",
@@ -138,6 +138,10 @@
         "accounts_name_length_check": {
           "name": "accounts_name_length_check",
           "value": "char_length(\"accounts\".\"name\") between 1 and 50"
+        },
+        "accounts_opening_balance_range_check": {
+          "name": "accounts_opening_balance_range_check",
+          "value": "\"accounts\".\"opening_balance\" between -1000000000000000 and 1000000000000000"
         },
         "accounts_type_check": {
           "name": "accounts_type_check",

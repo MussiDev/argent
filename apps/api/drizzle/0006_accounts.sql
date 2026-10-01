@@ -9,6 +9,7 @@ CREATE TABLE "accounts" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "accounts_name_length_check" CHECK (char_length("accounts"."name") between 1 and 50),
+	CONSTRAINT "accounts_opening_balance_range_check" CHECK ("accounts"."opening_balance" between -1000000000000000 and 1000000000000000),
 	CONSTRAINT "accounts_type_check" CHECK ("accounts"."type" in ('cash', 'bank_account', 'digital_wallet', 'credit_card', 'savings')),
 	CONSTRAINT "accounts_currency_check" CHECK ("accounts"."currency" in ('ARS', 'USD'))
 );

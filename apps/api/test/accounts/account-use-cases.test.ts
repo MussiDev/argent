@@ -60,9 +60,10 @@ async function create(
 }
 
 describe('balanceOf', () => {
-  it('adds the movement sum to the opening balance, exactly and within range', () => {
+  it('adds the movement sum to the opening balance, exactly and without a range limit (NFR-06)', () => {
     expect(balanceOf(100n, -250n)).toBe(-150n);
-    expect(() => balanceOf(MINOR_UNITS_MAX, 1n)).toThrow(RangeError);
+    expect(balanceOf(MINOR_UNITS_MAX, 1n)).toBe(MINOR_UNITS_MAX + 1n);
+    expect(balanceOf(-MINOR_UNITS_MAX, -MINOR_UNITS_MAX)).toBe(-2n * MINOR_UNITS_MAX);
   });
 });
 
@@ -255,6 +256,18 @@ describe('list totals (AC-12)', () => {
     for (const page of [page1, page2]) {
       expect(page.totals).toEqual({ ARS: sumMinorUnits([60n, 201n, 300n]), USD: 75n });
     }
+  });
+
+  it('returns exact totals above the int64 maximum for 9,300 active accounts at 10^15 without throwing (AC-22, NFR-06)', async () => {
+    const limit = 10n ** 15n;
+    for (let i = 0; i < 9300; i += 1) {
+      accounts.seed(ALICE, { name: `Big ${i}`, openingBalance: limit });
+    }
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.totals.ARS).toBe(9_300_000_000_000_000_000n);
+    expect(list.totals.ARS > MINOR_UNITS_MAX).toBe(true);
+    expect(list.totals.USD).toBe(0n);
+    expect(list.total).toBe(9300);
   });
 
   it('reports zero for every currency when there are no active accounts', async () => {

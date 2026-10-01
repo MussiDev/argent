@@ -45,6 +45,11 @@ export const accounts = pgTable(
   (table) => [
     // Mirrors the request validation (1 to 50 characters) as defence in depth (NFR-05).
     check('accounts_name_length_check', sql`char_length(${table.name}) between 1 and 50`),
+    // Second line of defence behind the shared schema: |opening balance| <= 10^15 minor units (Q8).
+    check(
+      'accounts_opening_balance_range_check',
+      sql`${table.openingBalance} between -1000000000000000 and 1000000000000000`,
+    ),
     check('accounts_type_check', oneOf(table.type, ACCOUNT_TYPES)),
     check('accounts_currency_check', oneOf(table.currency, ACCOUNT_CURRENCIES)),
     uniqueIndex('accounts_owner_name_unique').on(table.ownerId, sql`lower(${table.name})`),

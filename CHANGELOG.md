@@ -38,6 +38,10 @@ All notable changes to this project are documented in this file. The format foll
   short-lived single-use challenge; failed codes count toward the sign-in limit and are also
   limited per user, so a known email cannot lock its owner out of the second step.
 - DISC-001-01c Enabling or disabling 2FA ends every other session and emails the owner a notice.
+- FEAT-002 The product is named Pesly everywhere a user sees it: the web title and PWA name, the
+  screens, the recovery codes file and every email, in Spanish and English. The workspace packages
+  are `@pesly/*`, and Railway builds the services by path, so a package rename cannot break a
+  deploy. No user is signed out: cookie names and token claims are unchanged.
 
 ### Fixed
 

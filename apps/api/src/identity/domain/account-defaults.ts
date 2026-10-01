@@ -1,4 +1,4 @@
-import type { RateType } from '@argent/shared';
+import type { RateType } from '@pesly/shared';
 
 export const DISPLAY_CURRENCIES = ['ARS', 'USD'] as const;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];

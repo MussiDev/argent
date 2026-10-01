@@ -1,4 +1,4 @@
-import { AppError, type ErrorCode, type ErrorResponse } from '@argent/shared';
+import { AppError, type ErrorCode, type ErrorResponse } from '@pesly/shared';
 import type { ErrorRequestHandler, NextFunction, Request, Response } from 'express';
 import type { Logger } from '../logging/logger';
 

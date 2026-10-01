@@ -3,7 +3,7 @@ import {
   passwordResetConfirmResponseSchema,
   passwordResetRequestSchema,
   passwordResetResponseSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { Router } from 'express';
 import { validate } from '../../../shared/http/validate';
 import type { Logger } from '../../../shared/logging/logger';

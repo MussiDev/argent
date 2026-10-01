@@ -78,7 +78,7 @@ describe('API build output', () => {
       expect(code, entry).not.toMatch(/from\s*["'][^"']+\.ts["']/);
       expect(code, entry).not.toMatch(/import\(\s*["'][^"']+\.ts["']\s*\)/);
       expect(code, entry).not.toMatch(/["']tsx(\/[^"']*)?["']/);
-      expect(code, entry).not.toMatch(/["']@argent\/shared["']/);
+      expect(code, entry).not.toMatch(/["']@[^/"']+\/shared["']/);
     }
   });
 

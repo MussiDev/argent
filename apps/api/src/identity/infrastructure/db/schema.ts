@@ -1,4 +1,4 @@
-import { RATE_TYPES } from '@argent/shared';
+import { RATE_TYPES } from '@pesly/shared';
 import { sql, type SQL } from 'drizzle-orm';
 import {
   bigint,

@@ -1,4 +1,4 @@
-import { AppError } from '@argent/shared';
+import { AppError } from '@pesly/shared';
 import { Router } from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';

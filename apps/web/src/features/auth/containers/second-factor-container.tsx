@@ -1,6 +1,6 @@
 'use client';
 
-import { secondFactorVerifyRequestSchema, totpCodeSchema } from '@argent/shared';
+import { secondFactorVerifyRequestSchema, totpCodeSchema } from '@pesly/shared';
 import { useState } from 'react';
 import { z } from 'zod';
 import { useRouter } from '@/i18n/navigation';

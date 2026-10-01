@@ -1,4 +1,4 @@
-import { LANGUAGE_INPUT_MAX_LENGTH, TIME_ZONE_INPUT_MAX_LENGTH } from '@argent/shared';
+import { LANGUAGE_INPUT_MAX_LENGTH, TIME_ZONE_INPUT_MAX_LENGTH } from '@pesly/shared';
 
 /** What the device reports at registration; the API resolves defaults for missing values. */
 export interface DeviceContext {

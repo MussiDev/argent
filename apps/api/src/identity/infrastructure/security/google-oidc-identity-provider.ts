@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { emailInputSchema } from '@argent/shared';
+import { emailInputSchema } from '@pesly/shared';
 import { createRemoteJWKSet, errors, jwtVerify, type JWTPayload } from 'jose';
 import { z } from 'zod';
 import { GOOGLE_ENDPOINT_DEFAULTS } from '../../../shared/config/env';

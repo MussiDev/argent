@@ -398,19 +398,19 @@ describe('Railway Infrastructure as Code definition', () => {
 describe('Railway definition checks (sad paths)', () => {
   it('build filter error: a package-name filter, or one without --fail-if-no-match, names the service', () => {
     const nodes = [
-      service('argent-api', { build: { buildCommand: 'pnpm --filter @argent/api build' } }),
+      service('argent-api', { build: { buildCommand: 'pnpm --filter @pesly/api build' } }),
       service('argent-web', { build: { buildCommand: 'pnpm --filter ./apps/web build' } }),
       service('argent-worker', {
         build: {
-          buildCommand: 'pnpm --filter ./apps/api --filter @argent/web --fail-if-no-match build',
+          buildCommand: 'pnpm --filter ./apps/api --filter @pesly/web --fail-if-no-match build',
         },
       }),
     ];
     expect(buildFilterIssues(nodes)).toEqual([
-      'argent-api: build filter is not a ./ path (pnpm --filter @argent/api build)',
-      'argent-api: missing --fail-if-no-match (pnpm --filter @argent/api build)',
+      'argent-api: build filter is not a ./ path (pnpm --filter @pesly/api build)',
+      'argent-api: missing --fail-if-no-match (pnpm --filter @pesly/api build)',
       'argent-web: missing --fail-if-no-match (pnpm --filter ./apps/web build)',
-      'argent-worker: build filter is not a ./ path (pnpm --filter ./apps/api --filter @argent/web --fail-if-no-match build)',
+      'argent-worker: build filter is not a ./ path (pnpm --filter ./apps/api --filter @pesly/web --fail-if-no-match build)',
     ]);
   });
 

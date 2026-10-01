@@ -4,7 +4,7 @@ import {
   sessionResponseSchema,
   signInRequestSchema,
   signInResponseSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { Router, type RequestHandler } from 'express';
 import { validate } from '../../../shared/http/validate';
 import type { Logger } from '../../../shared/logging/logger';

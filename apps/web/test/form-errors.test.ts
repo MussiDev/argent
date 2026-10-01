@@ -2,7 +2,7 @@ import {
   passwordResetConfirmRequestSchema,
   registerRequestSchema,
   signInRequestSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import en from '../messages/en.json';

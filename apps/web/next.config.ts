@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // The repository keeps its own AGENTS.md; do not let `next dev` generate one inside apps/web.
   agentRules: false,
-  transpilePackages: ['@argent/shared'],
+  transpilePackages: ['@pesly/shared'],
   headers() {
     return Promise.resolve([{ source: '/:path*', headers: securityHeaders }]);
   },

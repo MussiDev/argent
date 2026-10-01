@@ -1,4 +1,4 @@
-import { AppError } from '@argent/shared';
+import { AppError } from '@pesly/shared';
 
 /** Missing, or outside the caller's scope; both answer 404 `NOT_FOUND` with the same body. */
 export class ResourceNotFound extends AppError {

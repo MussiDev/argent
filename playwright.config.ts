@@ -59,7 +59,7 @@ export default defineConfig({
   webServer: [
     {
       // Stands in for Google, so no e2e test ever calls it.
-      command: 'pnpm --filter @argent/api exec tsx test/fake-google-oidc-server.ts',
+      command: 'pnpm --filter @pesly/api exec tsx test/fake-google-oidc-server.ts',
       url: `${FAKE_GOOGLE_ORIGIN}/jwks`,
       reuseExistingServer: false,
       timeout: 60_000,
@@ -73,7 +73,7 @@ export default defineConfig({
       // Playwright starts webServers before globalSetup, so the e2e database is created and
       // migrated as part of the API command, before the API boots.
       command:
-        'pnpm --filter @argent/api exec tsx test/e2e-database.ts && pnpm --filter @argent/api start',
+        'pnpm --filter @pesly/api exec tsx test/e2e-database.ts && pnpm --filter @pesly/api start',
       url: `${API_URL}/health`,
       // Never reuse a running API: it could be pointed at another database.
       reuseExistingServer: false,
@@ -83,7 +83,7 @@ export default defineConfig({
     {
       // Delivers the outbox to Mailpit; without it no verification or reset email is ever sent.
       // Started after the API command, which creates and migrates the e2e database.
-      command: 'pnpm --filter @argent/api worker',
+      command: 'pnpm --filter @pesly/api worker',
       wait: { stdout: /email worker started/ },
       reuseExistingServer: false,
       timeout: 60_000,
@@ -91,8 +91,8 @@ export default defineConfig({
     },
     {
       command: isCI
-        ? 'pnpm --filter @argent/web build && pnpm --filter @argent/web start'
-        : 'pnpm --filter @argent/web dev',
+        ? 'pnpm --filter @pesly/web build && pnpm --filter @pesly/web start'
+        : 'pnpm --filter @pesly/web dev',
       url: `${WEB_URL}/es`,
       reuseExistingServer: !isCI,
       timeout: 180_000,

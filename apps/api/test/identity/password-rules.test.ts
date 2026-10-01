@@ -1,4 +1,4 @@
-import type { AppError } from '@argent/shared';
+import type { AppError } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import { PasswordTooLong, PasswordTooShort } from '../../src/identity/domain/errors';
 import { passwordLengthRule } from '../../src/identity/domain/password-rules';

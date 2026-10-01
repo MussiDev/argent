@@ -1,6 +1,6 @@
 'use client';
 
-import { twoFactorDisableRequestSchema, twoFactorEnableRequestSchema } from '@argent/shared';
+import { twoFactorDisableRequestSchema, twoFactorEnableRequestSchema } from '@pesly/shared';
 import { toString as renderQrCode } from 'qrcode';
 import { useCallback, useEffect, useState } from 'react';
 import {

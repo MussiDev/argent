@@ -17,7 +17,7 @@
   ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (Shared contracts, time zone check and amount formatter) (7 files, 842 words), Block 2 (Persistence: display name column and profile repository) (7 files, 769 words), Block 3 (Profile API: read and edit) (5 files, 958 words), Block 4 (Web screen: profile and preferences) (11 files, 1206 words)
   👁  F-SPEC-12 (contradicts the PRD) and F-SPEC-13 (terminology diverging from
       the PRD) are MANUAL: judge them and say so explicitly in your report.
-  ✅ F-SPEC-LOOP: 2 loop(s) since a human decided, under the ceiling of 3; 4 in total for this document
+  ✅ F-SPEC-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 5 in total for this document
 ────────────────────────────────────────────────────────────────
 Total: 13 passed, 0 failed, 1 warnings
 Result: PASSED

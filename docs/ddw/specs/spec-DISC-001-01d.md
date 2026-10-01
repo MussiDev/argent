@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01d.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 4 |
-| Loops since last human decision | 2 |
+| Spec loops | 5 |
+| Loops since last human decision | 0 |
 
 ## Summary
 Adds a profile and editable preferences to the `identity` module. A signed-in user reads
@@ -48,7 +48,7 @@ arithmetic on `bigint`, and the select control is a styled native `<select>` in 
 (a Radix select would add `@radix-ui/react-select`, which this ticket does not need).
 
 ## Decisions recorded and assumptions of this spec
-Decided by the human (recorded in the PRD's decision log):
+Decided by the human (all but A-3 are also in the PRD's decision log):
 - 2FA status is read from 01c's real code; no stub (D-5).
 - The migration is `0007_profile_display_name`: 01c owns `0005`, and the coordinator assigns
   migration numbers per ticket to avoid collisions: DISC-001-02a is `0006` (being implemented),
@@ -61,18 +61,16 @@ Decided by the human (recorded in the PRD's decision log):
 - AC-09/AC-10 (amount formatting by language) are verified by unit tests of the shared formatter
   only; no example amount is shown on any screen, and visual verification is deferred to the screens
   of PRD 02 (D-4).
+- A-3 (settled, do not re-raise in reviews): `GET /profile` and `PATCH /profile` use `requireSession` only, without `requireVerifiedEmail`. Reasoning: the routes touch only the user's own display name and preferences, so there is no security impact, and the web shell already keeps unverified users out of the screen.
 - No redirect to the saved language after sign-in; account deletion, display name at sign-up and the
   naming `DeleteUser` / `UserDeletionRepository` / `/profile/delete` belong to 01e and 01f.
 
-Assumptions of this spec (interpretations of the PRD wording, not decisions of the human; none
+Assumptions of this spec (A-1 and A-2: interpretations of the PRD wording, not decisions of the human; none
 blocks CODE, each can be changed in a new loop):
 - A-1: "empty" display name (AC-03) includes a name that is only spaces, names are trimmed before
   validation, and "characters" are counted as Unicode code points.
 - A-2: The profile and the preferences are one screen, `settings/profile`, with two forms, and the
   shell navigation gets a "Profile" link next to the "Security" link of 01c.
-- A-3: `GET /profile` and `PATCH /profile` use `requireSession` only (not `requireVerifiedEmail`),
-  so the API answers an unverified user's own profile; the web shell already keeps unverified users
-  out of the screen.
 
 ## Block 1 — Shared contracts, time zone check and amount formatter
 
@@ -272,4 +270,4 @@ reassigned it is renumbered before it merges (see the decisions above).
 - `GET /profile` and `PATCH /profile` behave as their contracts say, with the real session middleware, and each of the PRD's 10 acceptance criteria has at least one passing test.
 - `pnpm test`, `pnpm test:perf` (profile benchmark under 300 ms p95), `pnpm e2e`, `pnpm lint`, `pnpm typecheck` and `pnpm audit --prod --audit-level high` pass; coverage stays at or above 80% lines, branches and functions.
 - No float is used for money in code or tests, no UI string is hard-coded, and no new runtime dependency was added.
-- Assumptions A-1 to A-3 are accepted or changed in a new loop before the branch is merged.
+- Assumptions A-1 and A-2 are accepted or changed in a new loop before the branch is merged.

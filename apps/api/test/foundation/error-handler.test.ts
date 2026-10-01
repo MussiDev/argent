@@ -20,6 +20,12 @@ function buildApp(env: Env, lines: string[] = []) {
     await Promise.resolve();
     throw new AppError('PASSWORD_TOO_SHORT');
   });
+  router.get('/name-taken', () => {
+    throw new AppError('ACCOUNT_NAME_TAKEN');
+  });
+  router.get('/has-movements', () => {
+    throw new AppError('ACCOUNT_HAS_MOVEMENTS');
+  });
   const logger = createLogger({
     level: 'info',
     destination: { write: (line: string) => lines.push(line) },
@@ -60,6 +66,20 @@ describe('error handler', () => {
 
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ code: 'PASSWORD_TOO_SHORT' });
+  });
+
+  it('maps ACCOUNT_NAME_TAKEN to 409 with only its code', async () => {
+    const response = await request(buildApp(testEnv())).get('/name-taken');
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ code: 'ACCOUNT_NAME_TAKEN' });
+  });
+
+  it('maps ACCOUNT_HAS_MOVEMENTS to 409 with only its code', async () => {
+    const response = await request(buildApp(testEnv())).get('/has-movements');
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ code: 'ACCOUNT_HAS_MOVEMENTS' });
   });
 
   it('answers unknown routes with 404 NOT_FOUND', async () => {

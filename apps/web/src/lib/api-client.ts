@@ -53,7 +53,9 @@ export type ApiErrorKey =
   | 'secondFactorExpired'
   | 'twoFactorAlreadyEnabled'
   | 'twoFactorNotEnabled'
-  | 'twoFactorSetupRequired';
+  | 'twoFactorSetupRequired'
+  | 'accountNameTaken'
+  | 'accountHasMovements';
 
 /** `NETWORK`: the request never got an HTTP answer (offline, DNS, CORS, aborted). */
 export type ApiFailureCode = ErrorCode | 'NETWORK';
@@ -86,6 +88,8 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
   TWO_FACTOR_UNAVAILABLE: 'retryLater',
   SECOND_FACTOR_INVALID: 'codeInvalid',
   SECOND_FACTOR_EXPIRED: 'secondFactorExpired',
+  ACCOUNT_NAME_TAKEN: 'accountNameTaken',
+  ACCOUNT_HAS_MOVEMENTS: 'accountHasMovements',
 };
 
 function failure(code: ApiFailureCode): ApiFailure {

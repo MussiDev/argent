@@ -68,6 +68,8 @@ describe('api client', () => {
     [503, 'PASSWORD_CHECK_UNAVAILABLE', 'retryLater'],
     [400, 'VALIDATION_FAILED', 'validationFailed'],
     [500, 'INTERNAL', 'unexpected'],
+    [409, 'ACCOUNT_NAME_TAKEN', 'accountNameTaken'],
+    [409, 'ACCOUNT_HAS_MOVEMENTS', 'accountHasMovements'],
   ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
     const { client } = clientWith(jsonResponse(status, { code }));
 
@@ -107,6 +109,16 @@ describe('api client', () => {
 
   it('treats an error body that is not an API error as unexpected', async () => {
     const { client } = clientWith(new Response('<html>Bad gateway</html>', { status: 502 }));
+
+    const result = await client.signIn({ email: 'ana@example.com', password: 'x' });
+
+    expect(result).toEqual({ ok: false, code: 'INTERNAL', messageKey: 'unexpected' });
+  });
+
+  it('maps an unknown error code to unexpected and never shows API text', async () => {
+    const { client } = clientWith(
+      jsonResponse(409, { code: 'SOMETHING_NEW', message: 'raw API text' }),
+    );
 
     const result = await client.signIn({ email: 'ana@example.com', password: 'x' });
 

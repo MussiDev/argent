@@ -117,6 +117,8 @@
     "twoFactorAlreadyEnabled": "Two-step verification is already on.",
     "twoFactorNotEnabled": "Two-step verification is already off.",
     "twoFactorSetupRequired": "The setup changed in another session. Start again.",
+    "accountNameTaken": "You already have an account with that name.",
+    "accountHasMovements": "This account has movements, so it cannot be deleted. Archive it instead.",
     "totpCodeFormat": "Enter the 6 digits of the code.",
     "secondFactorCodeFormat": "Enter a 6-digit code or a recovery code."
   },

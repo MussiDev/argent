@@ -34,7 +34,7 @@ payments — usable offline at the moment of paying.
 | Install | `pnpm install --frozen-lockfile` |
 | Lint | `pnpm lint` |
 | Typecheck | `pnpm typecheck` |
-| Build | `pnpm --filter @argent/api build`, `pnpm --filter @argent/web build` |
+| Build | `pnpm --filter ./apps/api --fail-if-no-match build`, `pnpm --filter ./apps/web --fail-if-no-match build` |
 | Audit | `pnpm audit --prod --audit-level high` |
 
 ## Architecture conventions

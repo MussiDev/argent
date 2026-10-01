@@ -34,7 +34,7 @@ export default defineRailway((_ctx, project) => {
     source: github('MussiDev/pesly', { branch: 'main', checkSuites: true }),
     build: {
       builder: 'RAILPACK',
-      buildCommand: 'pnpm --filter @argent/api build',
+      buildCommand: 'pnpm --filter ./apps/api --fail-if-no-match build',
       watchPatterns: apiWatchPatterns,
     },
     start: 'node --max-old-space-size=320 apps/api/dist/server.js',
@@ -63,7 +63,7 @@ export default defineRailway((_ctx, project) => {
     source,
     build: {
       builder: 'RAILPACK',
-      buildCommand: 'pnpm --filter @argent/api build',
+      buildCommand: 'pnpm --filter ./apps/api --fail-if-no-match build',
       watchPatterns: apiWatchPatterns,
     },
     start: 'node --max-old-space-size=192 apps/api/dist/worker.js',
@@ -86,7 +86,7 @@ export default defineRailway((_ctx, project) => {
     source,
     build: {
       builder: 'RAILPACK',
-      buildCommand: 'pnpm --filter @argent/web build',
+      buildCommand: 'pnpm --filter ./apps/web --fail-if-no-match build',
       watchPatterns: ['/apps/web/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     },
     start: 'node --max-old-space-size=320 apps/web/node_modules/next/dist/bin/next start apps/web',

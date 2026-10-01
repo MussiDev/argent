@@ -38,6 +38,8 @@ const idTokenClaimsSchema = z.object({
   nonce: z.string().min(1).max(128),
   hd: z.string().min(1).max(253).optional(),
   azp: z.string().optional(),
+  // Display text only: an odd value is read as missing so it can never fail a sign-in.
+  name: z.string().optional().catch(undefined),
 });
 
 export interface GoogleOidcOptions {
@@ -88,7 +90,7 @@ export class GoogleOidcIdentityProvider implements GoogleIdentityProvider {
       client_id: this.options.clientId,
       redirect_uri: this.redirectUri,
       response_type: 'code',
-      scope: 'openid email',
+      scope: 'openid email profile',
       state,
       nonce,
       code_challenge: createHash('sha256').update(codeVerifier).digest('base64url'),
@@ -127,6 +129,7 @@ export class GoogleOidcIdentityProvider implements GoogleIdentityProvider {
       email,
       emailVerified: claims.email_verified,
       hostedDomain: claims.hd ?? null,
+      name: claims.name ?? null,
     };
   }
 

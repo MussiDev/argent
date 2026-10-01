@@ -93,7 +93,41 @@ describe('GoogleOidcIdentityProvider.exchangeCode', () => {
       email: 'ana.gomez@gmail.com',
       emailVerified: true,
       hostedDomain: null,
+      name: null,
     });
+  });
+
+  it('maps the name claim to GoogleClaims.name and to null when the token has none (FR-04)', async () => {
+    const google_ = provider();
+
+    const named = await google_.exchangeCode(
+      await approve(google_, { ...GMAIL_USER, name: 'Ana Gómez' }),
+    );
+    const unnamed = await google_.exchangeCode(await approve(google_, GMAIL_USER));
+
+    expect(named.name).toBe('Ana Gómez');
+    expect(unnamed.name).toBeNull();
+  });
+
+  it('reads a name claim that is not a string as missing, without failing the exchange (FR-05)', async () => {
+    const google_ = provider();
+    const exchange = await approve(google_, { ...GMAIL_USER, name: 'Ana Gómez' });
+    google.setTokenOptions({ claimOverrides: { name: 42 } });
+
+    await expect(google_.exchangeCode(exchange)).resolves.toMatchObject({ name: null });
+  });
+
+  it.each([
+    ['sub', 5],
+    ['email_verified', 'true'],
+    ['nonce', 7],
+    ['hd', 3],
+  ])('still rejects a malformed %s next to a valid name (FR-05)', async (claim, value) => {
+    const google_ = provider();
+    const exchange = await approve(google_, { ...GMAIL_USER, name: 'Ana Gómez' });
+    google.setTokenOptions({ claimOverrides: { [claim]: value } });
+
+    expect((await failureOf(google_.exchangeCode(exchange))).reason).toBe('claims_malformed');
   });
 
   it('returns the hd claim as hostedDomain and passes emailVerified through unchanged', async () => {
@@ -104,6 +138,7 @@ describe('GoogleOidcIdentityProvider.exchangeCode', () => {
       email: 'ana@empresa.com.ar',
       emailVerified: false,
       hostedDomain: 'empresa.com.ar',
+      name: null,
     });
   });
 
@@ -459,7 +494,7 @@ describe('GoogleOidcIdentityProvider.exchangeCode', () => {
 });
 
 describe('GoogleOidcIdentityProvider.authorizationUrl', () => {
-  it('carries state, nonce, the S256 challenge of the verifier, scope=openid email and the API callback', () => {
+  it('carries state, nonce, the S256 challenge of the verifier, scope=openid email profile and the API callback', () => {
     const url = new URL(
       provider().authorizationUrl({
         state: 'the-state',
@@ -473,7 +508,7 @@ describe('GoogleOidcIdentityProvider.authorizationUrl', () => {
       client_id: google.clientId,
       redirect_uri: REDIRECT_URI,
       response_type: 'code',
-      scope: 'openid email',
+      scope: 'openid email profile',
       state: 'the-state',
       nonce: 'the-nonce',
       code_challenge: createHash('sha256').update('the-verifier').digest('base64url'),

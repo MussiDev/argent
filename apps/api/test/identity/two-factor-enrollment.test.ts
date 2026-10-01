@@ -550,6 +550,7 @@ describe('POST /auth/2fa/setup and /auth/2fa/enable (AC-01, AC-02)', () => {
             email: EMAIL,
             emailVerified: true,
             hostedDomain: null,
+            name: null,
           }),
       },
       tokenGenerator: infrastructure.tokenGenerator,

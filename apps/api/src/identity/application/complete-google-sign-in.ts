@@ -1,5 +1,6 @@
 import { newAccountDefaults, type Language } from '../domain/account-defaults';
 import { Email } from '../domain/email';
+import { displayNameFromGoogleClaim } from '../domain/display-name';
 import { DuplicateEmail, IdentityAlreadyLinked } from '../domain/errors';
 import { isGoogleAuthoritative } from '../domain/google-authority';
 import type { CreateSignInChallenge } from './create-sign-in-challenge';
@@ -213,7 +214,11 @@ export class CompleteGoogleSignIn {
         return { outcome: 'resolved', via: 'linked', user: existing };
       }
       // AC-07 (FR-05): whoever registered the unverified password account loses it.
-      const superseded = await users.supersedeUnverified(existing.id, now);
+      const superseded = await users.supersedeUnverified(
+        existing.id,
+        now,
+        displayNameFromGoogleClaim(claims.name),
+      );
       if (!superseded) {
         // Verified between the two statements: link it as a verified account.
         await link(existing.id);
@@ -238,6 +243,7 @@ export class CompleteGoogleSignIn {
       displayCurrency,
       timeZone: pending.timeZone,
       language: pending.language,
+      displayName: displayNameFromGoogleClaim(claims.name),
     });
     await link(created.id);
     return { outcome: 'resolved', via: 'created', user: created };

@@ -67,6 +67,14 @@ async function identityRows(): Promise<
   return result.rows;
 }
 
+async function displayNameOf(userId: string): Promise<string | null> {
+  const result = await connection.pool.query<{ display_name: string | null }>(
+    'select display_name from users where id = $1',
+    [userId],
+  );
+  return result.rows[0]?.display_name ?? null;
+}
+
 describe('DrizzleUserRepository for Google accounts', () => {
   it('creates a user without a password and with emailVerifiedAt set (FR-01, FR-03)', async () => {
     const created = await users.create(
@@ -85,7 +93,7 @@ describe('DrizzleUserRepository for Google accounts', () => {
   it('supersedeUnverified clears the password, bumps the credentials version and marks the email verified (FR-05)', async () => {
     const created = await users.create(newUser('ana@gmail.com'));
 
-    const superseded = await users.supersedeUnverified(created.id, NOW);
+    const superseded = await users.supersedeUnverified(created.id, NOW, null);
 
     expect(superseded).toMatchObject({
       id: created.id,
@@ -98,12 +106,30 @@ describe('DrizzleUserRepository for Google accounts', () => {
   });
 
   it('supersedeUnverified returns null and changes nothing on an already verified user (sad path)', async () => {
-    const created = await users.create(newUser('ana@gmail.com'));
+    const created = await users.create(newUser('ana@gmail.com', { displayName: 'Typed Name' }));
     await users.markEmailVerified(created.id, new Date('2026-09-27T00:00:00.000Z'));
     const before = await users.findById(created.id);
 
-    expect(await users.supersedeUnverified(created.id, NOW)).toBeNull();
+    expect(await users.supersedeUnverified(created.id, NOW, 'Ana Google')).toBeNull();
     expect(await users.findById(created.id)).toEqual(before);
+    expect(await displayNameOf(created.id)).toBe('Typed Name');
+  });
+
+  it('supersedeUnverified sets the display name in the same statement that removes the password (FR-07)', async () => {
+    const created = await users.create(newUser('ana@gmail.com', { displayName: 'Typed Name' }));
+
+    const superseded = await users.supersedeUnverified(created.id, NOW, 'Ana Google');
+
+    expect(superseded).toMatchObject({ id: created.id, passwordHash: null });
+    expect(await displayNameOf(created.id)).toBe('Ana Google');
+  });
+
+  it('supersedeUnverified replaces the typed display name with null when Google sent none (FR-07)', async () => {
+    const created = await users.create(newUser('ana@gmail.com', { displayName: 'Typed Name' }));
+
+    await users.supersedeUnverified(created.id, NOW, null);
+
+    expect(await displayNameOf(created.id)).toBeNull();
   });
 });
 

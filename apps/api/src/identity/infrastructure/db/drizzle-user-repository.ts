@@ -63,7 +63,11 @@ export class DrizzleUserRepository implements UserRepository {
    * `email_verified_at is null` is re-evaluated after waiting for a concurrent writer's row lock,
    * so an account verified meanwhile is left alone.
    */
-  async supersedeUnverified(id: string, at: Date): Promise<User | null> {
+  async supersedeUnverified(
+    id: string,
+    at: Date,
+    displayName: string | null,
+  ): Promise<User | null> {
     const [superseded] = await this.db
       .update(users)
       .set({
@@ -71,6 +75,7 @@ export class DrizzleUserRepository implements UserRepository {
         credentialsVersion: sql`${users.credentialsVersion} + 1`,
         passwordChangedAt: at,
         emailVerifiedAt: at,
+        displayName,
       })
       .where(and(eq(users.id, id), isNull(users.emailVerifiedAt)))
       .returning();

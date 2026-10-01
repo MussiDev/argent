@@ -52,7 +52,7 @@ export interface UserRepository {
    * `credentialsVersion`, and sets `passwordChangedAt` and `emailVerifiedAt` to `at`, in one
    * statement. Resolves null, changing nothing, when the email is already verified.
    */
-  supersedeUnverified(id: string, at: Date): Promise<User | null>;
+  supersedeUnverified(id: string, at: Date, displayName: string | null): Promise<User | null>;
   /**
    * Bumps `credentialsVersion` in one statement and resolves the new value, so every session
    * created under an earlier version dies on its next use (FR-05). Rejects for an unknown user.

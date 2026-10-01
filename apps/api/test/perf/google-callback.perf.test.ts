@@ -85,8 +85,14 @@ async function seedCallbacks(now: Date): Promise<SeededCallback[]> {
       nonce,
       codeChallenge: pkceChallenge(codeVerifier),
       redirectUri: REDIRECT_URI,
+      scope: 'openid email profile',
     });
-    const query = new URLSearchParams({ state, code, scope: 'email openid', authuser: '0' });
+    const query = new URLSearchParams({
+      state,
+      code,
+      scope: 'email profile openid',
+      authuser: '0',
+    });
     seeded.push({ path: `/auth/google/callback?${query.toString()}`, binding });
   }
   return seeded;

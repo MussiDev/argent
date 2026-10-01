@@ -35,6 +35,8 @@ export interface FakeGoogleIdentity {
   emailVerified: boolean;
   /** Google Workspace domain; omitted for consumer accounts. */
   hd?: string;
+  /** The `name` claim, issued only when the requested scope includes `profile`. */
+  name?: string;
 }
 
 /** How the token endpoint misbehaves; every field left out behaves like Google. */
@@ -65,6 +67,8 @@ export interface FakeTokenOptions {
   rawTokenBody?: string;
   /** Adds a `padding` field of this many characters to an otherwise valid token response. */
   tokenResponsePaddingBytes?: number;
+  /** Claims set to these values after the identity's own, e.g. to make one malformed. */
+  claimOverrides?: Record<string, unknown>;
   /** Waits this long before answering `/jwks`. */
   jwksDelayMs?: number;
 }
@@ -85,6 +89,8 @@ export interface IssueCodeInput {
   /** base64url(SHA-256(verifier)). */
   codeChallenge: string;
   redirectUri: string;
+  /** Scope the authorization requested; defaults to `openid email`. */
+  scope?: string;
 }
 
 export interface FakeGoogleOidc {
@@ -119,6 +125,7 @@ export function fakeGoogleLoginHint(identity: FakeGoogleIdentity): string {
     email_verified: String(identity.emailVerified),
   });
   if (identity.hd !== undefined) hint.set('hd', identity.hd);
+  if (identity.name !== undefined) hint.set('name', identity.name);
   return hint.toString();
 }
 
@@ -129,7 +136,14 @@ function parseLoginHint(raw: string): FakeGoogleIdentity | null {
   const verified = hint.get('email_verified');
   if (!sub || !email || (verified !== 'true' && verified !== 'false')) return null;
   const hd = hint.get('hd');
-  return { sub, email, emailVerified: verified === 'true', ...(hd ? { hd } : {}) };
+  const name = hint.get('name');
+  return {
+    sub,
+    email,
+    emailVerified: verified === 'true',
+    ...(hd ? { hd } : {}),
+    ...(name === null ? {} : { name }),
+  };
 }
 
 export function pkceChallenge(verifier: string): string {
@@ -172,6 +186,10 @@ async function readBody(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+function requestedScopes(pending: PendingCode): string[] {
+  return (pending.scope ?? 'openid email').split(' ');
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -181,6 +199,7 @@ interface PendingCode {
   nonce: string;
   codeChallenge: string;
   redirectUri: string;
+  scope?: string;
   expiresAt: number;
 }
 
@@ -264,14 +283,20 @@ export async function startFakeGoogleOidc(
       send(response, 400, 'invalid login_hint');
       return;
     }
-    const code = issueCode({ identity, nonce, codeChallenge: challenge, redirectUri });
+    const code = issueCode({
+      identity,
+      nonce,
+      codeChallenge: challenge,
+      redirectUri,
+      scope: params.get('scope') ?? undefined,
+    });
     const approve = new URL(redirectUri);
     approve.searchParams.set('state', state);
     approve.searchParams.set('iss', origin);
     approve.searchParams.set('code', code);
     approve.searchParams.set(
       'scope',
-      'email openid https://www.googleapis.com/auth/userinfo.email',
+      'email profile openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     );
     approve.searchParams.set('authuser', '0');
     if (identity.hd) approve.searchParams.set('hd', identity.hd);
@@ -302,6 +327,10 @@ export async function startFakeGoogleOidc(
       iat: now + (tokenOptions.issuedAtOffsetSeconds ?? 0),
       exp: now + (tokenOptions.expiresInSeconds ?? ID_TOKEN_TTL_SECONDS),
       ...(pending.identity.hd ? { hd: pending.identity.hd } : {}),
+      ...(pending.identity.name !== undefined && requestedScopes(pending).includes('profile')
+        ? { name: pending.identity.name }
+        : {}),
+      ...tokenOptions.claimOverrides,
     };
     const omitted = new Set(tokenOptions.omitClaims ?? []);
     if (claims.azp === null) omitted.add('azp');
@@ -359,7 +388,8 @@ export async function startFakeGoogleOidc(
     sendJson(response, 200, {
       access_token: `ya29.${randomBytes(16).toString('base64url')}`,
       expires_in: 3599,
-      scope: 'openid https://www.googleapis.com/auth/userinfo.email',
+      scope:
+        'openid https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
       token_type: 'Bearer',
       id_token: await signIdToken(pending),
       ...(current.tokenResponsePaddingBytes === undefined

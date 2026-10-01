@@ -88,3 +88,7 @@ Other PRDs of DISC-001 reference this PRD as "PRD 07, FR-xx"; use this table to 
 | AC-25 | DISC-001-07a AC-16 |
 | AC-26 | DISC-001-07a AC-17 |
 | AC-27 | DISC-001-07a AC-18 |
+
+Requirements DISC-001-07a FR-15..FR-20 and AC-19..AC-25 have no original ID: they record decisions
+the user took on 2026-10-01, after the split, for cases the original PRD left open (holdings
+without a price, currency change, duplicate tickers).

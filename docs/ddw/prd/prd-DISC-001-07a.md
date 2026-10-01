@@ -5,7 +5,7 @@
 | Ticket | DISC-001-07a |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -50,6 +50,19 @@ ID to its new one.
 - FR-12: The system must let a user read, edit and delete only their own portfolios and holdings.
 - FR-13: The system must allow a user to delete a portfolio together with all its holdings.
 - FR-14: The system must require USD as the valuation currency of every crypto holding.
+- FR-15: The system must show no value and no gain or loss for a holding that has no latest
+  price, mark it as "price needed", and exclude it from the portfolio totals.
+- FR-16: The system must show, for every portfolio, the number of its holdings without a latest
+  price.
+- FR-17: The system must clear the latest unit price of a holding when the user changes its
+  valuation currency, leaving the user to re-enter the total cost in the new currency.
+- FR-18: The system must keep the ticker unique within a portfolio, ignoring letter case, and
+  must merge a holding added with a ticker that already exists in that portfolio into the existing
+  holding by summing the quantities and summing the total costs, keeping the existing price.
+- FR-19: The system must reject the addition, merging nothing, when the valuation currency of the
+  holding being added differs from that of the existing holding with the same ticker.
+- FR-20: The system must leave the total cost empty when a merge combines holdings of which at
+  least one has no total cost.
 
 ## Non-Functional Requirements
 - NFR-01: Amounts must be stored as 64-bit integers in minor units, with 0 floating-point columns
@@ -95,6 +108,24 @@ ID to its new one.
 - AC-18 (FR-14): IF a user adds or edits a crypto holding with ARS as valuation currency, THEN THE
   system SHALL reject it.
 
+- AC-19 (FR-15): WHILE a holding has no latest price, THE system SHALL show "price needed"
+  instead of its value and SHALL show no gain or loss for it.
+- AC-20 (FR-15): WHEN a portfolio has one holding valued at 185,000.00 ARS and one holding
+  without a latest price, THE system SHALL show a total of 185,000.00 ARS.
+- AC-21 (FR-16): WHILE a portfolio has 2 holdings without a latest price, THE system SHALL show
+  "2 holdings without price" for that portfolio.
+- AC-22 (FR-17): WHEN a user changes the valuation currency of a holding that has a latest
+  price, THE system SHALL clear that price and show the holding as "price needed".
+- AC-23 (FR-18): WHEN a user adds "aapl", 5 units, ARS, with a total cost of 50,000.00 ARS to a
+  portfolio that holds "AAPL", 10 units, ARS, with a total cost of 150,000.00 ARS and a price of
+  18,500.00 ARS, THE system SHALL leave one holding with 15 units, a total cost of 200,000.00 ARS
+  and the price of 18,500.00 ARS, without an error.
+- AC-24 (FR-19): IF a user adds a holding whose ticker already exists in the portfolio with a
+  different valuation currency, THEN THE system SHALL reject it with a validation error and
+  SHALL leave the existing holding unchanged.
+- AC-25 (FR-20): WHEN a merge combines a holding with a total cost and a holding without one,
+  THE system SHALL leave the merged holding with no total cost.
+
 ## Out of Scope
 - Automatic crypto prices and the daily portfolio value snapshot (DISC-001-07b).
 - Importing holdings from a broker file (DISC-001-07c).
@@ -123,3 +154,16 @@ ID to its new one.
 - 2026-09-25: User approved: portfolios, positions only (no operations), price date shown after 7
   days, crypto valued in USD.
 - 2026-10-01: Split from DISC-001-07 (user decision).
+- 2026-10-01: User decision: a holding without a latest price shows "price needed", no gain or
+  loss, is excluded from portfolio totals, and the portfolio shows how many holdings lack a price
+  (FR-15, FR-16).
+- 2026-10-01: User decision: changing the valuation currency of a priced holding clears its
+  latest price; the user re-enters the total cost (FR-17).
+- 2026-10-01: User decision: ticker is unique per portfolio, case-insensitive; adding an existing
+  ticker merges into the existing holding, summing quantity and total cost and keeping the
+  existing price (FR-18).
+- 2026-10-01: PENDING HUMAN CONFIRMATION — conservative defaults applied for cases the user did
+  not decide: (a) a merge across different valuation currencies is rejected, nothing merged
+  (FR-19); (b) a merge where at least one holding has no total cost leaves the total cost empty,
+  so no misleading gain or loss is shown (FR-20); (c) a merge keeps the existing instrument name
+  and type, which are not edited by FR-04.

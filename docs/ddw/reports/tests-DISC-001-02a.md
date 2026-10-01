@@ -4,27 +4,30 @@
 |---|---|
 | Runner | vitest 5.0.1 (V8 coverage via @vitest/coverage-v8 5.0.1) |
 | Command | `TEST_DATABASE_URL=postgres://argent:argent@localhost:5435/argent02a_test pnpm test:coverage` |
-| Total | 1175 |
-| Passed | 1175 |
+| Total | 1233 |
+| Passed | 1233 |
 | Failed | 0 |
 | Skipped | 0 |
-| Line coverage | 96.59% |
-| Branch coverage | 92.38% |
-| Function coverage | 93.75% |
+| Line coverage | 96.62% |
+| Branch coverage | 92.4% |
+| Function coverage | 93.78% |
 | Coverage floor | 80% lines, branches and functions (AGENTS.md, "Testing") |
 | Lint | `pnpm exec eslint .` — clean, 0 findings; `pnpm exec prettier --check --end-of-line auto .` — clean; `pnpm typecheck` — clean |
 
 ## Scope
 
-Coverage is measured over `apps/api/src`, `apps/web/src` and `packages/shared/src` together, as
-AGENTS.md requires: 99 test files, 1175 tests. Every suite below ran on the tree of commit
-`0bdae34` (all eight blocks of the spec):
+This is the second run of the ticket: the first one (1175 tests) was the original CODE closeout, and
+this one re-earns the gates after the corrective loop for the human decisions L-1 (opening balance
+bound and exact totals) and I-2 (control and format characters in names). Coverage is measured over
+`apps/api/src`, `apps/web/src` and `packages/shared/src` together, as AGENTS.md requires: 99 test
+files, 1233 tests. Every suite below ran on the tree of commit `9edd197` (Blocks 1 to 11):
 
-- `pnpm e2e` (Playwright): 50/50 passed, the 6 new accounts flows plus the earlier identity flows,
-  with `E2E_DATABASE_URL=postgres://argent:argent@localhost:5435/argent02a_e2e` and the shared
-  Mailpit.
-- `pnpm test:perf`: 5/5 passed in 4 files, including the accounts list benchmark (100 accounts,
-  100,000 test-only movement rows, p95 about 35 ms against the 300 ms limit of NFR-02).
+- `pnpm e2e` (Playwright): 53/53 passed, the 9 accounts flows (3 new ones for the balance limit and
+  the invisible-character names) plus the earlier identity flows, with
+  `E2E_DATABASE_URL=postgres://argent:argent@localhost:5435/argent02a_e2e` (dropped and recreated
+  first, because the regenerated unmerged migration 0006 had a different hash) and the shared Mailpit;
+  ports 3000, 4000 and 4100 were checked free before the run.
+- `pnpm test:perf`: 5/5 passed in 4 files, including the accounts list benchmark.
 
 No test calls dolarapi.com, CoinGecko, Google or any other real external service.
 

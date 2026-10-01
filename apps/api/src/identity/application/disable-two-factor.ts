@@ -119,11 +119,13 @@ export class DisableTwoFactor {
   private disableInTransaction(userId: string, user: User, now: Date): Promise<number> {
     return this.deps.unitOfWork.run(
       async ({ twoFactor, recoveryCodes, signInChallenges, users, sessions, emailSender }) => {
+        // Rows are locked in the order a sign-in verify locks them (challenge, then the 2FA row,
+        // then recovery codes), so a disable waits for a verify instead of deadlocking with it.
+        await signInChallenges.deleteForUser(userId);
         // Of two concurrent disables only one deletes the row; the other rolls back here, so
         // there is one bump and one notice.
         if (!(await twoFactor.delete(userId))) throw new TwoFactorNotEnabled();
         await recoveryCodes.deleteAll(userId);
-        await signInChallenges.deleteForUser(userId);
         // Every session created under the old version dies on its next use (AC-07, R-46).
         const version = await users.bumpCredentialsVersion(userId);
         await sessions.revokeAllForUser(userId, now);

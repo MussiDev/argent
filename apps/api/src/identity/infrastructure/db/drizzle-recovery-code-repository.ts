@@ -1,4 +1,4 @@
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, isNull } from 'drizzle-orm';
 import type {
   RecoveryCodeRepository,
   StoredRecoveryCode,
@@ -17,11 +17,13 @@ export class DrizzleRecoveryCodeRepository implements RecoveryCodeRepository {
     });
   }
 
+  /** In a fixed order (created_at, then id), so the codes are always checked the same way. */
   findUnused(userId: string): Promise<StoredRecoveryCode[]> {
     return this.db
       .select()
       .from(recoveryCodes)
-      .where(and(eq(recoveryCodes.userId, userId), isNull(recoveryCodes.usedAt)));
+      .where(and(eq(recoveryCodes.userId, userId), isNull(recoveryCodes.usedAt)))
+      .orderBy(asc(recoveryCodes.createdAt), asc(recoveryCodes.id));
   }
 
   async markUsed(id: string, at: Date): Promise<boolean> {

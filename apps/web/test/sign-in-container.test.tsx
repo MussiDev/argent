@@ -10,7 +10,10 @@ const { es, en } = CATALOGS;
 function signedIn(emailVerified: boolean, language: 'es' | 'en') {
   return {
     status: 200,
-    body: { user: { id: 'u1', email: 'ana@example.com', emailVerified, language } },
+    body: {
+      status: 'signed_in',
+      user: { id: 'u1', email: 'ana@example.com', emailVerified, language },
+    },
   };
 }
 
@@ -48,6 +51,19 @@ describe('SignInContainer', () => {
 
     await waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith('/es/check-your-email');
+    });
+  });
+
+  it('goes to the second-factor screen when the password needs a second factor (AC-04)', async () => {
+    stubApi({
+      'POST /auth/sign-in': { status: 200, body: { status: 'second_factor_required' } },
+    });
+    const { router } = renderApp(<SignInContainer />);
+
+    await signInAs('ana@example.com', 'correct horse battery');
+
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/es/sign-in/second-factor');
     });
   });
 

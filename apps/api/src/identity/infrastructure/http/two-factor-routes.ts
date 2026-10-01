@@ -1,5 +1,7 @@
 import {
   emptyRequestSchema,
+  secondFactorVerifyRequestSchema,
+  secondFactorVerifyResponseSchema,
   twoFactorDisableRequestSchema,
   twoFactorEnableRequestSchema,
   twoFactorEnableResponseSchema,
@@ -14,14 +16,26 @@ import type { DisableTwoFactor } from '../../application/disable-two-factor';
 import type { EnableTwoFactor } from '../../application/enable-two-factor';
 import type { GetTwoFactorStatus } from '../../application/get-two-factor-status';
 import type { StartTwoFactorSetup } from '../../application/start-two-factor-setup';
-import { TotpInvalid, Unauthenticated } from '../../domain/errors';
-import { setSessionCookies } from './session-cookies';
+import type { VerifySecondFactor } from '../../application/verify-second-factor';
+import {
+  SecondFactorExpired,
+  SecondFactorInvalid,
+  TotpInvalid,
+  Unauthenticated,
+} from '../../domain/errors';
+import {
+  clearSignInChallengeCookie,
+  setSessionCookies,
+  SIGN_IN_CHALLENGE_COOKIE,
+} from './session-cookies';
+import { signedInUser } from './signed-in-user';
 
 export interface TwoFactorRoutesDependencies {
   getTwoFactorStatus: GetTwoFactorStatus;
   startTwoFactorSetup: StartTwoFactorSetup;
   enableTwoFactor: EnableTwoFactor;
   disableTwoFactor: DisableTwoFactor;
+  verifySecondFactor: VerifySecondFactor;
   requireSession: RequestHandler;
   logger: Logger;
 }
@@ -36,6 +50,7 @@ export function createTwoFactorRoutes({
   startTwoFactorSetup,
   enableTwoFactor,
   disableTwoFactor,
+  verifySecondFactor,
   requireSession,
   logger,
 }: TwoFactorRoutesDependencies): Router {
@@ -114,6 +129,51 @@ export function createTwoFactorRoutes({
         );
         if (result.session) setSessionCookies(res, result.session);
         res.status(204).end();
+      },
+    ),
+  );
+
+  // Public: the challenge cookie stands in for the session. Logs carry the user id and the
+  // reason, never the code or the challenge token.
+  router.post(
+    '/auth/2fa/verify',
+    validate(
+      { body: secondFactorVerifyRequestSchema, response: secondFactorVerifyResponseSchema },
+      async ({ body }, { res, cookies, ip, requestId }) => {
+        const result = await verifySecondFactor.execute({
+          challengeToken: cookies[SIGN_IN_CHALLENGE_COOKIE],
+          code: body.code,
+        });
+        if (result.outcome === 'expired') {
+          logger.info(
+            {
+              requestId,
+              ip,
+              userId: result.userId ?? undefined,
+              via: result.via ?? undefined,
+              reason: result.reason,
+            },
+            'second factor refused: challenge expired',
+          );
+          // The challenge is gone: so is its cookie. The web app sends the user back to sign-in.
+          clearSignInChallengeCookie(res);
+          throw new SecondFactorExpired();
+        }
+        if (result.outcome === 'invalid') {
+          logger.info(
+            { requestId, ip, userId: result.userId, via: result.via },
+            'second factor refused: wrong code',
+          );
+          throw new SecondFactorInvalid();
+        }
+        const { user, session, via } = result;
+        logger.info(
+          { requestId, ip, userId: user.id, sessionId: session.sessionId, via },
+          'sign-in succeeded with a second factor',
+        );
+        clearSignInChallengeCookie(res);
+        setSessionCookies(res, session);
+        res.status(200).json({ status: 'signed_in', user: signedInUser(user) });
       },
     ),
   );

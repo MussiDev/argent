@@ -4,6 +4,7 @@ import { createIdentityInfrastructure } from '../../src/identity';
 import type { PasswordHasher } from '../../src/identity/application/ports/password-hasher';
 import type { UnitOfWork } from '../../src/identity/application/ports/unit-of-work';
 import { RefreshSession } from '../../src/identity/application/refresh-session';
+import { CreateSignInChallenge } from '../../src/identity/application/create-sign-in-challenge';
 import { SignIn } from '../../src/identity/application/sign-in';
 import { StartSession } from '../../src/identity/application/start-session';
 import { DUMMY_PASSWORD_HASH } from '../../src/identity/infrastructure/security/argon2id-password-hasher';
@@ -134,6 +135,12 @@ describe('credentials version (AC-10)', () => {
         sessions: infrastructure.sessions,
         tokenGenerator: infrastructure.tokenGenerator,
         accessTokens,
+        clock: harness.clock,
+      }),
+      twoFactor: infrastructure.twoFactor,
+      createSignInChallenge: new CreateSignInChallenge({
+        signInChallenges: infrastructure.signInChallenges,
+        tokenGenerator: infrastructure.tokenGenerator,
         clock: harness.clock,
       }),
       reportRefundFailure: () => undefined,

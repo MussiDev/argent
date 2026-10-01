@@ -81,3 +81,42 @@ assertions at `:1054`, `:1123`, `:1199`. After: 770 passed, 2 skipped.
 
 Block verifier: PASSED (0 FAIL, 7 WARN). Architecture auditor: PASSED (0 FAIL, 7 WARN); the
 fixes above address the disable fault path, sequential hashing and the policy import cycle.
+
+## Block 3 — Second step of sign-in
+
+| Required test | File:line (`apps/api/test/`) | Failure in the red run |
+|---|---|---|
+| password sign-in with 2FA → challenge, then TOTP starts the session (AC-04) | `identity/second-factor-sign-in.test.ts:186` | `expected {user} to equal {status:'second_factor_required'}` |
+| TOTP replay refused on the next challenge (NFR-03) | `:224` | same |
+| Google sign-in with 2FA → second-factor screen (AC-06) | `:242` | `expected '.../es' to be '.../es/sign-in/second-factor'` |
+| users without 2FA still sign in in one step | `:268` | `expected {user} to equal {status:'signed_in',user}` |
+| recovery code once, refused twice (AC-04, AC-05) | `:291` | `expected {user} to equal {status:'second_factor_required'}` |
+| 3 wrong codes + 2 wrong passwords → 429 (NFR-01) | `:312` | same |
+| 5 wrong passwords do not block the second step (NFR-04) | `:341` | same |
+| 6th in 15 min and 21st in 24 h → 429 (NFR-04) | `:359` | same |
+| no cookie, expired, consumed → `SECOND_FACTOR_EXPIRED` | `:409` | `expected 404 to be 401` |
+| attempt count persists across requests | `:446` | `expected {user} to equal {status:'second_factor_required'}` |
+| reset meanwhile / 2FA disabled meanwhile → expired, code not spent | `:486`, `:519` | same |
+| malformed codes → 400 (9 cases) | `:566` | same |
+| 12 verifies vs a pool of 10 complete | `identity/second-factor-races.test.ts:60` | same |
+| same code twice / TOTP + recovery concurrently → one session | `identity/second-factor-races.test.ts:97, 117` | same |
+| perf: recovery-code verify p95 < 1000 ms | `perf/second-factor.perf.test.ts:38` | `expected {'404':50} to equal {'200':50}` |
+| web: `second_factor_required` navigates to the second-factor screen | `apps/web/test/sign-in-container.test.tsx` | `router.replace` not called with `/es/sign-in/second-factor` |
+
+27/27 API, 1/1 perf and 1/1 web red before. After: 795 passed, 2 skipped; `pnpm test:perf` 4/4,
+verify p95 76 ms.
+
+### Block 3 review round 2
+
+| Item | Test | Failure in the red run |
+|---|---|---|
+| verify holding the challenge lock while a disable runs (lock order) | `identity/second-factor-races.test.ts:226` | `expected 500 to be 204` (PostgreSQL deadlock under the old order) |
+| `via` in the verify log lines | `identity/second-factor-sign-in.test.ts:199, 259, 311, 478, 555` | log objects without `via` |
+| `findUnused` ordered by `created_at, id` | `identity/two-factor-persistence.test.ts:234` | `expected ['c','b','d','a'] to deeply equal ['a','b','c','d']` |
+
+Characterisation tests added green: cookie cleared on expired (`:437`, `:478`), no key → 503 with
+units refunded (`:636`), unit-of-work fault refunds (`second-factor-races.test.ts:286`), real reset
+flow (`:555`), recovery code absent from logs (`:311`). After: 800 passed, 2 skipped; verify p95 75 ms.
+
+Block verifier: PASSED (0 FAIL, 5 WARN). Architecture auditor: PASSED (0 FAIL, 5 WARN); the lock
+order fix above addresses its deadlock warning.

@@ -230,6 +230,31 @@ describe('DrizzleRecoveryCodeRepository', () => {
   });
 });
 
+describe('DrizzleRecoveryCodeRepository.findUnused order', () => {
+  it('returns the unused codes ordered by created_at, then id, whatever the order they were stored in', async () => {
+    const ana = await createUser();
+    const rows = [
+      { id: '00000000-0000-4000-8000-000000000003', at: '2026-09-30T12:00:01.000Z', hash: 'c' },
+      { id: '00000000-0000-4000-8000-000000000002', at: '2026-09-30T12:00:00.000Z', hash: 'b' },
+      { id: '00000000-0000-4000-8000-000000000004', at: '2026-09-30T12:00:01.000Z', hash: 'd' },
+      { id: '00000000-0000-4000-8000-000000000001', at: '2026-09-30T12:00:00.000Z', hash: 'a' },
+    ];
+    for (const row of rows) {
+      await connection.pool.query(
+        'insert into recovery_codes (id, user_id, code_hash, created_at) values ($1, $2, $3, $4)',
+        [row.id, ana, row.hash, row.at],
+      );
+    }
+
+    expect((await recoveryCodes.findUnused(ana)).map((code) => code.codeHash)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ]);
+  });
+});
+
 describe('DrizzleUserRepository.bumpCredentialsVersion', () => {
   it('increments the version atomically and returns it (FR-05)', async () => {
     const userId = await createUser();

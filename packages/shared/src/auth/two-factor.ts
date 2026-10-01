@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { signedInResponseSchema } from './sign-in';
 
 /** Recovery codes issued when 2FA is enabled (PRD 01c FR-03). */
 export const RECOVERY_CODE_COUNT = 10;
@@ -61,3 +62,15 @@ export type TwoFactorEnableResponse = z.infer<typeof twoFactorEnableResponseSche
 export const twoFactorDisableRequestSchema = z.object({ code: secondFactorCodeSchema });
 
 export type TwoFactorDisableRequest = z.infer<typeof twoFactorDisableRequestSchema>;
+
+/**
+ * `POST /auth/2fa/verify`: the second step of a sign-in (FR-04), with a TOTP code or an unused
+ * recovery code; the challenge travels in its cookie.
+ */
+export const secondFactorVerifyRequestSchema = z.object({ code: secondFactorCodeSchema });
+
+export type SecondFactorVerifyRequest = z.infer<typeof secondFactorVerifyRequestSchema>;
+
+export const secondFactorVerifyResponseSchema = signedInResponseSchema;
+
+export type SecondFactorVerifyResponse = z.infer<typeof secondFactorVerifyResponseSchema>;

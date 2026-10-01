@@ -2,6 +2,7 @@ import { newAccountDefaults, type Language } from '../domain/account-defaults';
 import { Email } from '../domain/email';
 import { DuplicateEmail, IdentityAlreadyLinked } from '../domain/errors';
 import { isGoogleAuthoritative } from '../domain/google-authority';
+import type { CreateSignInChallenge } from './create-sign-in-challenge';
 import type { Clock } from './ports/clock';
 import {
   GoogleSignInFailed,
@@ -21,6 +22,8 @@ export interface CompleteGoogleSignInDependencies {
   tokenGenerator: TokenGenerator;
   unitOfWork: UnitOfWork;
   startSession: StartSession;
+  /** For users with 2FA: the session waits for the second factor (PRD 01c FR-04, AC-06). */
+  createSignInChallenge: CreateSignInChallenge;
   clock: Clock;
 }
 
@@ -53,9 +56,20 @@ export type GoogleSignInPath = 'existing_identity' | 'linked' | 'superseded' | '
  */
 export type CompleteGoogleSignInResult =
   | { outcome: 'signed_in'; via: GoogleSignInPath; user: User; session: SessionTokens }
+  | {
+      outcome: 'second_factor_required';
+      via: GoogleSignInPath;
+      user: User;
+      /** For the browser's challenge cookie; no session exists yet. */
+      challengeToken: string;
+    }
   | { outcome: 'failed'; reason: GoogleSignInFailure; language: Language | null };
 
 type AccountResult =
+  | { outcome: 'resolved'; via: GoogleSignInPath; user: User; twoFactorEnabled: boolean }
+  | { outcome: 'refused'; reason: GoogleSignInFailure };
+
+type ResolvedAccount =
   | { outcome: 'resolved'; via: GoogleSignInPath; user: User }
   | { outcome: 'refused'; reason: GoogleSignInFailure };
 
@@ -104,6 +118,23 @@ export class CompleteGoogleSignIn {
     const account = await this.resolveAccountWithRetry(claims, pending);
     if (account.outcome === 'refused') return fail(account.reason, pending.language);
 
+    // A Google link written above stays in place: it grants nothing without the second factor
+    // (threat R-50).
+    if (account.twoFactorEnabled) {
+      const challengeToken = await this.deps.createSignInChallenge.execute({
+        userId: account.user.id,
+        credentialsVersion: account.user.credentialsVersion,
+        via: 'google',
+        language: account.user.language,
+      });
+      return {
+        outcome: 'second_factor_required',
+        via: account.via,
+        user: account.user,
+        challengeToken,
+      };
+    }
+
     // The user as read in the transaction: a password change committed after it makes this
     // session stale, never the other way round (AC-10).
     const session = await this.deps.startSession.execute(account.user);
@@ -120,9 +151,20 @@ export class CompleteGoogleSignIn {
   ): Promise<AccountResult> {
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await this.deps.unitOfWork.run((repositories) =>
-          this.resolveAccount(repositories, claims, pending),
-        );
+        return await this.deps.unitOfWork.run(async (repositories) => {
+          const account = await this.resolveAccount(repositories, claims, pending);
+          // A user created just now has no 2FA yet.
+          if (account.outcome === 'refused' || account.via === 'created') {
+            return account.outcome === 'refused'
+              ? account
+              : { ...account, twoFactorEnabled: false };
+          }
+          // Read after the user row that supplies the credentials version, so a 2FA enable that
+          // commits in between leaves this sign-in stale instead of pairing a new version with
+          // "no 2FA" (01c).
+          const settings = await repositories.twoFactor.findByUserId(account.user.id);
+          return { ...account, twoFactorEnabled: Boolean(settings?.enabledAt) };
+        });
       } catch (error) {
         const conflict = error instanceof DuplicateEmail || error instanceof IdentityAlreadyLinked;
         if (!conflict) throw error;
@@ -135,7 +177,7 @@ export class CompleteGoogleSignIn {
     { users, identities, sessions }: TransactionalRepositories,
     claims: GoogleClaims,
     pending: OAuthState,
-  ): Promise<AccountResult> {
+  ): Promise<ResolvedAccount> {
     const now = this.deps.clock.now();
     const authoritative = isGoogleAuthoritative(claims.email, claims.hostedDomain);
     const link = (userId: string) =>

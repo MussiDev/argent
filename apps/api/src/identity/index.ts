@@ -4,6 +4,7 @@ import { createRequireSession } from '../shared/http/require-session';
 import type { Logger } from '../shared/logging/logger';
 import { CompleteGoogleSignIn } from './application/complete-google-sign-in';
 import { ConfirmPasswordReset } from './application/confirm-password-reset';
+import { CreateSignInChallenge } from './application/create-sign-in-challenge';
 import { DisableTwoFactor } from './application/disable-two-factor';
 import { EnableTwoFactor } from './application/enable-two-factor';
 import { GetCurrentSession } from './application/get-current-session';
@@ -19,6 +20,7 @@ import { StartGoogleSignIn } from './application/start-google-sign-in';
 import { StartSession } from './application/start-session';
 import { StartTwoFactorSetup } from './application/start-two-factor-setup';
 import { VerifyEmail } from './application/verify-email';
+import { VerifySecondFactor } from './application/verify-second-factor';
 import type { AttemptLimiter } from './application/ports/attempt-limiter';
 import type { AttemptPurger } from './application/ports/attempt-purger';
 import type { BreachedPasswordChecker } from './application/ports/breached-password-checker';
@@ -283,6 +285,17 @@ export function createIdentityModule({
     clock: identity.clock,
   });
   const google = createGoogleIdentityProvider(env, identity.tokenGenerator);
+  const createSignInChallenge = new CreateSignInChallenge({
+    signInChallenges: identity.signInChallenges,
+    tokenGenerator: identity.tokenGenerator,
+    clock: identity.clock,
+  });
+  const reportRecordFailure = (error: unknown) => {
+    dependencies.logger.warn(
+      { err: error },
+      'failed second-factor code not recorded on the sign-in limit',
+    );
+  };
   // After 2FA is turned on or off every session has ended; without a new one the user signs in again.
   const reportReissueFailure = (change: 'enable' | 'disable') => (error: unknown) => {
     dependencies.logger.error(
@@ -322,6 +335,8 @@ export function createIdentityModule({
         passwordHasher: identity.passwordHasher,
         dummyPasswordHash: DUMMY_PASSWORD_HASH,
         startSession,
+        twoFactor: identity.twoFactor,
+        createSignInChallenge,
         reportRefundFailure: (error) => {
           // `err` goes through the logger's safe serializer (no query params or row values).
           dependencies.logger.warn(
@@ -378,6 +393,7 @@ export function createIdentityModule({
         tokenGenerator: identity.tokenGenerator,
         unitOfWork: identity.unitOfWork,
         startSession,
+        createSignInChallenge,
         clock: identity.clock,
       }),
       webBaseUrl: env.WEB_BASE_URL,
@@ -423,13 +439,26 @@ export function createIdentityModule({
             'two-factor disable limit refund failed; the reserved units stay counted',
           );
         },
-        reportRecordFailure: (error) => {
+        reportRecordFailure,
+        reportReissueFailure: reportReissueFailure('disable'),
+      }),
+      verifySecondFactor: new VerifySecondFactor({
+        signInChallenges: identity.signInChallenges,
+        tokenGenerator: identity.tokenGenerator,
+        attemptLimiter: identity.attemptLimiter,
+        unitOfWork: identity.unitOfWork,
+        startSession,
+        totp: identity.totp,
+        secretBox: identity.secretBox,
+        passwordHasher: identity.passwordHasher,
+        clock: identity.clock,
+        reportRefundFailure: (error) => {
           dependencies.logger.warn(
             { err: error },
-            'failed second-factor code not recorded on the sign-in limit',
+            'second-factor limit refund failed; the reserved units stay counted',
           );
         },
-        reportReissueFailure: reportReissueFailure('disable'),
+        reportRecordFailure,
       }),
       requireSession: routeSession,
       logger: dependencies.logger,

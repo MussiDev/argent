@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { CompleteGoogleSignIn } from '../../src/identity/application/complete-google-sign-in';
+import { CreateSignInChallenge } from '../../src/identity/application/create-sign-in-challenge';
 import { GetCurrentSession } from '../../src/identity/application/get-current-session';
 import type {
   GoogleClaims,
@@ -16,6 +17,7 @@ import { StartSession } from '../../src/identity/application/start-session';
 import { Email } from '../../src/identity/domain/email';
 import { IdentityAlreadyLinked } from '../../src/identity/domain/errors';
 import { DrizzleSessionRepository } from '../../src/identity/infrastructure/db/drizzle-session-repository';
+import { DrizzleSignInChallengeRepository } from '../../src/identity/infrastructure/db/drizzle-sign-in-challenge-repository';
 import { DrizzleUnitOfWork } from '../../src/identity/infrastructure/db/drizzle-unit-of-work';
 import { DrizzleUserIdentityRepository } from '../../src/identity/infrastructure/db/drizzle-user-identity-repository';
 import { DrizzleUserRepository } from '../../src/identity/infrastructure/db/drizzle-user-repository';
@@ -91,6 +93,11 @@ function completeWith(unitOfWork: UnitOfWork, claims: GoogleClaims = CLAIMS): Co
       sessions: new DrizzleSessionRepository(connection.db),
       tokenGenerator,
       accessTokens,
+      clock,
+    }),
+    createSignInChallenge: new CreateSignInChallenge({
+      signInChallenges: new DrizzleSignInChallengeRepository(connection.db),
+      tokenGenerator,
       clock,
     }),
     clock,

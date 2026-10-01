@@ -55,6 +55,7 @@ describe('POST /auth/sign-in', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
+      status: 'signed_in',
       user: { id: userId, email: EMAIL, emailVerified: true, language: 'es' },
     });
     const cookies = parseSetCookies(response);
@@ -102,6 +103,7 @@ describe('POST /auth/sign-in', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
+      status: 'signed_in',
       user: { id: userId, email: EMAIL, emailVerified: false, language: 'en' },
     });
   });

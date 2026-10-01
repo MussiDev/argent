@@ -4,6 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createIdentityInfrastructure, type IdentityInfrastructure } from '../../src/identity';
 import { CompleteGoogleSignIn } from '../../src/identity/application/complete-google-sign-in';
+import { CreateSignInChallenge } from '../../src/identity/application/create-sign-in-challenge';
 import { DisableTwoFactor } from '../../src/identity/application/disable-two-factor';
 import { EnableTwoFactor } from '../../src/identity/application/enable-two-factor';
 import { GetTwoFactorStatus } from '../../src/identity/application/get-two-factor-status';
@@ -15,6 +16,7 @@ import type { UnitOfWork } from '../../src/identity/application/ports/unit-of-wo
 import { SignIn } from '../../src/identity/application/sign-in';
 import { StartSession } from '../../src/identity/application/start-session';
 import { StartTwoFactorSetup } from '../../src/identity/application/start-two-factor-setup';
+import { VerifySecondFactor } from '../../src/identity/application/verify-second-factor';
 import { createTwoFactorRoutes } from '../../src/identity/infrastructure/http/two-factor-routes';
 import { DUMMY_PASSWORD_HASH } from '../../src/identity/infrastructure/security/argon2id-password-hasher';
 import { JoseAccessTokenIssuer } from '../../src/identity/infrastructure/security/jose-access-token-issuer';
@@ -206,6 +208,20 @@ function beforeFirstStep(
   };
 }
 
+/** `real` with its `findByUserId` replaced. */
+function withFindByUserId(
+  real: TwoFactorRepository,
+  findByUserId: TwoFactorRepository['findByUserId'],
+): TwoFactorRepository {
+  return {
+    findByUserId,
+    savePending: (id, sealed) => real.savePending(id, sealed),
+    activate: (id, sealed, at) => real.activate(id, sealed, at),
+    advanceLastUsedStep: (id, step) => real.advanceLastUsedStep(id, step),
+    delete: (id) => real.delete(id),
+  };
+}
+
 /** What a concurrent disable that committed first leaves behind. */
 async function removeTwoFactorElsewhere(): Promise<void> {
   await connection.pool.query('delete from recovery_codes');
@@ -306,6 +322,19 @@ function useCasesFor(
       reportRefundFailure: reporter('refund'),
       reportRecordFailure: reporter('record'),
       reportReissueFailure: reporter('reissue'),
+    }),
+    verifySecondFactor: new VerifySecondFactor({
+      signInChallenges: infrastructure.signInChallenges,
+      tokenGenerator: infrastructure.tokenGenerator,
+      attemptLimiter: overrides.attemptLimiter ?? infrastructure.attemptLimiter,
+      unitOfWork: overrides.unitOfWork ?? infrastructure.unitOfWork,
+      startSession: session,
+      totp: infrastructure.totp,
+      secretBox: infrastructure.secretBox,
+      passwordHasher: overrides.passwordHasher ?? infrastructure.passwordHasher,
+      clock: infrastructure.clock,
+      reportRefundFailure: reporter('refund'),
+      reportRecordFailure: reporter('record'),
     }),
   };
 }
@@ -427,30 +456,34 @@ describe('POST /auth/2fa/setup and /auth/2fa/enable (AC-01, AC-02)', () => {
     const caller = await signedIn(harness);
     const { secret } = await startedSetup(harness, caller);
     const { infrastructure, startSession } = adaptersFor(harness);
-    let hashing = (): void => undefined;
-    const hashed = new Promise<void>((resolve) => (hashing = resolve));
+    let reading = (): void => undefined;
+    const read = new Promise<void>((resolve) => (reading = resolve));
     let release = (): void => undefined;
     const released = new Promise<void>((resolve) => (release = resolve));
-    const slowHasher: PasswordHasher = {
-      hash: (password) => infrastructure.passwordHasher.hash(password),
-      verify: async (passwordHash, password) => {
-        const matches = await infrastructure.passwordHasher.verify(passwordHash, password);
-        hashing();
-        await released;
-        return matches;
-      },
-    };
+    // The sign-in has read the user and its 2FA state (still off), and waits before its session.
+    const slowTwoFactor = withFindByUserId(infrastructure.twoFactor, async (id) => {
+      const settings = await infrastructure.twoFactor.findByUserId(id);
+      reading();
+      await released;
+      return settings;
+    });
     const signInUseCase = new SignIn({
       attemptLimiter: infrastructure.attemptLimiter,
       users: infrastructure.users,
-      passwordHasher: slowHasher,
+      passwordHasher: infrastructure.passwordHasher,
       dummyPasswordHash: DUMMY_PASSWORD_HASH,
       startSession,
+      twoFactor: slowTwoFactor,
+      createSignInChallenge: new CreateSignInChallenge({
+        signInChallenges: infrastructure.signInChallenges,
+        tokenGenerator: infrastructure.tokenGenerator,
+        clock: harness.clock,
+      }),
       reportRefundFailure: () => undefined,
     });
 
     const racing = signInUseCase.execute({ email: EMAIL, password: PASSWORD, ip: '203.0.113.9' });
-    await hashed;
+    await read;
     expect((await enable(harness.app, caller, totpNow(secret, harness.clock))).status).toBe(200);
     release();
     const result = await racing;
@@ -478,28 +511,19 @@ describe('POST /auth/2fa/setup and /auth/2fa/enable (AC-01, AC-02)', () => {
       emailAuthoritative: true,
     });
     const now = harness.clock.now();
-    // The enable commits right after the callback read the user through its Google link.
+    // The enable commits right after the callback read the user through its Google link, and
+    // its 2FA state (still off).
     const racing: UnitOfWork = {
       run: (work) =>
         infrastructure.unitOfWork.run((repositories) =>
           work({
             ...repositories,
-            identities: {
-              findUserByProviderSubject: async (provider, subject) => {
-                const user = await repositories.identities.findUserByProviderSubject(
-                  provider,
-                  subject,
-                );
-                const response = await enable(harness.app, caller, totpNow(secret, harness.clock));
-                expect(response.status).toBe(200);
-                return user;
-              },
-              hasProviderIdentity: (id, provider) =>
-                repositories.identities.hasProviderIdentity(id, provider),
-              link: (identity) => repositories.identities.link(identity),
-              deleteNonAuthoritativeForUser: (id) =>
-                repositories.identities.deleteNonAuthoritativeForUser(id),
-            },
+            twoFactor: withFindByUserId(repositories.twoFactor, async (id) => {
+              const settings = await repositories.twoFactor.findByUserId(id);
+              const response = await enable(harness.app, caller, totpNow(secret, harness.clock));
+              expect(response.status).toBe(200);
+              return settings;
+            }),
           }),
         ),
     };
@@ -531,6 +555,11 @@ describe('POST /auth/2fa/setup and /auth/2fa/enable (AC-01, AC-02)', () => {
       tokenGenerator: infrastructure.tokenGenerator,
       unitOfWork: racing,
       startSession,
+      createSignInChallenge: new CreateSignInChallenge({
+        signInChallenges: infrastructure.signInChallenges,
+        tokenGenerator: infrastructure.tokenGenerator,
+        clock: harness.clock,
+      }),
       clock: harness.clock,
     });
 
@@ -763,7 +792,17 @@ describe('POST /auth/2fa/disable (AC-03, AC-07, NFR-04)', () => {
   it('disable with a valid TOTP code turns 2FA off, deletes every recovery code, ends other sessions and enqueues a two_factor_disabled email (AC-03, AC-07)', async () => {
     const harness = createIdentityHarness(connection, { realSessions: true });
     const { cookies, secret, userId } = await enrolled(harness);
-    const other = await signedIn(harness);
+    // With 2FA on, another browser signs in through the second step (Block 3).
+    const first = await signIn(harness.app, EMAIL, PASSWORD);
+    const challenge = parseSetCookies(first).get('__Secure-argent_mfa')?.value ?? '';
+    const second = await request(harness.app)
+      .post('/auth/2fa/verify')
+      .set(trustedHeaders)
+      .set('Cookie', `__Secure-argent_mfa=${challenge}`)
+      .send({ code: totpNow(secret, harness.clock) });
+    expect(second.status).toBe(200);
+    const other = sessionFrom(second);
+    harness.clock.advance(STEP_MS);
     await connection.pool.query(
       `insert into sign_in_challenges (token_hash, user_id, credentials_version, via, language, expires_at)
        values ('pending-challenge', $1, 0, 'password', 'es', now() + interval '5 minutes')`,

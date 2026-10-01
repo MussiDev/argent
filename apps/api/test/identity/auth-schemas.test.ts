@@ -6,6 +6,7 @@ import {
   refreshResponseSchema,
   sessionResponseSchema,
   signInRequestSchema,
+  SIGN_IN_ERRORS,
   signInResponseSchema,
   PASSWORD_MAX_CODE_POINTS,
   PASSWORD_MAX_UTF16_LENGTH,
@@ -111,10 +112,20 @@ describe('shared auth schemas', () => {
     ).toEqual({ email: 'ana@example.com', password: 'p' });
 
     const user = { id: 'u1', email: 'ana@example.com', emailVerified: false, language: 'en' };
-    expect(signInResponseSchema.parse({ user: { ...user, passwordHash: 'x' } })).toEqual({ user });
-    expect(signInResponseSchema.safeParse({ user: { ...user, language: 'pt' } }).success).toBe(
-      false,
-    );
+    expect(
+      signInResponseSchema.parse({ status: 'signed_in', user: { ...user, passwordHash: 'x' } }),
+    ).toEqual({ status: 'signed_in', user });
+    expect(
+      signInResponseSchema.safeParse({ status: 'signed_in', user: { ...user, language: 'pt' } })
+        .success,
+    ).toBe(false);
+    // A first factor that needs the second one says nothing about the user (threat R-48).
+    expect(signInResponseSchema.parse({ status: 'second_factor_required', user })).toEqual({
+      status: 'second_factor_required',
+    });
+    expect(signInResponseSchema.safeParse({ user }).success).toBe(false);
+    expect(signInResponseSchema.safeParse({ status: 'signed_in' }).success).toBe(false);
+    expect(SIGN_IN_ERRORS).toEqual(['google_failed', 'second_factor_expired']);
     expect(sessionResponseSchema.parse({ user: { ...user, timeZone: 'America/Cordoba' } })).toEqual(
       { user: { ...user, timeZone: 'America/Cordoba' } },
     );

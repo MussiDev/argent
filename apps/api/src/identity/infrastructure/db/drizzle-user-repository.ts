@@ -18,6 +18,7 @@ export class DrizzleUserRepository implements UserRepository {
           email: user.email.value,
           passwordHash: user.passwordHash,
           emailVerifiedAt: user.emailVerifiedAt ?? null,
+          displayName: user.displayName ?? null,
           defaultRateType: user.defaultRateType,
           displayCurrency: user.displayCurrency,
           timeZone: user.timeZone,

@@ -4,6 +4,7 @@ import { PasswordCheckUnavailable } from '../../src/identity/domain/errors';
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
 import { createIdentityHarness } from '../helpers/identity-harness';
 import { testDatabaseUrl } from '../helpers/test-database';
+import { cookieHeader, sessionFrom, signIn } from '../helpers/session-client';
 import { trustedHeaders } from '../helpers/test-env';
 
 let connection: DatabaseConnection;
@@ -47,7 +48,11 @@ describe('POST /auth/register', () => {
   it('creates an unverified user and enqueues one verification email (AC-01)', async () => {
     const { app, worker, transport } = createIdentityHarness(connection);
 
-    const response = await register(app, { email: ' Ana@Example.com ', password: PASSWORD });
+    const response = await register(app, {
+      email: ' Ana@Example.com ',
+      password: PASSWORD,
+      displayName: ' Ana Pérez ',
+    });
 
     expect(response.status).toBe(202);
     expect(response.body).toEqual({ status: 'verification_sent' });
@@ -79,11 +84,19 @@ describe('POST /auth/register', () => {
   it('rejects a 9-character password and a breached password with their codes (AC-02)', async () => {
     const { app } = createIdentityHarness(connection);
 
-    const short = await register(app, { email: 'ana@example.com', password: '123456789' });
+    const short = await register(app, {
+      email: 'ana@example.com',
+      password: '123456789',
+      displayName: 'Ana',
+    });
     expect(short.status).toBe(400);
     expect(short.body).toEqual({ code: 'PASSWORD_TOO_SHORT' });
 
-    const breached = await register(app, { email: 'ana@example.com', password: 'password123' });
+    const breached = await register(app, {
+      email: 'ana@example.com',
+      password: 'password123',
+      displayName: 'Ana',
+    });
     expect(breached.status).toBe(400);
     expect(breached.body).toEqual({ code: 'PASSWORD_BREACHED' });
 
@@ -93,11 +106,16 @@ describe('POST /auth/register', () => {
 
   it('answers an existing email with the same 202 body, creates no user and enqueues a discard row (AC-03)', async () => {
     const { app } = createIdentityHarness(connection);
-    const first = await register(app, { email: 'ana@example.com', password: PASSWORD });
+    const first = await register(app, {
+      email: 'ana@example.com',
+      password: PASSWORD,
+      displayName: 'Ana',
+    });
 
     const second = await register(app, {
       email: 'ANA@example.com',
       password: 'another passphrase 42',
+      displayName: 'Ana',
     });
 
     expect(second.status).toBe(first.status);
@@ -115,6 +133,7 @@ describe('POST /auth/register', () => {
     await register(app, {
       email: 'ana@example.com',
       password: PASSWORD,
+      displayName: 'Ana',
       timeZone: 'America/Cordoba',
       language: 'en-US',
     });
@@ -140,7 +159,11 @@ describe('POST /auth/register', () => {
       },
     });
 
-    const response = await register(app, { email: 'ana@example.com', password: PASSWORD });
+    const response = await register(app, {
+      email: 'ana@example.com',
+      password: PASSWORD,
+      displayName: 'Ana',
+    });
 
     expect(response.status).toBe(503);
     expect(response.body).toEqual({ code: 'PASSWORD_CHECK_UNAVAILABLE' });
@@ -163,9 +186,15 @@ describe('POST /auth/register', () => {
       'c@example.com',
       'a@example.com',
     ]) {
-      statuses.push((await register(app, { email, password: PASSWORD })).status);
+      statuses.push(
+        (await register(app, { email, password: PASSWORD, displayName: 'Ana' })).status,
+      );
     }
-    const sixth = await register(app, { email: 'new@example.com', password: PASSWORD });
+    const sixth = await register(app, {
+      email: 'new@example.com',
+      password: PASSWORD,
+      displayName: 'Ana',
+    });
 
     expect(statuses).toEqual([202, 202, 202, 202, 202]);
     expect(sixth.status).toBe(429);
@@ -174,19 +203,28 @@ describe('POST /auth/register', () => {
 
     // The next hour is a new window.
     clock.advance(60 * 60 * 1000);
-    expect((await register(app, { email: 'new@example.com', password: PASSWORD })).status).toBe(
-      202,
-    );
+    expect(
+      (await register(app, { email: 'new@example.com', password: PASSWORD, displayName: 'Ana' }))
+        .status,
+    ).toBe(202);
   });
 
   it('rejects malformed input with VALIDATION_FAILED and no echoed values', async () => {
     const { app } = createIdentityHarness(connection);
 
-    const badEmail = await register(app, { email: 'not-an-email', password: PASSWORD });
+    const badEmail = await register(app, {
+      email: 'not-an-email',
+      password: PASSWORD,
+      displayName: 'Ana',
+    });
     expect(badEmail.status).toBe(400);
     expect(badEmail.body).toMatchObject({ code: 'VALIDATION_FAILED' });
 
-    const tooLong = await register(app, { email: 'ana@example.com', password: 'x'.repeat(129) });
+    const tooLong = await register(app, {
+      email: 'ana@example.com',
+      password: 'x'.repeat(129),
+      displayName: 'Ana',
+    });
     expect(tooLong.status).toBe(400);
     expect(tooLong.body).toEqual({ code: 'VALIDATION_FAILED', fields: ['body.password'] });
     expect(tooLong.text).not.toContain('xxxx');
@@ -194,6 +232,7 @@ describe('POST /auth/register', () => {
     const longTimeZone = await register(app, {
       email: 'ana@example.com',
       password: PASSWORD,
+      displayName: 'Ana',
       timeZone: 'x'.repeat(65),
     });
     expect(longTimeZone.status).toBe(400);
@@ -206,6 +245,7 @@ describe('POST /auth/register', () => {
     const response = await register(app, {
       email: 'ana@example.com',
       password: LOCK_EMOJI.repeat(128),
+      displayName: 'Ana',
     });
 
     expect(response.status).toBe(202);
@@ -215,12 +255,148 @@ describe('POST /auth/register', () => {
   it('never logs the email or the password', async () => {
     const { app, lines } = createIdentityHarness(connection);
 
-    await register(app, { email: 'ana@example.com', password: PASSWORD });
+    await register(app, {
+      email: 'ana@example.com',
+      password: PASSWORD,
+      displayName: 'Zoquete Ñandú',
+    });
+    await register(app, {
+      email: 'ana@example.com',
+      password: PASSWORD,
+      displayName: 'Zoquete Ñandú',
+    });
 
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
       expect(line).not.toContain('ana@example.com');
       expect(line).not.toContain(PASSWORD);
+      expect(line).not.toContain('Zoquete');
     }
+  });
+
+  it('stores the display name trimmed of surrounding spaces and counts code points (AC-01)', async () => {
+    const { app } = createIdentityHarness(connection);
+
+    expect(
+      (
+        await register(app, {
+          email: 'ana@example.com',
+          password: PASSWORD,
+          displayName: '  Ana Pérez  ',
+        })
+      ).status,
+    ).toBe(202);
+    expect(
+      (
+        await register(app, {
+          email: 'emoji@example.com',
+          password: PASSWORD,
+          displayName: LOCK_EMOJI.repeat(50),
+        })
+      ).status,
+    ).toBe(202);
+
+    const rows = await connection.pool.query<{ email: string; display_name: string }>(
+      'select email, display_name from users order by email',
+    );
+    expect(rows.rows).toEqual([
+      { email: 'ana@example.com', display_name: 'Ana Pérez' },
+      { email: 'emoji@example.com', display_name: LOCK_EMOJI.repeat(50) },
+    ]);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['whitespace-only', '   '],
+    ['51 characters', 'x'.repeat(51)],
+    ['containing NUL', 'An\u0000a'],
+    ['not a string', 42],
+  ])(
+    'rejects a %s display name with 400, no account and no email (AC-02)',
+    async (_label, name) => {
+      const { app } = createIdentityHarness(connection);
+
+      const response = await register(app, {
+        email: 'ana@example.com',
+        password: PASSWORD,
+        ...(name === undefined ? {} : { displayName: name }),
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ code: 'VALIDATION_FAILED', fields: ['body.displayName'] });
+      expect(await count('users')).toBe(0);
+      expect(await count('email_outbox')).toBe(0);
+    },
+  );
+
+  it('shows the registered display name in GET /profile after signing in (AC-03)', async () => {
+    const harness = createIdentityHarness(connection, { realSessions: true });
+    await register(harness.app, {
+      email: 'ana@example.com',
+      password: PASSWORD,
+      displayName: ' Ana Pérez ',
+    });
+    await harness.worker.runOnce();
+    const token = harness.transport.lastTokenFor('ana@example.com');
+    const verified = await request(harness.app)
+      .post('/auth/verify-email')
+      .set(trustedHeaders)
+      .send({ token });
+    expect(verified.status).toBe(200);
+
+    const signedIn = await signIn(harness.app, 'ana@example.com', PASSWORD);
+    expect(signedIn.status).toBe(200);
+    const profile = await request(harness.app)
+      .get('/profile')
+      .set('Cookie', cookieHeader(sessionFrom(signedIn)));
+
+    expect(profile.status).toBe(200);
+    expect(profile.body).toMatchObject({ displayName: 'Ana Pérez', email: 'ana@example.com' });
+  });
+
+  it('answers an existing email exactly as a new one and keeps its display name (AC-09, NFR-02)', async () => {
+    const { app } = createIdentityHarness(connection);
+    const fresh = await register(app, {
+      email: 'new@example.com',
+      password: PASSWORD,
+      displayName: 'Nueva',
+    });
+    await register(app, { email: 'ana@example.com', password: PASSWORD, displayName: 'Ana' });
+
+    const existing = await register(app, {
+      email: 'ana@example.com',
+      password: PASSWORD,
+      displayName: 'Impostor',
+    });
+
+    expect(existing.status).toBe(fresh.status);
+    expect(existing.text).toBe(fresh.text);
+    expect(existing.headers['content-type']).toBe(fresh.headers['content-type']);
+    const rows = await connection.pool.query<{ display_name: string }>(
+      "select display_name from users where email = 'ana@example.com'",
+    );
+    expect(rows.rows).toEqual([{ display_name: 'Ana' }]);
+  });
+
+  it('answers the same 400 for an invalid display name on a new and an existing email (NFR-02)', async () => {
+    const { app } = createIdentityHarness(connection);
+    await register(app, { email: 'ana@example.com', password: PASSWORD, displayName: 'Ana' });
+
+    const existing = await register(app, {
+      email: 'ana@example.com',
+      password: PASSWORD,
+      displayName: '   ',
+    });
+    const fresh = await register(app, {
+      email: 'new@example.com',
+      password: PASSWORD,
+      displayName: '   ',
+    });
+
+    expect(existing.status).toBe(400);
+    expect(fresh.status).toBe(existing.status);
+    expect(fresh.text).toBe(existing.text);
+    expect(await count('users')).toBe(1);
   });
 });

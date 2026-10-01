@@ -46,6 +46,21 @@ describe('DrizzleUserRepository', () => {
     expect(created.createdAt).toBeInstanceOf(Date);
   });
 
+  it('stores display_name when given and null when none is given', async () => {
+    await users.create(newUser({ displayName: 'Ana Pérez' }));
+    await users.create(newUser({ email: Email.parse('bob@example.com') }));
+    await users.create(newUser({ email: Email.parse('eve@example.com'), displayName: null }));
+
+    const rows = await connection.pool.query<{ email: string; display_name: string | null }>(
+      'select email, display_name from users order by email',
+    );
+    expect(rows.rows).toEqual([
+      { email: 'ana@example.com', display_name: 'Ana Pérez' },
+      { email: 'bob@example.com', display_name: null },
+      { email: 'eve@example.com', display_name: null },
+    ]);
+  });
+
   it('raises DuplicateEmail instead of a raw SQL error for a duplicate email', async () => {
     await users.create(newUser());
 

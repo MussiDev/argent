@@ -28,6 +28,8 @@ export interface NewUser {
   passwordHash: string | null;
   /** Set when the email is already proven, e.g. verified by Google (PRD 01b FR-03). */
   emailVerifiedAt?: Date;
+  /** Already validated and trimmed; accounts created without one store null. */
+  displayName?: string | null;
   defaultRateType: RateType;
   displayCurrency: DisplayCurrency;
   timeZone: string;

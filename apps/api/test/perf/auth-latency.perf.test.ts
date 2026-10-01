@@ -135,6 +135,7 @@ describe('auth latency (NFR-06)', () => {
     const result = await load(url, '/auth/register', (n) => ({
       email: `bench${n}@example.com`,
       password: PASSWORD,
+      displayName: `Bench ${n}`,
     }));
 
     expect(Object.fromEntries(result.statuses)).toEqual({ 202: REQUESTS });

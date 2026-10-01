@@ -54,6 +54,7 @@ export default defineRailway((_ctx, project) => {
       RESEND_API_KEY: preserve(),
       GOOGLE_CLIENT_ID: preserve(),
       GOOGLE_CLIENT_SECRET: preserve(),
+      TOTP_ENCRYPTION_KEY: preserve(),
     },
   });
 
@@ -66,7 +67,8 @@ export default defineRailway((_ctx, project) => {
       watchPatterns: apiWatchPatterns,
     },
     start: 'node --max-old-space-size=192 apps/api/dist/worker.js',
-    deploy: restart,
+    // The heap cap bounds only V8; the container limit bounds the rest of the process (FIX-005).
+    deploy: { ...restart, limitOverride: { containers: { cpu: 1, memoryBytes: 512_000_000 } } },
     // Shared settings follow the API's values instead of repeating them.
     env: {
       NODE_ENV: shared.NODE_ENV,
@@ -88,7 +90,7 @@ export default defineRailway((_ctx, project) => {
       watchPatterns: ['/apps/web/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     },
     start: 'node --max-old-space-size=320 apps/web/node_modules/next/dist/bin/next start apps/web',
-    deploy: restart,
+    deploy: { ...restart, limitOverride: { containers: { cpu: 1, memoryBytes: 1_000_000_000 } } },
     env: {
       NODE_ENV: 'production',
       API_ORIGIN: api.env.API_ORIGIN,

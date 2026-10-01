@@ -51,3 +51,6 @@ All notable changes to this project are documented in this file. The format foll
   JWT secret, the Google client) can no longer stop it and are no longer handed to it.
 - FIX-004 Google sign-ins finishing at the same time for the same new account (a double click, two
   tabs) all sign in, instead of one of them showing "Google sign-in failed".
+- FIX-005 The email worker and the web run with container limits on Railway (1 vCPU each; 512 MB
+  and 1 GB), so a runaway can no longer grow to the plan maximum. The TOTP encryption key is
+  declared as preserved in `.railway/railway.ts`, so applying the definition never deletes it.

@@ -8,6 +8,7 @@ import { CreateSignInChallenge } from './application/create-sign-in-challenge';
 import { DisableTwoFactor } from './application/disable-two-factor';
 import { EnableTwoFactor } from './application/enable-two-factor';
 import { GetCurrentSession } from './application/get-current-session';
+import { GetProfile } from './application/get-profile';
 import { GetTwoFactorStatus } from './application/get-two-factor-status';
 import { RefreshSession } from './application/refresh-session';
 import { RegisterUser } from './application/register-user';
@@ -19,6 +20,7 @@ import { SignOutAll } from './application/sign-out-all';
 import { StartGoogleSignIn } from './application/start-google-sign-in';
 import { StartSession } from './application/start-session';
 import { StartTwoFactorSetup } from './application/start-two-factor-setup';
+import { UpdateProfile } from './application/update-profile';
 import { VerifyEmail } from './application/verify-email';
 import { VerifySecondFactor } from './application/verify-second-factor';
 import type { AttemptLimiter } from './application/ports/attempt-limiter';
@@ -64,6 +66,7 @@ import { createPasswordResetRoutes } from './infrastructure/http/password-reset-
 import { createRegistrationRoutes } from './infrastructure/http/registration-routes';
 import { ACCESS_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
 import { createSessionRoutes } from './infrastructure/http/session-routes';
+import { createProfileRoutes } from './infrastructure/http/profile-routes';
 import { createTwoFactorRoutes } from './infrastructure/http/two-factor-routes';
 import {
   AesGcmSecretBox,
@@ -309,6 +312,11 @@ export function createIdentityModule({
     );
   };
 
+  const getTwoFactorStatus = new GetTwoFactorStatus({
+    twoFactor: identity.twoFactor,
+    recoveryCodes: identity.recoveryCodes,
+  });
+
   const routers = [
     createRegistrationRoutes({
       registerUser: new RegisterUser({
@@ -405,10 +413,7 @@ export function createIdentityModule({
       logger: dependencies.logger,
     }),
     createTwoFactorRoutes({
-      getTwoFactorStatus: new GetTwoFactorStatus({
-        twoFactor: identity.twoFactor,
-        recoveryCodes: identity.recoveryCodes,
-      }),
+      getTwoFactorStatus,
       startTwoFactorSetup: new StartTwoFactorSetup({
         users: identity.users,
         twoFactor: identity.twoFactor,
@@ -464,6 +469,18 @@ export function createIdentityModule({
           );
         },
         reportRecordFailure,
+      }),
+      requireSession: routeSession,
+      logger: dependencies.logger,
+    }),
+    createProfileRoutes({
+      getProfile: new GetProfile({
+        profiles: identity.profiles,
+        twoFactorStatus: getTwoFactorStatus,
+      }),
+      updateProfile: new UpdateProfile({
+        profiles: identity.profiles,
+        twoFactorStatus: getTwoFactorStatus,
       }),
       requireSession: routeSession,
       logger: dependencies.logger,

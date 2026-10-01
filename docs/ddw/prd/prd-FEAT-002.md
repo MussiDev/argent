@@ -5,7 +5,7 @@
 | Ticket | FEAT-002 |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -27,6 +27,12 @@ real cost — cookie names (renaming them signs every user out), the `X-Requeste
 API and the web deploy separately, so a mismatch window would reject requests), and the Railway
 service and database names (an Infrastructure as Code rename can recreate a service).
 
+User decision after the architecture review (2026-10-01): Railway builds every service from `main`,
+so build commands that filter by package name break whichever goes first, the apply or the merge,
+and pnpm exits 0 when a filter matches nothing. The build commands filter by path instead
+(`pnpm --filter ./apps/api --fail-if-no-match build`), which works with either package name, and
+are applied before the rename is merged.
+
 ## Goals
 
 - Every screen, email and file a user sees says Pesly, in Spanish and English.
@@ -43,8 +49,10 @@ service and database names (an Infrastructure as Code rename can recreate a serv
 - FR-04: The workspace packages must be renamed from `@argent/api`, `@argent/web` and
   `@argent/shared` to `@pesly/api`, `@pesly/web` and `@pesly/shared`, and the root package from
   `argent` to `pesly`, with every import, filter and reference updated.
-- FR-05: The Railway definition must build the API, worker and web with the renamed package
-  filters, and production must be updated through the Infrastructure as Code plan and apply.
+- FR-05: The Railway definition must build the API, worker and web with path filters that fail when
+  they match nothing (`pnpm --filter ./apps/api --fail-if-no-match build`, and `./apps/web` for the
+  web), applied to production through the Infrastructure as Code plan and apply before the package
+  rename reaches `main`.
 - FR-06: The project docs (`AGENTS.md`) and the local default email sender must name the product
   Pesly.
 
@@ -55,7 +63,7 @@ service and database names (an Infrastructure as Code rename can recreate a serv
   the occurrences that remain are the out-of-scope identifiers and the word "Argentina".
 - NFR-02: 0 users are signed out: cookie names and the `X-Requested-With` value are unchanged.
 - NFR-03: The plan against production lists only the three build command changes: 0 creations,
-  0 deletions, 0 other changes.
+  0 deletions, 0 other changes; 0 builds run with a filter that matches no package.
 - NFR-04: Coverage stays at or above 80% lines, 80% branches and 80% functions over
   `apps/api/src`, `apps/web/src` and `packages/shared/src`.
 
@@ -72,9 +80,12 @@ service and database names (an Infrastructure as Code rename can recreate a serv
 - AC-05 (FR-04): WHEN the workspace is installed, built, linted, type-checked and tested, THE
   packages SHALL resolve as `@pesly/*` with no reference to `@argent/*`.
 - AC-06 (FR-05): WHEN the definition is planned against production, THE plan SHALL list only the
-  build commands of `argent-api`, `argent-worker` and `argent-web` changing to `@pesly/*` filters.
-- AC-07 (FR-05): IF the renamed build fails on Railway, THEN THE previous deployment SHALL keep
-  serving and the rollback SHALL restore the `@argent/*` build commands.
+  build commands of `argent-api`, `argent-worker` and `argent-web` changing to path filters with
+  `--fail-if-no-match`.
+- AC-07 (FR-05): IF a build filter matches no package, THEN THE build SHALL fail, and THE previous
+  deployment SHALL keep serving.
+- AC-09 (FR-05): WHEN the rename is merged into `main` after the path filters are applied, THE three
+  services SHALL rebuild and report SUCCESS with no further apply.
 - AC-08 (FR-06): WHEN the API runs without `EMAIL_FROM` outside production, THE default sender
   SHALL name Pesly.
 
@@ -90,9 +101,10 @@ service and database names (an Infrastructure as Code rename can recreate a serv
 
 ## Risks and Mitigations
 
-- **Railway builds break on the new filters:** Mitigation: the plan must show only the build
-  commands (AC-06); the previous deployment keeps serving if a build fails, and the rollback
-  restores the old commands (AC-07).
+- **Railway builds break on the new filters:** Mitigation: path filters work with both package
+  names, so applying them before the merge changes nothing that is built (AC-06, AC-09);
+  `--fail-if-no-match` turns a filter that matches nothing into a failed build, which keeps the
+  previous deployment serving (AC-07).
 - **A missed import breaks the build:** Mitigation: AC-05 — install, build, lint, typecheck and the
   full suite run on the renamed workspace, and CI runs them again.
 - **Users are signed out:** Mitigation: NFR-02 — cookie names and the CSRF header value are not

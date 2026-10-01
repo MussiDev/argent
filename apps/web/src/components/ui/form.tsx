@@ -4,6 +4,7 @@ import { createContext, useContext, useId, type ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from './input';
 import { Label } from './label';
+import { Select } from './select';
 
 /**
  * shadcn/ui-style form field parts, wired through context so label, control, description and
@@ -21,6 +22,15 @@ function useFormItem(): FormItemContextValue {
   const context = useContext(FormItemContext);
   if (!context) throw new Error('Form field parts must be used inside <FormItem>');
   return context;
+}
+
+/** The id and ARIA attributes every control gets; it references only the parts that exist. */
+function useFieldAria() {
+  const { id, invalid, hasDescription } = useFormItem();
+  const describedBy = [hasDescription && `${id}-description`, invalid && `${id}-message`]
+    .filter(Boolean)
+    .join(' ');
+  return { id, 'aria-invalid': invalid, 'aria-describedby': describedBy || undefined };
 }
 
 /**
@@ -55,19 +65,14 @@ export function FormLabel({ className, ...props }: ComponentProps<typeof Label>)
 }
 
 export function FormControl(props: ComponentProps<typeof Input>) {
-  const { id, invalid, hasDescription } = useFormItem();
-  const describedBy = [hasDescription && `${id}-description`, invalid && `${id}-message`]
-    .filter(Boolean)
-    .join(' ');
-  return (
-    <Input
-      data-slot="form-control"
-      id={id}
-      aria-invalid={invalid}
-      aria-describedby={describedBy || undefined}
-      {...props}
-    />
-  );
+  const aria = useFieldAria();
+  return <Input data-slot="form-control" {...aria} {...props} />;
+}
+
+/** `FormControl` for a `<select>`: same ids and ARIA wiring. */
+export function FormSelect(props: ComponentProps<typeof Select>) {
+  const aria = useFieldAria();
+  return <Select data-slot="form-control" {...aria} {...props} />;
 }
 
 export function FormDescription({ className, ...props }: ComponentProps<'p'>) {

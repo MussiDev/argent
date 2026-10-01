@@ -4,15 +4,23 @@
 |---|---|
 | Runner | Vitest 5.0.1 (V8 coverage) |
 | Command | `TEST_DATABASE_URL=postgres://argent:argent@localhost:5435/argent_iac_test pnpm test:coverage` |
-| Total | 943 |
-| Passed | 943 |
+| Total | 1081 |
+| Passed | 1081 |
 | Failed | 0 |
 | Skipped | 0 |
-| Line coverage | 96.51% |
-| Branch coverage | 93.01% |
-| Function coverage | 92.93% |
+| Line coverage | 96.68% |
+| Branch coverage | 92.72% |
+| Function coverage | 93.47% |
 | Coverage floor | 80% (AGENTS.md, "Testing") |
-| Lint | `pnpm exec eslint .` — clean, 0 findings; `pnpm exec prettier --check --end-of-line auto .` — clean except `CHANGELOG.md`, whose working copy has mixed line endings from an earlier local edit (the committed file is clean) |
+| Lint | `pnpm exec eslint .` — clean, 0 findings; `pnpm exec prettier --check --end-of-line auto .` — clean |
+
+This run is on the branch after merging `main` (DISC-001-01d, profile and preferences, PR #11) in
+`9edead7`: the two conflicts (`CHANGELOG.md`, `account-defaults.ts`) were resolved, the feature's
+9 files importing the old scope were renamed, and its profile description ("How you appear in
+Argent." / "Cómo apareces en Argent.") now names Pesly; the scope scan and the catalog checks
+pass on the merged tree. A first full run had 1 timeout in `test/foundation/architecture-boundaries.test.ts`
+("rejects in domain: …"), whose first ESLint call took 9.7 seconds on this machine, the same cold
+start seen in FIX-004; the run above, started right after, passed.
 
 The run used the separate database `argent_iac_test`. Other checks: `pnpm install
 --frozen-lockfile` — up to date; `pnpm typecheck` — clean; `pnpm audit --prod --audit-level high`

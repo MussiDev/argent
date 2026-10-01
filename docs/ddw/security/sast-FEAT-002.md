@@ -5,7 +5,7 @@
 | Ticket | FEAT-002 |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Scope | diff of `feat/FEAT-002-rename-pesly` against `7ff1319`: `.railway/railway.ts`, `AGENTS.md`, web and email i18n catalogs, `apps/api/src/shared/config/env.ts`, `apps/api/scripts/build.mjs`, the `@argent/*` → `@pesly/*` imports and package manifests, `pnpm-lock.yaml`, `apps/web/next.config.ts`, `playwright.config.ts`, the tests, `docs/ddw/**` |
+| Scope | diff of `feat/FEAT-002-rename-pesly` against `7ff1319`, plus the merge of `main` (`9edead7`, DISC-001-01d) whose new imports and profile copy were renamed: `.railway/railway.ts`, `AGENTS.md`, web and email i18n catalogs, `apps/api/src/shared/config/env.ts`, `apps/api/scripts/build.mjs`, the `@argent/*` → `@pesly/*` imports and package manifests, `pnpm-lock.yaml`, `apps/web/next.config.ts`, `playwright.config.ts`, the tests, `docs/ddw/**` |
 | Method | Manual review of the diff against catalog §4, plus `pnpm audit --prod --audit-level high` and `pnpm install --frozen-lockfile` |
 | Result | PASSED — 0 Critical, 0 High, 0 Medium open |
 

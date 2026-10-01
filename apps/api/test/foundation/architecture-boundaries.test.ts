@@ -22,6 +22,46 @@ async function restrictedImports(filePath: string, source: string): Promise<stri
 const DOMAIN_FILE = 'apps/api/src/identity/domain/probe.ts';
 const APPLICATION_FILE = 'apps/api/src/identity/application/probe.ts';
 
+const INVESTMENTS_DOMAIN_FILE = 'apps/api/src/investments/domain/probe.ts';
+const INVESTMENTS_APPLICATION_FILE = 'apps/api/src/investments/application/probe.ts';
+
+describe('investments module import boundaries', () => {
+  it.each([
+    "import { x } from '../infrastructure/db/schema';",
+    "import { eq } from 'drizzle-orm';",
+    "import express from 'express';",
+    "import { randomUUID } from 'node:crypto';",
+  ])('rejects in investments domain: %s', async (source) => {
+    expect(await restrictedImports(INVESTMENTS_DOMAIN_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it('rejects infrastructure imports in investments application', async () => {
+    expect(
+      await restrictedImports(
+        INVESTMENTS_APPLICATION_FILE,
+        "import { x } from '../infrastructure/db/schema';\n",
+      ),
+    ).toEqual(['no-restricted-imports']);
+  });
+
+  it('allows investments domain and application to import shared code and the access port', async () => {
+    expect(
+      await restrictedImports(
+        INVESTMENTS_DOMAIN_FILE,
+        "import { AppError } from '@argent/shared';\nimport { y } from './holding';\n",
+      ),
+    ).toEqual([]);
+    expect(
+      await restrictedImports(
+        INVESTMENTS_APPLICATION_FILE,
+        "import type { AccessScope } from '../../shared/access';\nimport { y } from '../domain/holding';\n",
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe('hexagonal import boundaries', () => {
   it.each([
     "import { x } from '../infrastructure/db/schema';",

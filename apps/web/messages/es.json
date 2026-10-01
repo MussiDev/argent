@@ -1,10 +1,10 @@
 {
   "metadata": {
-    "title": "Argent",
+    "title": "Pesly",
     "description": "Tus finanzas personales y compartidas, en pesos y dólares, incluso sin conexión."
   },
   "home": {
-    "title": "Argent",
+    "title": "Pesly",
     "tagline": "Tus cuentas, gastos y ahorros en pesos y dólares, en un solo lugar."
   },
   "app": {
@@ -65,7 +65,7 @@
       "title": "Verificación de correo",
       "verifying": "Verificando tu correo…",
       "verifiedTitle": "Correo verificado",
-      "verified": "Tu correo está verificado. Ya puedes usar Argent.",
+      "verified": "Tu correo está verificado. Ya puedes usar Pesly.",
       "continue": "Continuar",
       "resend": "Enviar un nuevo enlace",
       "resending": "Enviando…",
@@ -152,8 +152,8 @@
       "copied": "Copiamos los códigos.",
       "copyFailed": "No pudimos copiarlos. Descárgalos o anótalos.",
       "download": "Descargar como texto",
-      "fileName": "argent-codigos-de-recuperacion.txt",
-      "fileHeader": "Códigos de recuperación de Argent. Cada uno sirve una sola vez.",
+      "fileName": "pesly-codigos-de-recuperacion.txt",
+      "fileHeader": "Códigos de recuperación de Pesly. Cada uno sirve una sola vez.",
       "done": "Ya los guardé"
     },
     "disable": {

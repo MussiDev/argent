@@ -1,10 +1,10 @@
 {
   "metadata": {
-    "title": "Argent",
+    "title": "Pesly",
     "description": "Your personal and shared finances, in pesos and dollars, even offline."
   },
   "home": {
-    "title": "Argent",
+    "title": "Pesly",
     "tagline": "Your accounts, expenses and savings in pesos and dollars, in one place."
   },
   "app": {
@@ -65,7 +65,7 @@
       "title": "Email verification",
       "verifying": "Verifying your email…",
       "verifiedTitle": "Email verified",
-      "verified": "Your email is verified. You can now use Argent.",
+      "verified": "Your email is verified. You can now use Pesly.",
       "continue": "Continue",
       "resend": "Send a new link",
       "resending": "Sending…",
@@ -152,8 +152,8 @@
       "copied": "Codes copied.",
       "copyFailed": "We could not copy them. Download them or write them down.",
       "download": "Download as text",
-      "fileName": "argent-recovery-codes.txt",
-      "fileHeader": "Argent recovery codes. Each one works only once.",
+      "fileName": "pesly-recovery-codes.txt",
+      "fileHeader": "Pesly recovery codes. Each one works only once.",
       "done": "I saved them"
     },
     "disable": {

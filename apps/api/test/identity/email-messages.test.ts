@@ -19,6 +19,25 @@ function flattenKeys(catalog: Catalog, prefix = ''): string[] {
   });
 }
 
+/** Dotted keys of every string that still names the old product (any case; "Argentina" is fine). */
+function productNameLeaks(catalog: Catalog, prefix = ''): string[] {
+  return Object.entries(catalog).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value !== 'string') return productNameLeaks(value, path);
+    return /\bargent\b/i.test(value) ? [path] : [];
+  });
+}
+
+function stringsAt(catalog: Catalog, field: string): [string, string][] {
+  return Object.entries(catalog).flatMap(([kind, copy]): [string, string][] => {
+    if (typeof copy === 'string') return [];
+    const value = copy[field];
+    return typeof value === 'string' ? [[`${kind}.${field}`, value]] : [];
+  });
+}
+
+const LOCALES = ['es', 'en'] as const;
+
 const TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO-_';
 
 describe('email catalogs (NFR-10)', () => {
@@ -35,6 +54,44 @@ describe('email catalogs (NFR-10)', () => {
 
   it('has every en key in es', () => {
     expect(enKeys.filter((key) => !esKeys.includes(key))).toEqual([]);
+  });
+});
+
+describe('product name in the email catalogs (FEAT-002)', () => {
+  it.each(LOCALES)('has no string naming Argent, in any case, in %s', (locale) => {
+    expect(productNameLeaks(loadCatalog(locale))).toEqual([]);
+  });
+
+  it.each(LOCALES)('names Pesly in every subject and body in %s', (locale) => {
+    const catalog = loadCatalog(locale);
+    const subjects = stringsAt(catalog, 'subject');
+    const bodies = [...stringsAt(catalog, 'intro'), ...stringsAt(catalog, 'body')];
+
+    expect(subjects).toHaveLength(Object.keys(catalog).length);
+    expect(bodies).toHaveLength(Object.keys(catalog).length);
+    expect([...subjects, ...bodies].filter(([, text]) => !/\bPesly\b/.test(text))).toEqual([]);
+  });
+
+  it.each(LOCALES)('renders the verification email subject with Pesly in %s', (language) => {
+    const email = renderEmail({
+      kind: 'verification',
+      language,
+      token: TOKEN,
+      webBaseUrl: 'https://app.argent.test',
+    });
+
+    expect(email.subject).toMatch(/\bPesly\b/);
+    expect(email.subject).not.toMatch(/\bargent\b/i);
+  });
+
+  it('product name error: reports every leak by its dotted key, in any case, and not "Argentina"', () => {
+    const catalog: Catalog = {
+      verification: { subject: 'Argent' },
+      recovery: { fileName: 'argent-recovery-codes.txt' },
+      footer: { place: 'Hecho en Argentina' },
+    };
+
+    expect(productNameLeaks(catalog)).toEqual(['verification.subject', 'recovery.fileName']);
   });
 });
 

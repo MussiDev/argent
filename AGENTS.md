@@ -1,4 +1,4 @@
-# AGENTS.md — Argent
+# AGENTS.md — Pesly
 
 ## Language
 
@@ -10,7 +10,7 @@
 
 ## What this project is
 
-Argent is a mobile-first PWA to manage personal and shared finances in Argentina: accounts and
+Pesly is a mobile-first PWA to manage personal and shared finances in Argentina: accounts and
 daily movements in ARS and USD with frozen exchange rates, credit cards with installments,
 Splitwise-style groups and households, savings goals, budgets, investments and recurring
 payments — usable offline at the moment of paying.

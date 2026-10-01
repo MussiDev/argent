@@ -285,7 +285,7 @@ describe('EmailWorker retry schedule stored in the outbox (NFR-09)', () => {
     };
     const transport = new ResendTransport({
       client,
-      from: 'Argent <no-reply@argent.test>',
+      from: 'Pesly <no-reply@pesly.test>',
       timeoutMs: 50,
     });
     const worker = createEmailWorker({ db: connection.db, env, logger: silent, transport, clock });

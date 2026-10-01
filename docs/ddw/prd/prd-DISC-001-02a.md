@@ -5,8 +5,8 @@
 | Ticket | DISC-001-02a |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 0 |
-| Loops since last human decision | 0 |
+| PRD loops | 2 |
+| Loops since last human decision | 1 |
 
 ## Context and Problem
 First sub-ticket of Accounts & Categories (parent index: `prd-DISC-001-02.md`). Every movement in
@@ -22,7 +22,8 @@ decision). Requirement IDs were renumbered; the parent index maps every original
 
 ## Functional Requirements
 - FR-01: The system must allow a user to create an account with a name, a type, a currency and
-  an opening balance.
+  an optional opening balance; the system must store 0 when it is omitted and must accept
+  negative values.
 - FR-02: The system must offer exactly these account types: cash, bank account, digital wallet,
   credit card and savings.
 - FR-03: The system must assign each account exactly one currency, ARS or USD, chosen at
@@ -86,6 +87,10 @@ decision). Requirement IDs were renumbered; the parent index maps every original
   user, THEN THE system SHALL answer 404 Not Found and leave it unchanged.
 - AC-15 (FR-12): WHEN a user opens the account list or an account picker, THE system SHALL show
   only accounts owned by that user.
+- AC-16 (FR-01): WHEN a user submits a new account with a valid name, type and currency and no
+  opening balance, THE system SHALL create it with an opening balance of 0.
+- AC-17 (FR-01): WHEN a user submits a new account with a negative opening balance, THE system
+  SHALL create it and show that negative balance in the account list.
 
 ## Out of Scope
 - Statement cycles, closing and due dates, and installment purchases on credit cards (PRD 10).
@@ -120,3 +125,7 @@ decision). Requirement IDs were renumbered; the parent index maps every original
   immutable currency and type, archive instead of delete when data exists, no joint accounts.
 - 2026-10-01: Parent PRD split into DISC-001-02a (accounts) and DISC-001-02b (categories) by user
   decision.
+- 2026-10-01: Human decision during PLAN: the opening balance may be negative (any signed 64-bit
+  value, including zero), and it is optional: when omitted the API stores 0 (FR-01, AC-16, AC-17).
+- 2026-10-01: Human decision during PLAN: there is no cap on the number of accounts per user and
+  no extra write-rate limit; do not re-raise it in reviews.

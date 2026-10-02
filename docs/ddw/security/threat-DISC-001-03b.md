@@ -7,16 +7,17 @@
 | Tier | FEATURE |
 | Date | 2026-10-02 |
 
-Risk identifiers are local to this ticket (R-01 to R-16).
+Risk identifiers are local to this ticket (R-01 to R-18).
 
 ## Components
 | Component | Source in the spec |
 |---|---|
 | `packages/shared/src/movements/movement.ts` + `packages/shared/src/movements/rate-age.ts` + `packages/shared/src/time/today.ts` (request and response contracts, rate age, today in a time zone) | Block 1 |
 | `apps/api/src/movements/application/create-movement.ts` + `apps/api/src/movements/application/list-movements.ts` + `apps/api/src/movements/application/get-movement.ts` + `apps/api/src/movements/domain/errors.ts` (use cases and typed errors) | Block 2 |
-| `apps/api/src/movements/infrastructure/db/schema.ts` + `apps/api/drizzle/0013_movements.sql` (`movements` relation, composite keys, checks, unique constraint on accounts) + `apps/api/drizzle/rollback/0013_movements.down.sql` | Block 3 |
+| `apps/api/src/movements/infrastructure/db/schema.ts` + `apps/api/drizzle/0014_movements.sql` (`movements` relation, composite keys, checks, unique constraint on accounts) + `apps/api/drizzle/rollback/0014_movements.down.sql` | Block 3 |
 | `apps/api/src/movements/infrastructure/db/drizzle-movement-repository.ts` + `apps/api/src/movements/infrastructure/db/drizzle-account-lookup.ts` + `apps/api/src/movements/infrastructure/db/drizzle-category-lookup.ts` + `apps/api/src/movements/infrastructure/db/drizzle-rate-lookup.ts` + `apps/api/src/movements/infrastructure/db/drizzle-user-preferences.ts` | Block 3 and Block 4 |
 | `apps/api/src/movements/infrastructure/accounts/drizzle-account-movements.ts` + `apps/api/src/movements/infrastructure/categories/drizzle-category-usage.ts` (the real adapters of the two open ports) | Block 4 |
+| `apps/api/src/movements/application/record-manual-movement.ts` + `apps/api/src/movements/infrastructure/db/drizzle-movement-write-limiter.ts` + the `movement_rate_limits` relation of `apps/api/src/movements/infrastructure/db/schema.ts` (the creation limit of 60 per minute per user) | Block 2, Block 3 and Block 4 |
 | `apps/api/src/movements/infrastructure/http/movement-routes.ts` + `apps/api/src/movements/infrastructure/http/movement-presenter.ts` (`POST /movements`, `GET /movements`, `GET /movements/:id`) + `apps/api/src/server.ts` wiring | Block 5 |
 | `apps/api/src/identity/infrastructure/db/user-erasure-step.ts` + `apps/api/src/identity/infrastructure/db/drizzle-user-deletion-repository.ts` + `apps/api/src/movements/infrastructure/db/erase-user-movements.ts` (ordered erasure step) + `apps/api/test/identity/user-erasure.test.ts` (guard policy `erase-step`) | Block 6 |
 | `apps/web/src/features/movements/containers/create-movement-container.tsx` + `apps/web/src/features/movements/containers/movements-container.tsx` + `apps/web/src/features/movements/components/movement-form.tsx` + `apps/web/src/features/movements/components/movement-list.tsx` + `apps/web/src/lib/api-client.ts` (web client and screens) | Block 8 and Block 9 |
@@ -46,7 +47,7 @@ Risk identifiers are local to this ticket (R-01 to R-16).
 - **Denial of Service:** a create is one insert plus four indexed point reads and a list is one paged query with a count, with no provider call (R-08, R-11).
 - **Elevation of Privilege:** a write needs `AccessScope<'write'>`, a type only the policy can issue; group access is denied until PRD 05 (R-01).
 
-### `apps/api/src/movements/infrastructure/db/schema.ts` + `apps/api/drizzle/0013_movements.sql` (`movements` relation, composite keys, checks, unique constraint on accounts) + `apps/api/drizzle/rollback/0013_movements.down.sql`
+### `apps/api/src/movements/infrastructure/db/schema.ts` + `apps/api/drizzle/0014_movements.sql` (`movements` relation, composite keys, checks, unique constraint on accounts) + `apps/api/drizzle/rollback/0014_movements.down.sql`
 - **Spoofing:** `owner_id` is `NOT NULL` with a foreign key to `users` and the composite key `(account_id, owner_id)` to accounts, so a movement cannot reference another owner's account even if the application is bypassed (R-01).
 - **Tampering:** check constraints bound the amount, the rate, the type, the note length and the pairing of rate source and rate type; the composite key `(category_id, owner_id, type)` makes the database refuse a category of the other kind (R-02, R-03).
 - **Repudiation:** `created_at` and `updated_at` are set by the database.
@@ -69,6 +70,14 @@ Risk identifiers are local to this ticket (R-01 to R-16).
 - **Information Disclosure:** every result is keyed by the given ids and never reads another account's rows, so another user's movements cannot change a caller's balance (R-13).
 - **Denial of Service:** one grouped query per chunk of at most 500 ids on `movements_account_idx`; the performance test covers 100 accounts and 100,000 movements (R-08).
 - **Elevation of Privilege:** the adapters cannot write, and no route calls them with request-supplied ids.
+
+### `apps/api/src/movements/application/record-manual-movement.ts` + `apps/api/src/movements/infrastructure/db/drizzle-movement-write-limiter.ts` + the `movement_rate_limits` relation of `apps/api/src/movements/infrastructure/db/schema.ts` (the creation limit of 60 per minute per user)
+- **Spoofing:** the limiter key is the owner id taken from the session scope, never from the request, so a client cannot spend or dodge another user's limit (R-17).
+- **Tampering:** the counter is one atomic upsert per attempt on an epoch-aligned minute window, so concurrent requests from several API instances never lose an increment and a client cannot reset its window (R-17).
+- **Repudiation:** a rejected excess answers 429 with a retry time and is visible in the request log as a status and request id; no amount or note is logged (R-06).
+- **Information Disclosure:** the 429 body is only `{ code }` and the `Retry-After` header carries seconds, nothing about other users or the number of stored movements.
+- **Denial of Service:** the limit stops a script from flooding creation; the limiter itself writes one row per owner and minute and deletes the owner's older windows in the same transaction, so it never holds more than two rows per user and cannot grow the relation (R-08, R-18).
+- **Elevation of Privilege:** `CreateMovement` does not touch the limiter, so a future import is never counted, but only server code can call it; no route exposes it without the limit (R-17).
 
 ### `apps/api/src/movements/infrastructure/http/movement-routes.ts` + `apps/api/src/movements/infrastructure/http/movement-presenter.ts` (`POST /movements`, `GET /movements`, `GET /movements/:id`) + `apps/api/src/server.ts` wiring
 - **Spoofing:** all routes sit behind `requireSession` and `requireVerifiedEmail`; with no valid session the answer is 401 and no movement is returned (R-01).
@@ -101,6 +110,7 @@ Risk identifiers are local to this ticket (R-01 to R-16).
 | Movement note (free text) | PII | PostgreSQL volume encrypted at rest; at most 500 characters, no control characters | TLS |
 | Account and category names shown next to movements | PII | PostgreSQL volume encrypted at rest | TLS |
 | User time zone and default rate type read for a save | PII | PostgreSQL volume encrypted at rest; read from the caller's own row only | private database network |
+| Creation-limit counters (owner id, window start, count) | PII | PostgreSQL volume encrypted at rest; at most two rows per user, removed with the user by the cascade | private database network |
 | Stored exchange rates | public | PostgreSQL volume encrypted at rest | private database network |
 | Session cookie and access token presented to the routes | credentials | not stored by this module; the identity module stores them hashed | TLS, cookies flagged Secure in production |
 
@@ -114,18 +124,20 @@ Risk identifiers are local to this ticket (R-01 to R-16).
 | R-05 | Existence of other users' data leaks through error differences or messages | I | M | M | Foreign and missing ids answer the same 404, errors carry `{ code }` only, no SQL or stack in the body |
 | R-06 | Amounts, notes or rates written to logs | I | L | M | Audit lines carry request id, user id and movement id only; a test asserts the log keys |
 | R-07 | Stored XSS or hidden text through the note, account or category names | T | M | M | Names and notes render as React text nodes, the note refuses control and format characters and is capped at 500 characters |
-| R-08 | Denial of service through heavy lists, unbounded growth or slow balance sums | D | M | M | Page cap of 100, indexed queries, sums in chunks of 500 on `movements_account_idx`, performance tests at 100,000 movements, body limit 16 kb; no per-user write limiter or cap is added (as for accounts in DISC-001-02a), growth per user is bounded by authenticated, verified-email access and the platform's edge limits, and the open question for the human is whether a per-user write limit is wanted |
+| R-08 | Denial of service through heavy lists, unbounded growth or slow balance sums | D | M | M | Page cap of 100, indexed queries, sums in chunks of 500 on `movements_account_idx`, performance tests at 100,000 movements, body limit 16 kb, and the human-decided limit of 60 manual creations per minute per user (R-17); there is deliberately no cap on the total number of movements |
 | R-09 | A deleted user's movements remain (financial and personal data kept after deletion) | I | M | H | Ordered erasure step deleting the movements first in the deletion transaction after a `for update` lock on the user row, the guard policy `erase-step` tied to the named constraints with a test that the step removed the rows, and tests of the deterministic facts that record, without pinning, the order-dependent outcome of a bare user delete |
 | R-10 | A half-completed deletion, or a movement created while the user is being deleted | T | L | H | The step runs in the same transaction as the user delete and a failure rolls everything back; the deletion takes `for update` on the user row before the step, so a concurrent insert, which needs a key-share lock on that row, waits and then fails on the foreign key after the user is gone; a race test covers it |
 | R-11 | A wrong or missing rate is frozen without the user noticing | T | M | M | No stored rate answers `RATE_REQUIRED` and forces a manual rate (human decision), the entry screen shows the rate and its age when older than 2 hours, and the rate is editable before saving |
-| R-12 | Movements recorded on an archived account or category | T | L | L | Open question Q2 for the human: the pickers hide archived items and the API accepts them unless the human decides otherwise; the data stays consistent because the keys still hold |
+| R-12 | Movements recorded on an archived account or category | T | L | L | The API rejects them (human decision Q2): `ACCOUNT_ARCHIVED` and `CATEGORY_ARCHIVED`, 409, nothing stored, and the pickers hide archived items |
 | R-13 | The unscoped adapters are asked about ids the caller does not own | I | L | H | The accounts and categories modules pass only ids returned by their scoped repositories (documented on the ports), every result is keyed by the given ids, and no route passes request-supplied ids to an adapter; tests cover another user's movements not affecting balances |
-| R-14 | A future-dated movement slips through by manipulating the date or the time zone | T | L | L | The date is checked on the server against today in the user's stored time zone (a validated IANA zone), never against the client's clock |
+| R-14 | A future-dated movement slips through by manipulating the timestamp or the time zone, or a daylight-saving ambiguity stores a wrong instant | T | L | L | The local date of the instant is checked on the server against today in the user's stored time zone (a validated IANA zone with a safe fallback), never against the client's clock; the entry form's local-to-UTC conversion takes the earlier instant for a repeated local time and refuses a skipped one (open question Q6), and whether a later time today is accepted is open question Q5 |
 | R-15 | The migration locks or corrupts accounts, or the rollback destroys data | D | L | H | The unique constraint on accounts is added in one short statement on a small relation, the migration is non-destructive and tested, and the destructive rollback is documented, needs a backup and a stopped API and worker |
+| R-17 | A script floods manual creation, or tries to evade or spend the creation limit | D | M | M | Limit of 60 per minute per user in the database (human decision Q4), keyed by the session's owner, one atomic upsert per attempt, the unit refunded when the creation fails or is over the limit so only saved movements count, 429 with `Retry-After`; two limiter instances against one database are tested; a future import calls `CreateMovement` directly and is not counted |
+| R-18 | The limiter's own writes grow without bound or add latency to every save | D | L | L | One row per owner and minute, the owner's older windows deleted in the same transaction (at most two rows per user), the relation cascades with the user and is registered in the erasure guard, and the save-path performance test includes the limiter |
 | R-16 | Cross-site request forgery on `POST /movements` | S | L | M | The global origin guard requires the web origin and `X-Requested-With: argent` on state-changing routes; a test asserts 403 without them |
 
 ## Supply chain
 No new runtime dependency is planned: the module uses the already installed `drizzle-orm`, `pg`, `zod` and Express, and the web part uses the existing React, next-intl, Tailwind and shadcn components. The only external service involved is none: the module reads the rates already stored by DISC-001-03a and never calls dolarapi.com.
 
 ## Availability
-The save path has one insert and four indexed point reads and no external call, so it stays up when the rate provider is down (a missing stored rate only forces a manual rate). The real balance adapter adds one grouped query per account list, covered by a performance test at 100 accounts and 100,000 movements. Deletion of a user stays one transaction with a 5-second lock timeout. The rollback of migration 0013 is destructive and is an operator action with the API and the worker stopped.
+The save path has one insert, one limiter upsert and four indexed point reads and no external call, so it stays up when the rate provider is down (a missing stored rate only forces a manual rate). The real balance adapter adds one grouped query per account list, covered by a performance test at 100 accounts and 100,000 movements. Deletion of a user stays one transaction with a 5-second lock timeout. The rollback of migration 0013 is destructive and is an operator action with the API and the worker stopped.

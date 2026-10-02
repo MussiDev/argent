@@ -6,7 +6,7 @@ import {
   portfolioIdParamsSchema,
   setPriceRequestSchema,
   updateHoldingRequestSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { Router } from 'express';
 import type {
   AddHolding,

@@ -50,7 +50,7 @@ describe('investments module import boundaries', () => {
     expect(
       await restrictedImports(
         INVESTMENTS_DOMAIN_FILE,
-        "import { AppError } from '@argent/shared';\nimport { y } from './holding';\n",
+        "import { AppError } from '@pesly/shared';\nimport { y } from './holding';\n",
       ),
     ).toEqual([]);
     expect(

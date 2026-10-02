@@ -3,7 +3,7 @@ import {
   portfolioIdParamsSchema,
   portfolioListResponseSchema,
   portfolioResponseSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { Router } from 'express';
 import type {
   CreatePortfolio,

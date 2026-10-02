@@ -1,4 +1,4 @@
-import type { HoldingResponse, PortfolioResponse } from '@argent/shared';
+import type { HoldingResponse, PortfolioResponse } from '@pesly/shared';
 import type { HoldingView, PortfolioView } from '../../application/portfolio-view';
 
 /** The only place the bigint read model becomes decimal strings: JSON never carries a float. */

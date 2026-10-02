@@ -1,4 +1,4 @@
-import type { PortfolioResponse } from '@argent/shared';
+import type { PortfolioResponse } from '@pesly/shared';
 import type { Express } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

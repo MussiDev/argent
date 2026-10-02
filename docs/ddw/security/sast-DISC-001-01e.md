@@ -5,7 +5,7 @@
 | Ticket | DISC-001-01e |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Scope | the code of `git diff feat/DISC-001-01d-profile...HEAD`: `packages/shared/src/{auth/register,profile/profile}.ts`, `apps/api/src/identity/**` (`domain/display-name.ts`, `register-user.ts`, `complete-google-sign-in.ts`, the user repository port and Drizzle adapter, the Google OIDC adapter), `apps/web/src/**` (registration form and container, `form-errors.ts`, `lib/display-name-error.ts`, `profile-errors.ts`, the two-factor callers of `toValidationErrors`), tests and fixtures for secrets only |
+| Scope | the code of `git diff origin/main...HEAD` (the branch is rebased onto main after the merges of DISC-001-01d, the Pesly rename and DISC-001-02a): `packages/shared/src/{auth/register,profile/profile}.ts`, `apps/api/src/identity/**` (`domain/display-name.ts`, `register-user.ts`, `complete-google-sign-in.ts`, the user repository port and Drizzle adapter, the Google OIDC adapter), `apps/web/src/**` (registration form and container, `form-errors.ts`, `lib/display-name-error.ts`, `profile-errors.ts`, the two-factor callers of `toValidationErrors`), tests and fixtures for secrets only |
 | Method | Manual review of the diff against catalog §4 plus targeted pattern searches over the touched files, and `pnpm audit --prod` |
 | Result | PASSED — 0 Critical, 0 High, 0 Medium open; 3 Info documented below |
 
@@ -43,6 +43,10 @@
 | I-1 | Info | `apps/web/src/lib/display-name-error.ts:1` | A name containing a NUL character gets the "too long" message on the client (the rule distinguishes only empty from not empty); the API rejects it correctly | Accepted: UX only, reachable only by pasting a NUL |
 | I-2 | Info | `apps/web/src/features/auth/form-errors.ts:1` | `toValidationErrors(error, submitted = {}, codeError)` takes two optional positional parameters, so three callers pass `{}`; a caller that forgets the submitted values would show the "required" message for an over-long name | Accepted: the compiler rejects the old argument order and only the registration screen maps this field; an options object is a possible cleanup |
 | I-3 | Info | `apps/api/test/fixtures/fake-google-oidc.ts:1` | The fake always lists `profile` in the approve redirect and token response scope even when the authorization did not request it; only the ID-token claim honors the requested scope | Accepted: test fixture only |
+
+## Corrective round after merging main
+
+Merging DISC-001-02a (PR #13) showed that its Playwright accounts specs registered users without the now required display name. The only change of the round is one line of `apps/web/e2e/accounts.spec.ts` (the `signedInUser` helper fills the display name); no production code changed, so the findings above are unchanged.
 
 ## Summary
 

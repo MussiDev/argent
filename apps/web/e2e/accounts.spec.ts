@@ -24,6 +24,7 @@ function uniqueEmail(label: string): string {
 async function signedInUser(page: Page, label: string): Promise<string> {
   const email = uniqueEmail(label);
   await page.goto('/es/register');
+  await page.getByLabel(es.auth.fields.displayName).fill('Ana Pérez');
   await page.getByLabel(es.auth.fields.email).fill(email);
   await page.getByLabel(es.auth.fields.password).fill(PASSWORD);
   await page.getByRole('button', { name: es.auth.register.submit }).click();

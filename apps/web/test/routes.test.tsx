@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import AccountsPage from '../src/app/[locale]/(app)/accounts/page';
 import NewAccountPage from '../src/app/[locale]/(app)/accounts/new/page';
 import CategoriesPage from '../src/app/[locale]/(app)/categories/page';
+import NewMovementPage from '../src/app/[locale]/(app)/movements/new/page';
 import AppLayout from '../src/app/[locale]/(app)/layout';
 import HomePage from '../src/app/[locale]/(app)/page';
 import CheckYourEmailPage from '../src/app/[locale]/(auth)/check-your-email/page';
@@ -133,6 +134,56 @@ describe('routes', () => {
       await screen.findByRole('heading', { level: 1, name: es.accounts.new.title }),
     ).toBeDefined();
     expect(screen.getByLabelText(es.accounts.fields.name)).toBeDefined();
+  });
+
+  it('the new movement form is only shown behind the session guard', async () => {
+    stubApi({
+      'GET /auth/session': SESSION,
+      'GET /profile': {
+        status: 200,
+        body: {
+          displayName: 'Ana',
+          email: 'ana@example.com',
+          twoFactorEnabled: false,
+          deletionReauth: 'password',
+          preferences: {
+            defaultRateType: 'blue',
+            displayCurrency: 'ARS',
+            timeZone: 'UTC',
+            language: 'es',
+          },
+        },
+      },
+      'GET /accounts?archived=false&limit=100': {
+        status: 200,
+        body: {
+          items: [],
+          availableTotals: { ARS: '0', USD: '0' },
+          netWorthTotals: { ARS: '0', USD: '0' },
+          debtTotals: { ARS: '0', USD: '0' },
+          creditCardCount: 0,
+          total: 0,
+          limit: 100,
+          offset: 0,
+        },
+      },
+      'GET /categories?archived=false&limit=100': {
+        status: 200,
+        body: { items: [], total: 0, limit: 100, offset: 0 },
+      },
+      'GET /exchange-rates/latest': { status: 200, body: { rates: [] } },
+    });
+    renderApp(
+      <AppLayout>
+        <NewMovementPage />
+      </AppLayout>,
+    );
+
+    expect(screen.queryByRole('heading', { name: es.movements.new.title })).toBeNull();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: es.movements.new.title }),
+    ).toBeDefined();
+    expect(screen.getByLabelText(es.movements.fields.amount)).toBeDefined();
   });
 
   it('renders both accounts screens in English', async () => {

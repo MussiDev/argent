@@ -6,6 +6,9 @@ import {
   listCategoriesResponseSchema,
   addHoldingResponseSchema,
   holdingResponseSchema,
+  latestRatesResponseSchema,
+  listMovementsResponseSchema,
+  movementResponseSchema,
   portfolioListResponseSchema,
   portfolioResponseSchema,
   passwordResetConfirmResponseSchema,
@@ -25,6 +28,11 @@ import {
   type AccountResponse,
   type CategoryResponse,
   type createAccountRequestSchema,
+  type createMovementRequestSchema,
+  type LatestRatesResponse,
+  type ListMovementsQuery,
+  type ListMovementsResponse,
+  type MovementResponse,
   type CreateCategoryRequest,
   type DeleteUserRequest,
   type ErrorCode,
@@ -108,6 +116,8 @@ export interface ApiFailure {
   messageKey: ApiErrorKey;
   /** Names of the invalid request fields, present only when the API sent them. */
   fields?: string[];
+  /** Whole seconds to wait, read from the `Retry-After` header; absent when it was missing or unusable. */
+  retryAfterSeconds?: number;
 }
 
 export type ApiResult<T> = { ok: true; data: T } | ApiFailure;
@@ -190,6 +200,19 @@ export type ListCategoriesParams = Partial<
   Pick<ListCategoriesQuery, 'kind' | 'archived' | 'limit' | 'offset'>
 >;
 
+/** What the entry screen sends to create a movement: the body of `POST /movements`. */
+export type CreateMovementInput = z.input<typeof createMovementRequestSchema>;
+
+export type ListMovementsParams = Partial<Pick<ListMovementsQuery, 'limit' | 'offset'>>;
+
+/** Only a positive whole number of seconds is a usable wait; HTTP dates and junk are ignored. */
+function readRetryAfterSeconds(response: Response): number | undefined {
+  const header = response.headers.get('Retry-After');
+  if (header === null || !/^\d{1,9}$/.test(header)) return undefined;
+  const seconds = Number.parseInt(header, 10);
+  return seconds > 0 ? seconds : undefined;
+}
+
 export interface ApiClientOptions {
   /** The API origin, e.g. `https://api.argent.app`. */
   baseUrl: string;
@@ -252,6 +275,10 @@ export interface ApiClient {
   updateHolding(holdingId: string, body: UpdateHoldingRequest): Promise<ApiResult<HoldingResponse>>;
   setHoldingPrice(holdingId: string, body: SetPriceRequest): Promise<ApiResult<HoldingResponse>>;
   deleteHolding(holdingId: string): Promise<ApiResult<undefined>>;
+  createMovement(body: CreateMovementInput): Promise<ApiResult<MovementResponse>>;
+  listMovements(query: ListMovementsParams): Promise<ApiResult<ListMovementsResponse>>;
+  /** The stored rates only: the API never reaches the external source for this call. */
+  getLatestRates(): Promise<ApiResult<LatestRatesResponse>>;
 }
 
 /**
@@ -293,8 +320,13 @@ export function createApiClient({
     if (!response.ok) {
       const parsed = errorResponseSchema.safeParse(payload);
       if (!parsed.success) return failure('INTERNAL');
-      const failed = failure(parsed.data.code);
-      return parsed.data.fields ? { ...failed, fields: parsed.data.fields } : failed;
+      const retryAfterSeconds = readRetryAfterSeconds(response);
+      const failed: ApiFailure = {
+        ...failure(parsed.data.code),
+        ...(parsed.data.fields ? { fields: parsed.data.fields } : {}),
+        ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+      };
+      return failed;
     }
     if (options.response === null) return { ok: true, data: undefined as T };
     const parsed = options.response.safeParse(payload);
@@ -666,6 +698,33 @@ export function createApiClient({
         method: 'DELETE',
         path: `/investments/holdings/${encodeURIComponent(holdingId)}`,
         response: null,
+        refreshOnUnauthenticated: true,
+      }),
+    createMovement: (body) =>
+      request({
+        method: 'POST',
+        path: '/movements',
+        body,
+        response: movementResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    listMovements: ({ limit, offset }) => {
+      const query = new URLSearchParams();
+      if (limit !== undefined) query.set('limit', String(limit));
+      if (offset !== undefined) query.set('offset', String(offset));
+      const queryString = query.toString();
+      return request({
+        method: 'GET',
+        path: queryString ? `/movements?${queryString}` : '/movements',
+        response: listMovementsResponseSchema,
+        refreshOnUnauthenticated: true,
+      });
+    },
+    getLatestRates: () =>
+      request({
+        method: 'GET',
+        path: '/exchange-rates/latest',
+        response: latestRatesResponseSchema,
         refreshOnUnauthenticated: true,
       }),
   };

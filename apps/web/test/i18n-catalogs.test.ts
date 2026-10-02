@@ -179,3 +179,67 @@ describe('product name in the web catalogs (FEAT-002)', () => {
     ]);
   });
 });
+
+describe('movements catalog (DISC-001-03b)', () => {
+  it.each(LOCALES)('has a message for each of the four new error codes in %s', (locale) => {
+    const catalog = loadCatalog(locale);
+
+    for (const key of [
+      'movementDateInFuture',
+      'rateRequired',
+      'movementCategoryKindMismatch',
+      'categoryArchived',
+    ]) {
+      expect(readString(catalog, `errors.${key}`)?.length).toBeGreaterThan(0);
+    }
+  });
+
+  it.each(LOCALES)(
+    'has a movement-specific archived-account message that does not reuse the account one in %s',
+    (locale) => {
+      const catalog = loadCatalog(locale);
+      const own = readString(catalog, 'movements.errors.accountArchived');
+
+      expect(own?.length).toBeGreaterThan(0);
+      expect(own).not.toBe(readString(catalog, 'errors.accountArchived'));
+    },
+  );
+
+  it.each(LOCALES)('has the entry screen strings in %s', (locale) => {
+    const catalog = loadCatalog(locale);
+
+    for (const key of [
+      'movements.new.title',
+      'movements.fields.amount',
+      'movements.fields.occurredAt',
+      'movements.fields.rate',
+      'movements.rate.age',
+      'movements.errors.amountNotPositive',
+      'movements.errors.rateLimited',
+      'movements.saved.rate',
+    ]) {
+      expect(readString(catalog, key)?.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('maps every error code the API sends to a message that exists in both catalogs', async () => {
+    const { ERROR_CODES } = await import('@pesly/shared');
+    const { createApiClient } = await import('../src/lib/api-client');
+    const keys = new Set<string>();
+    for (const code of ERROR_CODES) {
+      const client = createApiClient({
+        baseUrl: 'http://api.argent.test',
+        fetch: () => Promise.resolve(new Response(JSON.stringify({ code }), { status: 400 })),
+      });
+      const result = await client.listMovements({});
+      if (!result.ok) keys.add(result.messageKey);
+    }
+
+    for (const locale of LOCALES) {
+      const catalog = loadCatalog(locale);
+      expect([...keys].filter((key) => readString(catalog, `errors.${key}`) === undefined)).toEqual(
+        [],
+      );
+    }
+  });
+});

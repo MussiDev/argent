@@ -127,3 +127,19 @@ No production code changes in this block: Blocks 4 and 5 already satisfy every t
 Perf (threshold p95 under 300 ms, 500 requests, 20 warm-up, 8 connections): accounts list 37.5 ms, saving a movement 80.2 ms.
 
 Review: verifier PASS, auditor no blockers. Fixed after review: the shared fixture `newCategory` used an icon outside the public palette (now `wallet`), a vacuous assertion removed. Advisories left: the harness does not pass the identity hooks (`seedDefaultCategories`, `beforeUserErased`) so the router list is duplicated by hand across `server.ts`, the harness and the perf test; perf helpers duplicated across perf files; fixed emails in perf seeds.
+
+## Block 8 — Web client and the entry screen (103 new tests)
+
+| Test file | Tests | Red result |
+|---|---|---|
+| `apps/web/test/api-client-movements.test.ts` | 20 | 20 of 20 failed: `client.createMovement is not a function` (and the same for `listMovements`, `getLatestRates`) |
+| `apps/web/test/i18n-catalogs.test.ts` | 7 new | 7 of 7 new failed: `actual value must be number or bigint, received undefined` (keys missing); the 30 existing passed |
+| `apps/web/test/movements-components.test.tsx` | 25 | load failure: `Failed to resolve import ../src/features/movements/format-rate` |
+| `apps/web/test/movements-containers.test.tsx` | 50 | load failure: `Failed to resolve import ../src/features/movements/containers/create-movement-container` |
+| `apps/web/test/routes.test.tsx` | 1 new | load failure: `Failed to resolve import .../movements/new/page` (the 17 existing could not run) |
+
+Deviations from the spec's file list (accepted by the verifier): client tests live in a new file `api-client-movements.test.ts`; two extra presentational files `movement-field.tsx` and `movement-saved.tsx`; the container reuses `AccountsLoadStateView`. After saving, the screen shows the frozen rate and a link to the list instead of navigating by itself.
+
+Review: verifier PASS, auditor no blockers. Added after review: a `pending` guard against double submit. Advisories left: duplicated field wrapper and focus hook (accounts, categories, movements), no idempotency key (a lost response followed by a retry could create a duplicate; to confirm as an accepted limitation), validation logic could move out of the container, no container test for the repeated DST hour.
+
+After: 8 web test files, 320 tests green in the narrow run; typecheck and eslint clean.

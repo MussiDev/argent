@@ -115,7 +115,7 @@ Risk identifiers are local to this ticket (R-01 to R-12).
 | ID | Risk | STRIDE | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|---|
 | R-01 | The provider URL is changed or redirected so the worker talks to another host | S | L | H | In production `DOLARAPI_BASE_URL` must equal `https://dolarapi.com` or startup fails; redirects are never followed; requests carry no secret |
-| R-02 | The provider (or a man in the middle) answers plausible but wrong rates | T | L | H | HTTPS to a pinned host, hard bounds of 1..10,000,000, a complete set of 7 or nothing, both timestamps returned so callers can judge age, and the rate on a movement is shown and editable before it is saved (DISC-001-03b FR-05); a jump guard against the previous value is not in the PRD and is raised as an open question instead of being invented |
+| R-02 | The provider (or a man in the middle) answers plausible but wrong rates | T | L | H | HTTPS to a pinned host, hard bounds of 1..10,000,000, a complete set of 7 or nothing, both timestamps returned so callers can judge age, and the rate on a movement is shown and editable before it is saved (DISC-001-03b FR-05); no jump guard against the previous value: the residual risk is accepted, see Accepted risks below |
 | R-03 | An oversized or slow answer ties up the worker | D | M | M | 10-second timeout, 64 KiB body cap read with a limit, JSON content-type check, redirects never followed |
 | R-04 | A rate loses precision or overflows through a float | T | M | H | JSON number source text goes to a bigint parser (no `Number`), bigint columns with range checks, a static no-float test and a schema-introspection test |
 | R-05 | Several workers or a restart refresh at the same time and hit the provider more than needed | D | M | L | Atomic one-statement claim with a 5-minute lease in `exchange_rate_sync`; a test with two concurrent jobs asserts one provider call |
@@ -126,6 +126,12 @@ Risk identifiers are local to this ticket (R-01 to R-12).
 | R-10 | A refresh failure goes unnoticed | R | M | M | Each failure writes a record and a log line with code and status; `consecutive_failures` is kept on the schedule row |
 | R-11 | The fake provider is active in production | S | L | H | `RATE_PROVIDER=fake` is rejected when `NODE_ENV=production`, tested in the environment tests |
 | R-12 | Rates are read without a session | S | L | L | `requireSession` and `requireVerifiedEmail` on the prefix; AC-04 test asserts 401 and an empty body |
+
+## Accepted risks
+### R-02
+- **Accepted by:** project owner (human decision relayed by the orchestrator, 2026-10-02)
+- **Justification:** a wrong but in-range rate from the provider is possible, and a guard that rejects large jumps would also freeze real devaluation moves for hours; the rate is shown and editable on every movement before it is saved (DISC-001-03b FR-05), the provider is reached only over HTTPS at a pinned host, and every refresh must return a complete, bounded set of 7 quotes.
+- **Review conditions:** revisited if the provider is replaced or a second one is added, if a wrong rate is ever observed in production, or when rates start feeding automatic conversions that the user does not review (DISC-001-03e edits and PRDs 05, 06 and 07).
 
 ## Supply chain
 No new dependency: the adapter uses the global `fetch` of Node 24, the job uses timers from the platform, and persistence uses the already-installed `drizzle-orm` and `pg`. The only third party is the dolarapi.com service, which sits behind a single `RateProvider` port with one adapter and a fake, so it can be replaced without touching the use cases or the movements that will read the stored rates. Tests never reach it: they use the fake, a recorded fixture and a local stub server.

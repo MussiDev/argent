@@ -17,7 +17,7 @@
   ⚠️ W-SPEC-02: large block, consider splitting: Block 2 (Domain, ports and use cases) (11 files, 493 words), Block 3 (Persistence: tables, migration 0012, repositories) (11 files, 1073 words), Block 4 (Provider adapters: dolarapi and the fake) (5 files, 582 words), Block 5 (Sync job, worker wiring and environment) (10 files, 780 words)
   👁  F-SPEC-12 (contradicts the PRD) and F-SPEC-13 (terminology diverging from
       the PRD) are MANUAL: judge them and say so explicitly in your report.
-  ✅ F-SPEC-LOOP: 1 loop(s) since a human decided, under the ceiling of 3; 1 in total for this document
+  ✅ F-SPEC-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 2 in total for this document
 ────────────────────────────────────────────────────────────────
 Total: 13 passed, 0 failed, 1 warnings
 Result: PASSED

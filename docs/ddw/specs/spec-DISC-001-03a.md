@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-03a.md |
 | Tier | FEATURE |
 | Date | 2026-10-02 |
-| Spec loops | 1 |
-| Loops since last human decision | 1 |
+| Spec loops | 2 |
+| Loops since last human decision | 0 |
 
 ## Summary
 A new module `apps/api/src/exchange-rates/` (hexagonal, mirroring `accounts`) keeps one current row per
@@ -47,13 +47,16 @@ Decisions taken in this spec (none changes a PRD requirement):
   tarjeta.
 - **D5, schedule.** A success schedules the next refresh 60 minutes later (NFR-02). A failure schedules a
   retry 5 minutes later so one blip does not leave rates stale for 2 hours; the 5-minute value is a design
-  constant, not a requirement. A claim is a lease of 5 minutes, so a worker that dies mid-refresh is retried
+  constant, not a requirement (confirmed by the human on 2026-10-02). A claim is a lease of 5 minutes, so a worker that dies mid-refresh is retried
   after the lease. `claim` returns the lease expiry it wrote, and `succeeded` and `failed` update the schedule only while
   `next_attempt_at` still equals that value, so a worker whose lease was taken over cannot overwrite the new owner's schedule. Times
   come from the worker's injected clock, not the database's, as the email outbox does; a few seconds of skew only moves a refresh.
 - **D6, no user data.** The three tables hold market data and operational records, have no foreign key to
   `users`, and are not reachable from `users`, so the erasure guard of DISC-001-01f needs no registry entry.
 - **D7, no new runtime dependency.** The adapter uses the global `fetch` of Node 24.
+
+Human decisions of 2026-10-02 (relayed by the orchestrator) folded in: no jump guard on refreshed rates (threat R-02 accepted by the
+project owner); the 5-minute failure retry is confirmed; FR-03, AC-04 and AC-05 are accepted as part of this ticket.
 
 ## Coverage: PRD → blocks
 | Requirement | Covered by |

@@ -5,7 +5,7 @@
 | Ticket | DISC-001-02b |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 1 |
+| PRD loops | 2 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -21,7 +21,8 @@ ID to its new one.
 - Keep the history intact: nothing that has movements can disappear.
 
 ## Functional Requirements
-- FR-01: The system must create the default category set (see Appendix A) for every new user.
+- FR-01: The system must create the default category set (see Appendix A) for every user at the
+  moment the user's account is created, whether by email and password or by Google sign-up.
 - FR-02: The system must allow a user to create a category with a name, a kind (expense or
   income), an icon, a color and an optional parent category.
 - FR-03: The system must allow a category to have a parent only if that parent has no parent
@@ -42,6 +43,10 @@ ID to its new one.
   the interface language.
 - FR-12: The system must treat a default category as the user's own once the user renames it: the
   new name is kept whatever the interface language and the category is no longer translated.
+- FR-13: The system must create the default category set, once, for every user that already exists
+  when this feature is released, through a data migration that adds nothing for a user who already
+  has the set and changes or deletes no other data.
+- FR-14: The system must not recreate a default category that the user has deleted.
 
 ## Non-Functional Requirements
 - NFR-01: The category list endpoint must be paginated with a maximum page size of 100 items.
@@ -50,8 +55,8 @@ ID to its new one.
 - NFR-03: Category names must be between 1 and 50 characters.
 
 ## Acceptance Criteria
-- AC-01 (FR-01): WHEN a new user account is created, THE system SHALL create for that user
-  exactly the categories and subcategories listed in Appendix A.
+- AC-01 (FR-01): WHEN a user registers with email and password, THE system SHALL create for that
+  user exactly the categories and subcategories listed in Appendix A.
 - AC-02 (FR-02): WHEN a user submits a new category with a valid name, kind, icon and color, THE
   system SHALL create it and offer it when recording a movement of that kind.
 - AC-03 (FR-03): IF a user sets as parent a category that already has a parent, THEN THE system
@@ -86,6 +91,17 @@ ID to its new one.
   THE system SHALL keep showing the name the user chose.
 - AC-17 (FR-12): WHILE a default category has not been renamed by the user, THE system SHALL keep
   translating it when the interface language changes.
+- AC-18 (FR-01): WHEN a user is created through Google sign-up, THE system SHALL create for that
+  user exactly the categories and subcategories listed in Appendix A.
+- AC-19 (FR-01): IF creating the default categories fails while a user account is being created,
+  THEN THE system SHALL NOT create the account.
+- AC-20 (FR-13): WHEN the data migration runs on a database that has users without default
+  categories, THE system SHALL create exactly the categories and subcategories listed in Appendix A
+  for each of them and SHALL leave every other row unchanged.
+- AC-21 (FR-13): WHEN the data migration runs again, or runs for a user who already has the default
+  set, THE system SHALL create no duplicate category.
+- AC-22 (FR-14): WHILE a user has deleted a default category, THE system SHALL NOT recreate it, not
+  after a repeated migration run, another sign-in or any later request.
 
 ## Out of Scope
 - Recording movements (PRD 03).
@@ -103,7 +119,8 @@ ID to its new one.
 
 ## Dependencies
 - PRD 01 (Identity & Access) — user ownership and access control (NFR-02, FR-01, FR-10), and the
-  user's interface language preference (FR-11, FR-12), delivered by DISC-001-01d.
+  user's interface language preference (FR-11, FR-12), delivered by DISC-001-01d, and the account
+  creation paths (email and password registration, Google sign-up) that create the defaults (FR-01).
 - PRD 03 (Movements & Exchange Rates) — movements that use categories (FR-08).
 - PRD 05 (Groups & Expense Splitting) — categories used in groups (Out of Scope).
 
@@ -119,6 +136,18 @@ ID to its new one.
   becomes the user's own and is no longer translated, while untouched defaults keep translating.
   This replaces the earlier wording "in the language at the moment the user is created" (FR-11,
   FR-12, AC-14 to AC-17).
+- 2026-10-01: Human decisions on the PLAN open questions: (D1, changed) default categories are
+  created AT ACCOUNT CREATION, for email and password registration and for Google sign-up, in the
+  same transaction as the user, and users who already exist get them through an idempotent,
+  non-destructive data migration that respects a per-owner marker, so deleted defaults are never
+  recreated (FR-01, FR-13, FR-14, AC-01, AC-18 to AC-22); (D2) a custom name equal to any language's
+  name of an untouched sibling default is refused with 409; (D3) icon and color are keys from fixed
+  lists with a proposed value per default; (D4) only a name change makes a default the user's own;
+  (D5) creating a subcategory under an archived parent is allowed; (D6) the list defaults to 100
+  items, the web pages through it, and the archived filter means only active or only archived;
+  (D7) names are unique among archived siblings too, unarchiving a parent does not unarchive its
+  subcategories, archive and unarchive are idempotent; (D8) the AGENTS.md exception for default
+  category names in `packages/shared` is approved.
 - 2026-10-01: Parent PRD split into DISC-001-02a (accounts) and DISC-001-02b (categories) by user
   decision.
 

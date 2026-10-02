@@ -26,6 +26,8 @@ const ALL_TABLES = [
   'exchange_rate_sync',
   'exchange_rates',
   'holdings',
+  'movement_rate_limits',
+  'movements',
   'oauth_states',
   'one_time_tokens',
   'portfolios',

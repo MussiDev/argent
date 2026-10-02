@@ -47,3 +47,25 @@ never calls `release`; when the window rolls over while the creation fails, `rel
 
 After: 31/31 in the three files; with the shared suite 96/96. `pnpm typecheck` clean.
 
+## Block 3 — Persistence: relations, migration 0014 and the repository (33 new tests plus 5 in `migration.test.ts`)
+
+| Test file | Tests | Red result |
+|---|---|---|
+| `apps/api/test/movements/movement-repository.test.ts` | 25 | headline only: the suite failed to load, `Cannot find module '../../src/movements/infrastructure/db/drizzle-movement-repository'`, so none of its tests ran |
+| `apps/api/test/movements/schema-introspection.test.ts` | 9 | 7 of 9 failed, for example `has both tables: expected [] to deeply equal ['movement_rate_limits', 'movements']` and `unique constraint: expected [] to have a length of 1`; the two that passed (no float column, no key to `exchange_rates`) were vacuously true on an empty set, and the first test guards them |
+| `apps/api/test/identity/migration.test.ts` | 5 new, the rest adjusted | with the 0014 journal entry removed, 33 tests failed, for example `expected 13 to be 14` and `expected [... 17 tables] to deeply equal [... 19]`; the journal was restored afterwards |
+| `apps/api/test/deploy/build-output.test.ts` | table list extended | not shown failing first: it was edited and run together (it compares the list after migrating) |
+
+Round 2 (review fixes), per-test red evidence:
+
+| Test | Red result |
+|---|---|
+| the list query can use `movements_owner_date_idx` for its ordering with no sort step (30 seeded rows, `analyze`, `explain` with `enable_seqscan` and `enable_sort` off) | `expected 'Limit (cost=10000000013.31..…' not to match /Sort/`: the plan was `Sort (Sort Key: occurred_at DESC, id DESC)` over an index scan, because the repository's `desc()` ordered `NULLS FIRST` while the index is `NULLS LAST` |
+| the insert ignores a smuggled id, owner and timestamps | `expected '11111111-1111-4111-8111-111111111111' not to be '11111111-1111-4111-8111-111111111111'` (the smuggled id was stored, because the insert spread its input) |
+
+The first draft of the index test had a regular expression that silently contained backspace characters, so it passed against the old ordering; it was corrected and the red result above is from the corrected test.
+
+Migration generation: the journal `when` is 1790966184307 (generated, greater than 0013's 1790962588595); the 0014 snapshot `prevId` equals 0013's snapshot id; `drizzle-kit check` is clean; a second `drizzle-kit generate` reported no schema changes. The one hand edit is the position of the `accounts_id_owner_unique` statement before the composite keys (drizzle-kit emitted it after them), documented in the SQL header.
+
+After: 432/432 in 14 files (movements, migration, build-output, accounts, categories); typecheck clean.
+

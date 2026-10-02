@@ -15,6 +15,7 @@
       "security": "Seguridad",
       "profile": "Perfil",
       "categories": "Categorías",
+      "movements": "Movimientos",
       "investments": "Inversiones"
     }
   },
@@ -131,6 +132,10 @@
     "categoryNestingTooDeep": "Las subcategorías no pueden tener subcategorías.",
     "categoryParentKindMismatch": "Una subcategoría debe ser del mismo tipo que su categoría principal.",
     "accountArchived": "Esta cuenta está archivada, por eso no se puede cambiar esta opción. Desarchívala primero.",
+    "movementDateInFuture": "La fecha no puede ser posterior a hoy.",
+    "rateRequired": "Ingresa la cotización: no hay una guardada para usar.",
+    "movementCategoryKindMismatch": "Esta categoría no coincide con el tipo de movimiento. Elige otra.",
+    "categoryArchived": "Esta categoría está archivada, por eso no se puede usar. Desarchívala primero.",
     "totpCodeFormat": "Ingresa los 6 dígitos del código.",
     "secondFactorCodeFormat": "Ingresa un código de 6 dígitos o un código de recuperación."
   },
@@ -203,6 +208,67 @@
       "currencyRequired": "Elige una moneda.",
       "amountInvalid": "Ingresa un monto válido, por ejemplo 1.500,00.",
       "amountOutOfRange": "El saldo inicial no puede superar {max} en valor absoluto."
+    }
+  },
+  "movements": {
+    "title": "Movimientos",
+    "list": {
+      "newMovement": "Nuevo movimiento",
+      "empty": "Todavía no tienes movimientos.",
+      "showMore": "Ver más",
+      "rate": "Cotización: {rate} ARS por USD",
+      "unknownAccount": "Cuenta desconocida",
+      "unknownCategory": "Categoría desconocida"
+    },
+    "new": {
+      "title": "Nuevo movimiento",
+      "description": "Registra un gasto o un ingreso."
+    },
+    "fields": {
+      "type": "Tipo",
+      "account": "Cuenta",
+      "accountPlaceholder": "Elige una cuenta",
+      "category": "Categoría",
+      "categoryPlaceholder": "Elige una categoría",
+      "amount": "Monto",
+      "occurredAt": "Fecha y hora",
+      "rate": "Cotización (ARS por USD)",
+      "note": "Nota (opcional)"
+    },
+    "types": {
+      "expense": "Gasto",
+      "income": "Ingreso"
+    },
+    "rate": {
+      "automatic": "Cotización {rateType} guardada. Edítala para usar la tuya.",
+      "missing": "No hay una cotización guardada. Ingresa los ARS por USD de este movimiento.",
+      "age": "Cotización de hace {hours} h"
+    },
+    "form": {
+      "submit": "Guardar movimiento",
+      "pending": "Guardando…",
+      "back": "Volver a movimientos"
+    },
+    "saved": {
+      "title": "Movimiento guardado",
+      "rate": "Cotización usada: {rate} ARS por USD",
+      "back": "Volver a movimientos"
+    },
+    "errors": {
+      "accountRequired": "Elige una cuenta.",
+      "categoryRequired": "Elige una categoría.",
+      "amountInvalid": "Ingresa un monto válido, por ejemplo 1.500,00.",
+      "amountNotPositive": "El monto debe ser mayor que 0",
+      "amountOutOfRange": "El monto es demasiado grande.",
+      "dateInvalid": "Ingresa una fecha y hora válidas.",
+      "dateSkipped": "Esa hora local no existe ese día por el cambio de horario. Elige otra hora.",
+      "rateInvalid": "Ingresa una cotización mayor que 0 con hasta 4 decimales, por ejemplo 1250,50.",
+      "rateRequired": "Ingresa la cotización.",
+      "noteTooLong": "La nota puede tener como máximo {max} caracteres.",
+      "noteInvalidCharacters": "La nota contiene caracteres que no se pueden mostrar. Quítalos e inténtalo de nuevo.",
+      "accountArchived": "Esta cuenta está archivada. Desarchívala antes de registrar movimientos en ella.",
+      "rateLimited": "Estás guardando movimientos demasiado rápido. Inténtalo de nuevo en {seconds} s.",
+      "rateLimitedGeneric": "Estás guardando movimientos demasiado rápido. Inténtalo de nuevo en un momento."
     }
   },
   "categories": {

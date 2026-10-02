@@ -69,6 +69,7 @@ import { DrizzleUserRepository } from './infrastructure/db/drizzle-user-reposito
 import { PostgresAttemptLimiter } from './infrastructure/db/postgres-attempt-limiter';
 import type { IdentityDb } from './infrastructure/db/schema';
 import type { UserCreatedHook } from './infrastructure/db/user-created-hook';
+import type { UserErasureStep } from './infrastructure/db/user-erasure-step';
 import type { EmailTransport } from './infrastructure/email/email-transport';
 import { EmailWorker } from './infrastructure/email/email-worker';
 import { OutboxEmailSender } from './infrastructure/email/outbox-email-sender';
@@ -130,6 +131,7 @@ export * from './application/ports/user-identity-repository';
 export * from './application/ports/user-repository';
 export type { IdentityDb } from './infrastructure/db/schema';
 export type { UserCreatedHook } from './infrastructure/db/user-created-hook';
+export type { UserErasureStep } from './infrastructure/db/user-erasure-step';
 export { systemClock } from './infrastructure/system-clock';
 export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
 export { createEmailTransport } from './infrastructure/email/email-transport';
@@ -147,6 +149,11 @@ export interface IdentityInfrastructureDependencies {
    * so other modules can provision a new account; a rejection rolls the creation back.
    */
   onUserCreated?: readonly UserCreatedHook[];
+  /**
+   * Run, in order, inside the transaction that erases a user, before the user row is deleted, so
+   * other modules can delete rows whose keys restrict; a rejection rolls the erasure back.
+   */
+  beforeUserErased?: readonly UserErasureStep[];
 }
 
 export interface IdentityInfrastructure {
@@ -185,6 +192,7 @@ export function createIdentityInfrastructure({
   logger,
   clock = systemClock,
   onUserCreated,
+  beforeUserErased,
 }: IdentityInfrastructureDependencies): IdentityInfrastructure {
   const attemptLimiter = new PostgresAttemptLimiter(db, clock);
   const oauthStates = new DrizzleOAuthStateRepository(db);
@@ -215,7 +223,7 @@ export function createIdentityInfrastructure({
     signInChallengePurger: signInChallenges,
     deletionGrants,
     deletionGrantPurger: deletionGrants,
-    userDeletion: new DrizzleUserDeletionRepository(db),
+    userDeletion: new DrizzleUserDeletionRepository(db, beforeUserErased),
     totp: new RfcTotpEngine(),
     secretBox: env.TOTP_ENCRYPTION_KEY
       ? new AesGcmSecretBox(env.TOTP_ENCRYPTION_KEY)

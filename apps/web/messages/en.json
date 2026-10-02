@@ -15,6 +15,7 @@
       "security": "Security",
       "profile": "Profile",
       "categories": "Categories",
+      "movements": "Movements",
       "investments": "Investments"
     }
   },
@@ -131,6 +132,10 @@
     "categoryNestingTooDeep": "Subcategories cannot have subcategories.",
     "categoryParentKindMismatch": "A subcategory must have the same kind as its parent.",
     "accountArchived": "This account is archived, so this setting cannot be changed. Unarchive it first.",
+    "movementDateInFuture": "The date cannot be later than today.",
+    "rateRequired": "Enter the exchange rate: there is no stored rate to use.",
+    "movementCategoryKindMismatch": "This category does not match the movement type. Choose another one.",
+    "categoryArchived": "This category is archived, so it cannot be used. Unarchive it first.",
     "totpCodeFormat": "Enter the 6 digits of the code.",
     "secondFactorCodeFormat": "Enter a 6-digit code or a recovery code."
   },
@@ -203,6 +208,67 @@
       "currencyRequired": "Choose a currency.",
       "amountInvalid": "Enter a valid amount, for example 1,500.00.",
       "amountOutOfRange": "The opening balance cannot exceed {max} in absolute value."
+    }
+  },
+  "movements": {
+    "title": "Movements",
+    "list": {
+      "newMovement": "New movement",
+      "empty": "You have no movements yet.",
+      "showMore": "Show more",
+      "rate": "Rate: {rate} ARS per USD",
+      "unknownAccount": "Unknown account",
+      "unknownCategory": "Unknown category"
+    },
+    "new": {
+      "title": "New movement",
+      "description": "Record an expense or an income."
+    },
+    "fields": {
+      "type": "Type",
+      "account": "Account",
+      "accountPlaceholder": "Choose an account",
+      "category": "Category",
+      "categoryPlaceholder": "Choose a category",
+      "amount": "Amount",
+      "occurredAt": "Date and time",
+      "rate": "Exchange rate (ARS per USD)",
+      "note": "Note (optional)"
+    },
+    "types": {
+      "expense": "Expense",
+      "income": "Income"
+    },
+    "rate": {
+      "automatic": "Stored {rateType} rate. Edit it to use your own.",
+      "missing": "There is no stored rate. Enter the ARS per USD rate for this movement.",
+      "age": "Rate from {hours} h ago"
+    },
+    "form": {
+      "submit": "Save movement",
+      "pending": "Saving…",
+      "back": "Back to movements"
+    },
+    "saved": {
+      "title": "Movement saved",
+      "rate": "Rate used: {rate} ARS per USD",
+      "back": "Back to movements"
+    },
+    "errors": {
+      "accountRequired": "Choose an account.",
+      "categoryRequired": "Choose a category.",
+      "amountInvalid": "Enter a valid amount, for example 1,500.00.",
+      "amountNotPositive": "Amount must be greater than 0",
+      "amountOutOfRange": "The amount is too large.",
+      "dateInvalid": "Enter a valid date and time.",
+      "dateSkipped": "That local time does not exist on that day because of the clock change. Choose another time.",
+      "rateInvalid": "Enter a rate greater than 0 with up to 4 decimals, for example 1,250.50.",
+      "rateRequired": "Enter the exchange rate.",
+      "noteTooLong": "The note can be at most {max} characters long.",
+      "noteInvalidCharacters": "The note contains characters that cannot be shown. Remove them and try again.",
+      "accountArchived": "This account is archived. Unarchive it before recording movements on it.",
+      "rateLimited": "You are saving movements too fast. Try again in {seconds} s.",
+      "rateLimitedGeneric": "You are saving movements too fast. Try again in a moment."
     }
   },
   "categories": {

@@ -29,7 +29,8 @@ export interface ApiCall {
   body: unknown;
 }
 
-type Answer = { status: number; body?: unknown } | 'network-error';
+type Answer =
+  { status: number; body?: unknown; headers?: Record<string, string> } | 'network-error';
 
 /**
  * Stubs `fetch` with fixed answers per `METHOD /path`, so the real API client (and its schemas)
@@ -56,7 +57,7 @@ export function stubApi(routes: Record<string, Answer | Answer[]>) {
     return Promise.resolve(
       new Response(answer.body === undefined ? null : JSON.stringify(answer.body), {
         status: answer.status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...answer.headers },
       }),
     );
   });

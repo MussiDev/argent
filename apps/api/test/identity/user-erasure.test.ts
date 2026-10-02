@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DrizzleDeletionGrantRepository } from '../../src/identity/infrastructure/db/drizzle-deletion-grant-repository';
 import { DrizzleOAuthStateRepository } from '../../src/identity/infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleSessionRepository } from '../../src/identity/infrastructure/db/drizzle-session-repository';
+import { eraseUserMovements } from '../../src/movements';
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
 import { createIdentityHarness, type IdentityHarness } from '../helpers/identity-harness';
 import {
@@ -45,19 +46,29 @@ interface SeedContext {
 }
 
 /**
- * `cascade`: the rows go with the user through `ON DELETE CASCADE`. A module that needs another
- * action (restrict, anonymize) adds a policy here and an erasure step in its own ticket.
+ * `cascade`: the rows go with the user through `ON DELETE CASCADE`.
+ * `erase-step`: the module deletes the rows in an ordered step that runs before the user is
+ * deleted, because its keys to other tables restrict; only the constraints named on the entry may
+ * be non-cascading. A module that needs another action adds a policy here and a step in its ticket.
  */
-type ErasurePolicy = 'cascade';
+type ErasurePolicy = 'cascade' | 'erase-step';
 
 interface RegisteredTable {
   table: string;
   /** The column that holds the owner's user id. */
   userColumn: string;
   policy: ErasurePolicy;
+  /** For `erase-step`: the constraints of this table that may be non-cascading. */
+  stepConstraints?: readonly string[];
   /** Creates one real row for the user. */
   seed: (context: SeedContext) => Promise<void>;
 }
+
+/** The two restricting composite keys of `movements` (migration 0014). */
+const MOVEMENTS_STEP_CONSTRAINTS = [
+  'movements_account_owner_fk',
+  'movements_category_owner_kind_fk',
+] as const;
 
 const query = (context: SeedContext, statement: string, params: unknown[]) =>
   context.connection.pool.query(statement, params);
@@ -217,6 +228,50 @@ const REGISTRY: readonly RegisteredTable[] = [
     },
   },
   {
+    table: 'movements',
+    userColumn: 'owner_id',
+    policy: 'erase-step',
+    // The composite keys to the owner's accounts and categories restrict, so the step deletes the
+    // movements first; the key to users itself cascades.
+    stepConstraints: MOVEMENTS_STEP_CONSTRAINTS,
+    // Registered after accounts and categories. A second account (the accounts seeder uses
+    // `Caja`) and a category of the same kind as the movement.
+    seed: async (context) => {
+      const account = await query(
+        context,
+        "insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ($1, 'Movements account', 'cash', 'ARS', 0, true) returning id",
+        [context.userId],
+      );
+      const category = await query(
+        context,
+        "insert into categories (owner_id, kind, name, icon, color) values ($1, 'expense', 'Movements category', 'tag', 'blue') returning id",
+        [context.userId],
+      );
+      await query(
+        context,
+        "insert into movements (owner_id, type, account_id, category_id, amount, occurred_at, rate, rate_source) values ($1, 'expense', $2, $3, 1000, $4, 10000, 'manual')",
+        [
+          context.userId,
+          (account.rows[0] as { id: string }).id,
+          (category.rows[0] as { id: string }).id,
+          NOW,
+        ],
+      );
+    },
+  },
+  {
+    table: 'movement_rate_limits',
+    userColumn: 'owner_id',
+    policy: 'cascade',
+    seed: async (context) => {
+      await query(
+        context,
+        'insert into movement_rate_limits (owner_id, window_start, count) values ($1, $2, 1)',
+        [context.userId, NOW],
+      );
+    },
+  },
+  {
     table: 'portfolios',
     userColumn: 'owner_id',
     policy: 'cascade',
@@ -308,8 +363,13 @@ async function guardViolations(
       );
     }
     // A self-referencing key (the category tree) restricts only rows of the same owner, which the
-    // cascade from users removes together; every other key must cascade.
-    if (key.deleteAction !== 'c' && key.child !== key.parent) {
+    // cascade from users removes together. A key named on an `erase-step` entry restricts because
+    // the module's step deletes those rows first. Every other key must cascade, so a later
+    // accidental `restrict` on the same table fails here.
+    const entry = registry.find((candidate) => candidate.table === key.child);
+    const namedByStep =
+      entry?.policy === 'erase-step' && (entry.stepConstraints ?? []).includes(key.constraint);
+    if (key.deleteAction !== 'c' && key.child !== key.parent && !namedByStep) {
       violations.push(`key ${key.constraint} of ${key.child} does not cascade on delete`);
     }
   }
@@ -417,6 +477,108 @@ describe('the erasure guard (NFR-01)', () => {
       await connection.pool.query('drop table if exists erasure_guard_test_fixture_resources');
     }
   });
+
+  it('accepts the movements keys only as the named constraints of a table registered with erase-step', async () => {
+    const keys = await foreignKeysFromUsers(connection.pool);
+    const restricting = keys
+      .filter((key) => key.child === 'movements' && key.deleteAction !== 'c')
+      .map((key) => key.constraint)
+      .sort();
+    expect(restricting).toEqual([...MOVEMENTS_STEP_CONSTRAINTS].sort());
+
+    expect(await guardViolations(connection.pool)).toEqual([]);
+  });
+
+  it('fails for the movements keys when the table is registered as cascade or names no constraint (error, sad path)', async () => {
+    const withMovements = (entry: Partial<RegisteredTable>): RegisteredTable[] =>
+      REGISTRY.map((candidate) =>
+        candidate.table === 'movements' ? { ...candidate, ...entry } : candidate,
+      );
+    const expected = [
+      'key movements_account_owner_fk of movements does not cascade on delete',
+      'key movements_category_owner_kind_fk of movements does not cascade on delete',
+    ];
+
+    const asCascade = await guardViolations(connection.pool, withMovements({ policy: 'cascade' }));
+    const unnamed = await guardViolations(connection.pool, withMovements({ stepConstraints: [] }));
+    const oneNamed = await guardViolations(
+      connection.pool,
+      withMovements({ stepConstraints: ['movements_account_owner_fk'] }),
+    );
+
+    expect(asCascade.sort()).toEqual(expected);
+    expect(unnamed.sort()).toEqual(expected);
+    expect(oneNamed).toEqual([expected[1]]);
+  });
+
+  it('fails for another non-cascading key on the movements table, even though it is an erase-step table (error, sad path)', async () => {
+    await connection.pool.query('alter table movements drop column if exists probe_user_id');
+    await connection.pool.query(
+      'alter table movements add column probe_user_id uuid references users (id)',
+    );
+    try {
+      const violations = await guardViolations(connection.pool);
+
+      expect(violations).toEqual([
+        'key movements_probe_user_id_fkey of movements does not cascade on delete',
+      ]);
+    } finally {
+      await connection.pool.query('alter table movements drop column if exists probe_user_id');
+    }
+  });
+
+  it('fails for a non-cascading key on an unregistered table with both reasons (error, sad path)', async () => {
+    await connection.pool.query('drop table if exists erasure_guard_probe');
+    await connection.pool.query(
+      'create table erasure_guard_probe (id uuid primary key, user_id uuid references users (id) on delete restrict)',
+    );
+    try {
+      const violations = await guardViolations(connection.pool);
+
+      expect(violations).toEqual([
+        expect.stringContaining('table erasure_guard_probe'),
+        'key erasure_guard_probe_user_id_fkey of erasure_guard_probe does not cascade on delete',
+      ]);
+    } finally {
+      await connection.pool.query('drop table if exists erasure_guard_probe');
+    }
+  });
+
+  it('records what PostgreSQL does with a bare delete from users when movements restrict (order-dependent fact)', async () => {
+    const harness = createIdentityHarness(connection, { realSessions: true });
+    const userId = await seedUser(connection, { email: 'ana@example.com', password: PASSWORD });
+    const state: SeedContext['state'] = {};
+    const email = 'ana@example.com';
+    for (const entry of REGISTRY.filter((candidate) =>
+      ['accounts', 'categories', 'movements'].includes(candidate.table),
+    )) {
+      await entry.seed({ connection, userId, email, harness, state });
+    }
+    const client = await connection.pool.connect();
+    let outcome: 'deleted' | 'blocked' = 'deleted';
+    try {
+      await client.query('begin');
+      try {
+        await client.query('delete from users where id = $1', [userId]);
+      } catch (error) {
+        // The restricting keys may fire before the cascade removes the movements: that depends on
+        // the order PostgreSQL fires the referential triggers, so both outcomes are legal.
+        expect((error as { code?: string }).code).toBe('23503');
+        outcome = 'blocked';
+      } finally {
+        await client.query('rollback');
+      }
+    } finally {
+      client.release();
+    }
+
+    expect(['deleted', 'blocked']).toContain(outcome);
+    const remaining = await connection.pool.query<{ n: string }>(
+      'select count(*) as n from movements where owner_id = $1',
+      [userId],
+    );
+    expect(Number(remaining.rows[0]?.n)).toBe(1);
+  });
 });
 
 describe('deleting an account leaves no row of the user behind (NFR-01, AC-01)', () => {
@@ -450,7 +612,11 @@ describe('deleting an account leaves no row of the user behind (NFR-01, AC-01)',
   };
 
   it('has 0 rows for the user in every registered table and its outbox, while another user keeps all of theirs', async () => {
-    const harness = createIdentityHarness(connection, { realSessions: true });
+    const movementsStep = vi.fn(eraseUserMovements);
+    const harness = createIdentityHarness(connection, {
+      realSessions: true,
+      beforeUserErased: [movementsStep],
+    });
     const other = await seeded(harness, 'bea@example.com');
     // The deleting user signs in before 2FA is seeded, so the sign-in needs no second factor.
     const email = 'ana@example.com';
@@ -477,6 +643,8 @@ describe('deleting an account leaves no row of the user behind (NFR-01, AC-01)',
     });
 
     expect(response.status).toBe(204);
+    expect(movementsStep).toHaveBeenCalledTimes(1);
+    expect(movementsStep.mock.calls[0]?.[1]).toBe(userId);
     for (const entry of REGISTRY) {
       expect(await rowsFor(entry, userId), `${entry.table} after`).toBe(0);
       expect(await rowsFor(entry, other.userId), `${entry.table} of the other user`).toBe(

@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   type AnyPgColumn,
@@ -60,6 +61,9 @@ export const accounts = pgTable(
       'accounts_credit_card_not_available_check',
       sql`${table.type} <> 'credit_card' or ${table.includeInAvailable} = false`,
     ),
+    // The target of the composite foreign key of movements, which makes the database check the owner.
+    // drizzle-kit emits its ALTER after the foreign keys: 0014_movements.sql is hand-ordered (see its header).
+    unique('accounts_id_owner_unique').on(table.id, table.ownerId),
     uniqueIndex('accounts_owner_name_unique').on(table.ownerId, sql`lower(${table.name})`),
     index('accounts_owner_created_idx').on(table.ownerId, table.createdAt, table.id),
   ],

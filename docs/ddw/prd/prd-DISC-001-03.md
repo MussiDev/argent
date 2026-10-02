@@ -11,7 +11,7 @@
 | Sub-ticket | Title | PRD | Dependencies | Status |
 |---|---|---|---|---|
 | DISC-001-03a | Exchange Rates, Store and Sync | prd-DISC-001-03a.md | PRD 01 (sessions); no code dependency on the open branches | done: draft PR #18, merges when the PR merges, after 07a (0008) if that lands first (migration 0012; its journal `when` 1790945403578 must stay greater than main's maximum, re-check before merging); #15 (02b, 0009), #16 (01f, 0010) and #17 (FEAT-003, 0011) are already merged and this branch is rebased on them |
-| DISC-001-03b | Expense and Income | prd-DISC-001-03b.md | depends on a (draft PR #18, not yet merged); DISC-001-02b is merged into main (#15), so that condition is met (decision 2, resolved) | active: next to start, once 03a's PR has merged |
+| DISC-001-03b | Expense and Income | prd-DISC-001-03b.md | depends on a (merged, #18); DISC-001-02b is merged into main (#15), so that condition is met (decision 2, resolved) | done: draft PR #20, migration 0014 `0014_movements`, journal `when` 1790966184307 must stay greater than main's maximum at merge time; next: 03c and 03d |
 | DISC-001-03c | Transfers and Currency Exchange | prd-DISC-001-03c.md | depends on b | pending |
 | DISC-001-03d | Tags and Filters | prd-DISC-001-03d.md | depends on b; DISC-001-02b merged | pending |
 | DISC-001-03e | Edit and Delete Movements | prd-DISC-001-03e.md | depends on b, c and d | pending |
@@ -77,6 +77,21 @@ requirement.
 | 03d AC-07 | Filters never reveal another user's data | AGENTS.md rule |
 | 03e FR-04, AC-04, AC-05 | Future date and non-positive amount rejected on edit | applies the original FR-20 and AC-02 to edits |
 | 03e NFR-03 | Edit and delete < 300 ms p95 | extends the original NFR-04 (saving) to edit and delete |
+
+## Added while defining and planning DISC-001-03b (not in the original text)
+Each is derived from an obligation, a convention or a human decision on record (2026-10-02).
+
+| New ID | What | Why |
+|---|---|---|
+| 03b FR-13, AC-22, AC-23 | Ordered erasure of a user's movements | human decision: keep ON DELETE RESTRICT and erase movements first (DISC-001-01f guard) |
+| 03b FR-14, AC-24 | Movements count in Available and Net worth | FEAT-003 totals with the real AccountMovements adapter |
+| 03b FR-15, AC-25 to AC-27 | A movement on an archived account or category is rejected | human decision Q2 |
+| 03b FR-16, NFR-08, AC-28 to AC-30 | 60 manual creations per minute per user, counters in the database, imports not counted | human decision Q4 |
+| 03b AC-31 and the timestamp in FR-01, FR-02, FR-08, FR-09 | A movement stores date and time (UTC instant, shown in the user's time zone) | human decision Q3 |
+| 03b design: caps and read route | Amount at most 10^15 minor units, note at most 500 characters, `RATE_REQUIRED` is a 400, `GET /movements/:id` exists | human decision Q3 (confirmed) |
+
+## Future tickets noted
+- **Movement import (for example from Excel):** no PRD covers it yet. It must create movements through the application use case without going through the manual-entry limit of DISC-001-03b (FR-16, AC-30).
 
 ## Deferred obligations discharged by this split
 - DISC-001-02a (deferred to PRD 03): AC-10 end to end, the history half of AC-07, NFR-01 and NFR-02

@@ -80,6 +80,14 @@ All notable changes to this project are documented in this file. The format foll
   adds two tables and a guard trigger; its rollback script is destructive. Deferred to PRD 03:
   showing and keeping categories on movements, and blocking deletion of a category in use by a
   movement.
+- DISC-001-01f Account deletion: a signed-in user deletes the account and all its data from a new
+  screen (`/settings/delete-account`) after re-authenticating: the password (plus a TOTP or recovery
+  code when two-factor authentication is on), or, for an account created with Google and no password,
+  a fresh Google sign-in that issues a single-use grant (5 minutes, bound to the session). Deletion
+  ends every session, removes the pending emails of the user and cascades to every user-owned table;
+  a guard test fails when a new table that references a user is not registered for erasure. New
+  migration `0010_account_deletion` (OAuth state purpose and `deletion_grants`); `GET /profile` gains
+  a required `deletionReauth`, so the API deploys first.
 
 ### Fixed
 

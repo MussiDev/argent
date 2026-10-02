@@ -1,5 +1,5 @@
 const DECIMAL_TEXT = /^[0-9]+(\.[0-9]+)?$/;
-const MAX_TEXT_LENGTH = 40;
+export const MAX_TEXT_LENGTH = 40;
 
 /** The scale must be 1, 10, 100, ...; anything else would silently misplace the decimal point. */
 function decimalPlaces(scale: bigint): number {

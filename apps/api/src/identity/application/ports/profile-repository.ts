@@ -6,6 +6,8 @@ export interface Profile {
   /** Always lower-cased. */
   email: string;
   displayName: string | null;
+  /** Whether the account has a password; the hash itself never leaves the repository. */
+  hasPassword: boolean;
   defaultRateType: RateType;
   displayCurrency: DisplayCurrency;
   timeZone: string;

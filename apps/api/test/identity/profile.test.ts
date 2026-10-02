@@ -40,6 +40,7 @@ interface ProfileBody {
   displayName: string | null;
   email: string;
   twoFactorEnabled: boolean;
+  deletionReauth: 'password' | 'google';
   preferences: {
     defaultRateType: string;
     displayCurrency: string;
@@ -98,6 +99,7 @@ describe('GET /profile', () => {
       displayName: null,
       email: EMAIL,
       twoFactorEnabled: false,
+      deletionReauth: 'password',
       preferences: {
         defaultRateType: 'mep',
         displayCurrency: 'ARS',
@@ -105,6 +107,17 @@ describe('GET /profile', () => {
         language: 'es',
       },
     });
+  });
+
+  it('reports deletionReauth google for a user without a password, also after an update', async () => {
+    const { userId, cookies } = await signedIn();
+    await connection.pool.query('update users set password_hash = null where id = $1', [userId]);
+
+    const read = await getProfile(cookies);
+    const updated = await patchProfile(cookies, { language: 'en' });
+
+    expect((read.body as ProfileBody).deletionReauth).toBe('google');
+    expect((updated.body as ProfileBody).deletionReauth).toBe('google');
   });
 
   it('shows twoFactorEnabled true once 2FA is enabled', async () => {

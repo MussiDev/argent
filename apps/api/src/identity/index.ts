@@ -5,6 +5,7 @@ import type { Logger } from '../shared/logging/logger';
 import { CompleteGoogleSignIn } from './application/complete-google-sign-in';
 import { ConfirmPasswordReset } from './application/confirm-password-reset';
 import { CreateSignInChallenge } from './application/create-sign-in-challenge';
+import { DeleteUser } from './application/delete-user';
 import { DisableTwoFactor } from './application/disable-two-factor';
 import { EnableTwoFactor } from './application/enable-two-factor';
 import { GetCurrentSession } from './application/get-current-session';
@@ -505,6 +506,24 @@ export function createIdentityModule({
       updateProfile: new UpdateProfile({
         profiles: identity.profiles,
         twoFactorStatus: getTwoFactorStatus,
+      }),
+      deleteUser: new DeleteUser({
+        users: identity.users,
+        twoFactor: identity.twoFactor,
+        recoveryCodes: identity.recoveryCodes,
+        totp: identity.totp,
+        secretBox: identity.secretBox,
+        passwordHasher: identity.passwordHasher,
+        attemptLimiter: identity.attemptLimiter,
+        userDeletion: identity.userDeletion,
+        clock: identity.clock,
+        reportRefundFailure: (error) => {
+          dependencies.logger.warn(
+            { err: error },
+            'account deletion limit refund failed; the reserved units stay counted',
+          );
+        },
+        reportRecordFailure,
       }),
       requireSession: routeSession,
       logger: dependencies.logger,

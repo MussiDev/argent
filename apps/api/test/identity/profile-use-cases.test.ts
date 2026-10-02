@@ -14,6 +14,7 @@ const stored: Profile = {
   userId: USER_ID,
   email: 'ana@example.com',
   displayName: null,
+  hasPassword: true,
   defaultRateType: 'mep',
   displayCurrency: 'ARS',
   timeZone: 'America/Cordoba',
@@ -54,6 +55,7 @@ describe('GetProfile', () => {
       displayName: null,
       email: 'ana@example.com',
       twoFactorEnabled: true,
+      deletionReauth: 'password',
       preferences: {
         defaultRateType: 'mep',
         displayCurrency: 'ARS',
@@ -61,6 +63,15 @@ describe('GetProfile', () => {
         language: 'es',
       },
     });
+  });
+
+  it('asks for Google re-authentication when the account has no password', async () => {
+    const view = await new GetProfile({
+      profiles: fakeProfiles({ ...stored, hasPassword: false }),
+      twoFactorStatus: twoFactor(false),
+    }).execute(USER_ID);
+
+    expect(view.deletionReauth).toBe('google');
   });
 
   it('raises Unauthenticated for a user that no longer exists (sad path)', async () => {
@@ -83,6 +94,16 @@ describe('GetProfile', () => {
 });
 
 describe('UpdateProfile', () => {
+  it('carries deletionReauth in the updated view, google for an account without a password', async () => {
+    const profiles = fakeProfiles({ ...stored, hasPassword: false });
+    const view = await new UpdateProfile({
+      profiles,
+      twoFactorStatus: twoFactor(false),
+    }).execute(USER_ID, { language: 'en' });
+
+    expect(view.deletionReauth).toBe('google');
+  });
+
   function build(current: Profile | null = stored) {
     const profiles = fakeProfiles(current);
     return {
@@ -118,6 +139,7 @@ describe('UpdateProfile', () => {
       displayName: 'Ana',
       email: 'ana@example.com',
       twoFactorEnabled: false,
+      deletionReauth: 'password',
       preferences: {
         defaultRateType: 'blue',
         displayCurrency: 'USD',

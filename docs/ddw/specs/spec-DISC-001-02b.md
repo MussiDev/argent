@@ -6,7 +6,7 @@
 | PRD | docs/ddw/prd/prd-DISC-001-02b.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 3 |
+| Spec loops | 4 |
 | Loops since last human decision | 0 |
 
 ## Summary
@@ -65,7 +65,7 @@ whose only adapter returns `false` until PRD 03, the same pattern as accounts.
   catalog matches what `seedDefaultCategories` writes. Cost is proportional to users times 33 rows in one
   pre-deploy transaction (about 330 rows today); the 100,000-user revisit point is a guess, not a
   measured limit.
-- **Safety net (D9, open):** the use cases still call `ensureDefaults`, which checks the marker with
+- **Safety net (D9, human decision, 2026-10-01: keep):** the use cases still call `ensureDefaults`, which checks the marker with
   a plain select and seeds only when it is missing. It covers users created in the window between the
   migration and the deploy of the hooks and any future creation path that forgets the hook, and it is
   the same function as the hook, so it never creates duplicates or resurrects deleted defaults.
@@ -121,14 +121,9 @@ whose only adapter returns `false` until PRD 03, the same pattern as accounts.
   default key.
 - **D8 (approved):** default category names live in `packages/shared` and AGENTS.md records the
   exception.
-
-## Open decision for the human (does not block CODE; the default below is what this spec builds)
-- **D9, lazy safety net on top of creation-time seeding:** keep `ensureDefaults` in the use cases (one
-  plain select per request) as an idempotent fallback for users created between the migration and the
-  deploy of the hooks and for future creation paths that forget the hook; it respects the marker, so
-  it never resurrects a deleted default. Alternative: remove it and rely on the hook and the backfill
-  only. Recommendation: keep it; tradeoff: one extra cheap read per categories request and a second
-  code path to maintain.
+- **D9 (2026-10-01):** keep the lazy `ensureDefaults` safety net on top of creation-time seeding (one
+  plain select per categories request; idempotent, respects the marker, never resurrects a deleted
+  default).
 
 ## Deferred to PRD 03 (explicit, and not silent gaps)
 - AC-05 "shows it in every existing movement" and AC-06 "keeps it on existing movements": movements do

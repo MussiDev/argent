@@ -3,9 +3,9 @@
 | Field | Value |
 |---|---|
 | Module | `apps/api/src/investments`, `packages/shared/src/investments`, `apps/web/src/features/investments`, migration `0008_investments` |
-| Line coverage | 97.09% |
-| Branch coverage | 93.17% |
-| Function coverage | 94.72% |
+| Line coverage | 97.12% |
+| Branch coverage | 92.98% |
+| Function coverage | 94.75% |
 | Coverage floor | 80% (AGENTS.md, "Testing") |
 | Lint | `npx eslint .` clean, `npx prettier --check --end-of-line auto .` clean, `pnpm typecheck` clean |
 
@@ -100,4 +100,27 @@ in the block reports.
 - W6 (W-VER-01): the dead keys and exported constant of finding 6; `portfolio-view.ts` branch coverage 87.5% (W-VER-02).
 - W7: the call-log tests of Block 3 prove call order only; locking is proven by the Block 4 database tests.
 
-Result: BLOCKED
+Round 1 result: BLOCKED (see round 2 below).
+
+## Round 2 (after the corrective loop, commit `ffe5907`)
+
+Corrections of round 1 and how they were closed:
+1. FR-17 (high): the edit form clears the total cost when the currency leaves the saved one and restores it on return; an empty cost sends `totalCost: null` explicitly, a typed cost is sent, a quantity-only edit sends only the quantity. The test asserting the old behavior ("sends the unchanged cost along with a changed currency (AC-22)") was replaced.
+2. Focus (medium): openers are per portfolio (`Add holding to {name}`, `Delete portfolio {name}` plus a `data-opener` key); closing or submitting the add form returns focus to the opener of the same portfolio; after a portfolio delete, or whenever the focused control is removed, focus goes to the page heading (safe, non-destructive target); `lastFocused` is reset when falling back to the heading so a later reload does not steal focus; deleting a holding closes its open edit or price form. Two dead catalog keys were removed.
+3. TDD evidence: provided in the section above (round 1); for the corrective loop, failing before the fix (assertion): `expected '150000' to be ''` (cost input cleared on currency change); `totalCost` null expectation received the old cost `'15000000'` (empty cost sends null); typed cost `'120050'` expectation; notice wording en and es (`expected 'Changing the currency clears the pric…' to match /enter the total cost again/i`); `Unable to find role="button" and name "Agregar posición a IOL"` (add success, add cancel on portfolio 2) and `"Eliminar cartera IOL"` (delete confirmation cancel); `expected <button …> to be <h1>` (deleting portfolio 1 of 2); `expected <body> to be <h1>` (holding deleted with edit form open, price form open, slow reload); and for the follow-up reset, `expect(document.activeElement).toBe(document.body)` failed because focus had gone to the heading. Guards that passed before and are recorded as such: switching back to the saved currency restores the cost, the quantity-only edit after a round trip.
+
+Independent verification (`ddw-module-verifier`, sonnet) of round 2: all 25 ACs and 11 blocks still hold; no Required test removed or weakened (the one replaced title asserted the defect); all three corrections hold and the new tests discriminate the old behavior; whole web suite 55 files, 726 passed; `npx eslint .`, `npx prettier --check --end-of-line auto .` and `pnpm typecheck` clean; no focus or cost-flow regression found. Findings: one Low documentation item (the corrective-loop evidence above), now written; the deferred follow-ups L-1 and L-2 (races between an add-merge and an edit or manual price of the same user) are recorded in `docs/ddw/security/sast-DISC-001-07a.md` and go to a later ticket by human decision.
+
+Suites on the final tree: full run 143 files, 1899 passed, 0 failed, 0 skipped; e2e 60/60 (ports 3000, 4000 and 4100 checked free before the run); SAST re-scan of the web delta: 0 Critical, 0 High, 0 Medium.
+
+## Warnings carried over
+- W1 (W-VER-03): the AC-17 "account balances untouched" assertion is proxied by other users' rows.
+- W2 (W-VER-03): `format-amount.test.ts` hard-codes ICU date strings tied to the CLDR version of Node 24.13; some tests use 150 ms timing sleeps.
+- W3: the e2e is one consolidated test with named steps.
+- W4: the `scope.ts` fail-closed branch and quantity above the maximum in the add form have no direct test.
+- W5: no test asserts that the list route issues exactly two statements.
+- W6 (W-VER-02): `portfolio-view.ts` branch coverage 87.5%.
+- W7: the call-log tests of Block 3 prove call order only.
+- I1: the spec text still says `@argent/*` and `Intl.NumberFormat`.
+
+Result: PASSED

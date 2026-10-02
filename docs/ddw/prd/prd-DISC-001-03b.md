@@ -5,7 +5,7 @@
 | Ticket | DISC-001-03b |
 | Tracker | none |
 | Date | 2026-10-02 |
-| PRD loops | 3 |
+| PRD loops | 4 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -233,9 +233,14 @@ maps every original ID to its new one.
   movement stores DATE AND TIME as a UTC instant, shown in the user's time zone, and the entry form
   defaults to the current moment and is editable (FR-01, FR-02, FR-08, FR-09, AC-01, AC-04, AC-14,
   AC-15, AC-31). The rule "no movement after the current day in the user's time zone" is kept on the
-  date taken in that zone (AC-15), which allows a later time on the same day; whether a later time
-  today should also be refused is raised as an open question and not decided here.
+  date taken in that zone (AC-15), which allows a later time on the same day (confirmed by the
+  human, Q5, below).
 - 2026-10-02: Human decision Q4: manual movement creation is limited to 60 per minute per user, a
   rejected excess answers 429 with a retry time, the counters are stored in the database, bulk import
   (for example from Excel, a future ticket with no PRD yet) must not count against it, and the limit
   is not a cap on the total number of movements: FR-16, NFR-08, AC-28 to AC-30.
+- 2026-10-02: Human decision Q5: a later time on the current local day is ACCEPTED; the rule stays "no
+  movement after the current day in the user's time zone" (FR-09, AC-15).
+- 2026-10-02: Human decision Q6: when the entry form converts a typed local time to a UTC instant, a
+  local time that happens twice (clocks going back) means the earlier instant, and a local time that
+  does not exist (clocks going forward) is rejected as invalid input with a message (FR-01, FR-02, AC-31).

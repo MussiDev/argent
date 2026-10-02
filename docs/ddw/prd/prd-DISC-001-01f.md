@@ -5,7 +5,7 @@
 | Ticket | DISC-001-01f |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -27,9 +27,7 @@ DISC-001-01d and was moved here when that ticket was split (user decision, 2026-
 - FR-01: The system must allow a user to permanently delete their account and all their personal
   data, after re-authenticating.
 - FR-02: The system must require the account password to re-authenticate a user who has a
-  password. *(Pending human confirmation: the agent's default for a user who has both a password
-  and a linked Google identity is that the password is required and a Google re-authentication is
-  not accepted.)*
+  password.
 - FR-03: The system must also require a valid TOTP code or an unused recovery code from a user who
   has 2FA enabled, whatever the other re-authentication was.
 - FR-04: The system must require a user without a password (an account created through Google) to
@@ -45,8 +43,7 @@ DISC-001-01d and was moved here when that ticket was split (user decision, 2026-
   second-factor codes at deletion must be limited to 5 per user per 15 minutes and 20 per user per
   24 hours, as DISC-001-01c does when disabling 2FA.
 - NFR-03: A deletion grant must expire 5 minutes after it is issued, be usable once, and be valid
-  only for the user and the session that started the Google re-authentication. *(The 5 minutes
-  are pending human confirmation: the agent's proposal.)*
+  only for the user and the session that started the Google re-authentication.
 - NFR-04: 100% of Google ID tokens used to issue a deletion grant must be verified (signature,
   audience, issuer, expiry and nonce, as in DISC-001-01b NFR-02), the OAuth state, nonce and PKCE
   protections of DISC-001-01b must apply unchanged, and Google must be asked to authenticate the
@@ -83,7 +80,6 @@ DISC-001-01d and was moved here when that ticket was split (user decision, 2026-
   nothing.
 - AC-10 (FR-02): WHILE a user has both a password and a linked Google identity, THE system SHALL
   require the password to confirm account deletion and SHALL not accept a Google deletion grant.
-  *(Pending human confirmation.)*
 
 ## Out of Scope
 - Data export before deletion.
@@ -126,9 +122,11 @@ DISC-001-01d and was moved here when that ticket was split (user decision, 2026-
   and AC-03 to AC-09).
 - 2026-10-01: User decisions: no email notice after deletion (Out of Scope); the naming
   `DeleteUser`, `UserDeletionRepository` and the route `/profile/delete` is confirmed.
-- 2026-10-01: Pending human confirmation, agent defaults that do not block DISC-001-01d: a user who
-  has both a password and a linked Google identity deletes with the password (FR-02, AC-10); and
-  the deletion grant expires after 5 minutes (NFR-03).
-- 2026-10-01: Scope re-assessment to do when this PRD is planned: it has 4 FR, 4 NFR and 10 AC in
-  one module (identity). If it still looks too big, it can be split into password and second
-  factor (AC-01 to AC-05, AC-10) and Google re-authentication (AC-06 to AC-09).
+- 2026-10-01: The user confirmed the two defaults that this PRD had marked as pending (human
+  decisions): a user who has both a password and a linked Google identity deletes with the password
+  and a Google re-authentication is accepted only for an account without a password (FR-02,
+  AC-10); and the deletion grant expires 5 minutes after it is issued (NFR-03).
+- 2026-10-01: Scope re-assessment when this ticket started: 4 FR, 4 NFR and 10 AC in one module
+  (identity), one user flow with two re-authentication paths. Judged borderline but not clearly too
+  big, so it was kept as one ticket; if planning shows otherwise, it can be split into password and
+  second factor (AC-01 to AC-05, AC-10) and Google re-authentication (AC-06 to AC-09).

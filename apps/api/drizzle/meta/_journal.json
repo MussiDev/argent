@@ -45,6 +45,13 @@
       "breakpoints": true
     },
     {
+      "idx": 6,
+      "version": "7",
+      "when": 1790895423195,
+      "tag": "0006_accounts",
+      "breakpoints": true
+    },
+    {
       "idx": 7,
       "version": "7",
       "when": 1790891329764,

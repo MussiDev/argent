@@ -68,6 +68,8 @@ describe('api client', () => {
     [503, 'PASSWORD_CHECK_UNAVAILABLE', 'retryLater'],
     [400, 'VALIDATION_FAILED', 'validationFailed'],
     [500, 'INTERNAL', 'unexpected'],
+    [409, 'ACCOUNT_NAME_TAKEN', 'accountNameTaken'],
+    [409, 'ACCOUNT_HAS_MOVEMENTS', 'accountHasMovements'],
   ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
     const { client } = clientWith(jsonResponse(status, { code }));
 
@@ -107,6 +109,16 @@ describe('api client', () => {
 
   it('treats an error body that is not an API error as unexpected', async () => {
     const { client } = clientWith(new Response('<html>Bad gateway</html>', { status: 502 }));
+
+    const result = await client.signIn({ email: 'ana@example.com', password: 'x' });
+
+    expect(result).toEqual({ ok: false, code: 'INTERNAL', messageKey: 'unexpected' });
+  });
+
+  it('maps an unknown error code to unexpected and never shows API text', async () => {
+    const { client } = clientWith(
+      jsonResponse(409, { code: 'SOMETHING_NEW', message: 'raw API text' }),
+    );
 
     const result = await client.signIn({ email: 'ana@example.com', password: 'x' });
 
@@ -498,5 +510,274 @@ describe('api client: two-factor authentication', () => {
 
     expect(result).toEqual({ ok: false, code: 'UNAUTHENTICATED', messageKey: 'unauthenticated' });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('api client: accounts', () => {
+  const ID = '0b9f6c1e-4a52-4f3e-9a0e-1d2c3b4a5f60';
+  const ACCOUNT = {
+    id: ID,
+    name: 'Cash',
+    type: 'cash',
+    currency: 'ARS',
+    openingBalance: '1000',
+    balance: '1000',
+    archived: false,
+    archivedAt: null,
+    createdAt: '2026-10-01T12:00:00.000Z',
+  };
+
+  it('creates an account with cookies, the CSRF header and a JSON body (AC-01)', async () => {
+    const { client, fetch } = clientWith(jsonResponse(201, ACCOUNT));
+
+    const result = await client.createAccount({
+      name: 'Cash',
+      type: 'cash',
+      currency: 'ARS',
+      openingBalance: '1000',
+    });
+
+    expect(result).toEqual({ ok: true, data: ACCOUNT });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/accounts`);
+    expect(init.method).toBe('POST');
+    expect(init.credentials).toBe('include');
+    const headers = new Headers(init.headers);
+    expect(headers.get('X-Requested-With')).toBe('argent');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: 'Cash',
+      type: 'cash',
+      currency: 'ARS',
+      openingBalance: '1000',
+    });
+  });
+
+  it('creates an account without an opening balance', async () => {
+    const { client, fetch } = clientWith(jsonResponse(201, ACCOUNT));
+
+    await client.createAccount({ name: 'Cash', type: 'cash', currency: 'ARS' });
+
+    expect(JSON.parse(requestAt(fetch, 0).init.body as string)).toEqual({
+      name: 'Cash',
+      type: 'cash',
+      currency: 'ARS',
+    });
+  });
+
+  it('gets one account by its encoded id', async () => {
+    const { client, fetch } = clientWith(jsonResponse(200, ACCOUNT));
+
+    const result = await client.getAccount('a/b?c');
+
+    expect(result).toEqual({ ok: true, data: ACCOUNT });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/accounts/a%2Fb%3Fc`);
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('renames with PATCH, the encoded id and a JSON body (AC-06)', async () => {
+    const renamed = { ...ACCOUNT, name: 'Wallet' };
+    const { client, fetch } = clientWith(jsonResponse(200, renamed));
+
+    const result = await client.renameAccount('a/b', { name: 'Wallet' });
+
+    expect(result).toEqual({ ok: true, data: renamed });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/accounts/a%2Fb`);
+    expect(init.method).toBe('PATCH');
+    expect(init.credentials).toBe('include');
+    expect(new Headers(init.headers).get('X-Requested-With')).toBe('argent');
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'Wallet' });
+  });
+
+  it('archives and unarchives with POST on the right path (AC-07, AC-08)', async () => {
+    const archived = { ...ACCOUNT, archived: true, archivedAt: '2026-10-02T00:00:00.000Z' };
+    const { client, fetch } = clientWith(jsonResponse(200, archived), jsonResponse(200, ACCOUNT));
+
+    expect(await client.archiveAccount(ID)).toEqual({ ok: true, data: archived });
+    expect(await client.unarchiveAccount(ID)).toEqual({ ok: true, data: ACCOUNT });
+
+    expect(requestAt(fetch, 0).url).toBe(`${BASE_URL}/accounts/${ID}/archive`);
+    expect(requestAt(fetch, 0).init.method).toBe('POST');
+    expect(requestAt(fetch, 1).url).toBe(`${BASE_URL}/accounts/${ID}/unarchive`);
+    expect(requestAt(fetch, 1).init.method).toBe('POST');
+  });
+
+  it('deletes with DELETE and accepts an empty 204 (AC-09)', async () => {
+    const { client, fetch } = clientWith(new Response(null, { status: 204 }));
+
+    const result = await client.deleteAccount(ID);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/accounts/${ID}`);
+    expect(init.method).toBe('DELETE');
+    expect(init.credentials).toBe('include');
+    expect(new Headers(init.headers).get('X-Requested-With')).toBe('argent');
+  });
+
+  it('serializes archived, limit and offset and parses totals as strings (AC-12)', async () => {
+    const list = {
+      items: [ACCOUNT],
+      totals: { ARS: '1000', USD: '9223372036854775807' },
+      total: 1,
+      limit: 20,
+      offset: 40,
+    };
+    const { client, fetch } = clientWith(jsonResponse(200, list));
+
+    const result = await client.listAccounts({ archived: true, limit: 20, offset: 40 });
+
+    expect(result).toEqual({ ok: true, data: list });
+    const { url, init } = requestAt(fetch, 0);
+    expect(init.method).toBe('GET');
+    const parsed = new URL(url);
+    expect(`${parsed.origin}${parsed.pathname}`).toBe(`${BASE_URL}/accounts`);
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({
+      archived: 'true',
+      limit: '20',
+      offset: '40',
+    });
+  });
+
+  it('serializes archived=false and omits the keys that are undefined', async () => {
+    const list = { items: [], totals: { ARS: '0', USD: '0' }, total: 0, limit: 50, offset: 0 };
+    const { client, fetch } = clientWith(jsonResponse(200, list), jsonResponse(200, list));
+
+    const first = await client.listAccounts({ archived: false });
+    const second = await client.listAccounts({});
+
+    expect(first).toEqual({ ok: true, data: list });
+    expect(second).toEqual({ ok: true, data: list });
+    expect(requestAt(fetch, 0).url).toBe(`${BASE_URL}/accounts?archived=false`);
+    expect(requestAt(fetch, 1).url).toBe(`${BASE_URL}/accounts`);
+  });
+
+  it('sends archive and unarchive with an empty JSON object body', async () => {
+    const { client, fetch } = clientWith(jsonResponse(200, ACCOUNT), jsonResponse(200, ACCOUNT));
+
+    await client.archiveAccount(ID);
+    await client.unarchiveAccount(ID);
+
+    for (const index of [0, 1]) {
+      const { init } = requestAt(fetch, index);
+      expect(new Headers(init.headers).get('Content-Type')).toBe('application/json');
+      expect(JSON.parse(init.body as string)).toEqual({});
+    }
+  });
+
+  it('maps a 404 NOT_FOUND answer of rename, archive and delete to the unexpected key', async () => {
+    const notFound = () => jsonResponse(404, { code: 'NOT_FOUND' });
+    const { client } = clientWith(notFound(), notFound(), notFound());
+
+    const expected = { ok: false, code: 'NOT_FOUND', messageKey: 'unexpected' };
+    expect(await client.renameAccount(ID, { name: 'Wallet' })).toEqual(expected);
+    expect(await client.archiveAccount(ID)).toEqual(expected);
+    expect(await client.deleteAccount(ID)).toEqual(expected);
+  });
+
+  it.each([
+    [403, 'EMAIL_NOT_VERIFIED', 'emailNotVerified'],
+    [400, 'VALIDATION_FAILED', 'validationFailed'],
+  ] as const)('maps a %i %s answer of createAccount to %s', async (status, code, messageKey) => {
+    const { client } = clientWith(jsonResponse(status, { code }));
+
+    expect(await client.createAccount({ name: 'Cash', type: 'cash', currency: 'ARS' })).toEqual({
+      ok: false,
+      code,
+      messageKey,
+    });
+  });
+
+  it.each(['', '.', '..'])('does not send a request for the unsafe id %j', async (id) => {
+    const { client, fetch } = clientWith();
+    const expected = { ok: false, code: 'VALIDATION_FAILED', messageKey: 'validationFailed' };
+
+    expect(await client.getAccount(id)).toEqual(expected);
+    expect(await client.renameAccount(id, { name: 'Wallet' })).toEqual(expected);
+    expect(await client.archiveAccount(id)).toEqual(expected);
+    expect(await client.unarchiveAccount(id)).toEqual(expected);
+    expect(await client.deleteAccount(id)).toEqual(expected);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [409, 'ACCOUNT_NAME_TAKEN', 'accountNameTaken'],
+    [409, 'ACCOUNT_HAS_MOVEMENTS', 'accountHasMovements'],
+  ] as const)(
+    'maps a %i %s answer of the account calls to %s (AC-13, AC-10)',
+    async (status, code, messageKey) => {
+      const body = { code };
+      const { client } = clientWith(
+        jsonResponse(status, body),
+        jsonResponse(status, body),
+        jsonResponse(status, body),
+      );
+
+      const expected = { ok: false, code, messageKey };
+      expect(await client.createAccount({ name: 'Cash', type: 'cash', currency: 'ARS' })).toEqual(
+        expected,
+      );
+      expect(await client.renameAccount(ID, { name: 'Wallet' })).toEqual(expected);
+      expect(await client.deleteAccount(ID)).toEqual(expected);
+    },
+  );
+
+  it('returns NETWORK without throwing when the API cannot be reached', async () => {
+    const { client } = clientWith(new TypeError('Failed to fetch'));
+
+    const result = await client.listAccounts({});
+
+    expect(result).toEqual({ ok: false, code: 'NETWORK', messageKey: 'network' });
+  });
+
+  it('returns INTERNAL without throwing when the body does not match the schema', async () => {
+    const { client } = clientWith(
+      jsonResponse(200, { ...ACCOUNT, balance: 12.5 }),
+      jsonResponse(200, { items: 'nope' }),
+    );
+
+    expect(await client.getAccount(ID)).toEqual({
+      ok: false,
+      code: 'INTERNAL',
+      messageKey: 'unexpected',
+    });
+    expect(await client.listAccounts({})).toEqual({
+      ok: false,
+      code: 'INTERNAL',
+      messageKey: 'unexpected',
+    });
+  });
+
+  type Client = ReturnType<typeof clientWith>['client'];
+  const SESSION_CALLS: [string, (client: Client) => Promise<unknown>][] = [
+    ['listAccounts', (client) => client.listAccounts({})],
+    [
+      'createAccount',
+      (client) => client.createAccount({ name: 'a', type: 'cash', currency: 'ARS' }),
+    ],
+    ['getAccount', (client) => client.getAccount(ID)],
+    ['renameAccount', (client) => client.renameAccount(ID, { name: 'b' })],
+    ['archiveAccount', (client) => client.archiveAccount(ID)],
+    ['unarchiveAccount', (client) => client.unarchiveAccount(ID)],
+    ['deleteAccount', (client) => client.deleteAccount(ID)],
+  ];
+
+  it.each(SESSION_CALLS)('%s refreshes the session once when refused', async (_name, call) => {
+    const { client, fetch } = clientWith(
+      jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+      jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+      jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+    );
+
+    const result = await call(client);
+
+    expect(result).toMatchObject({ ok: false, code: 'UNAUTHENTICATED' });
+    const urls = fetch.mock.calls.map(([url]) => url);
+    expect(urls).toHaveLength(3);
+    expect(urls[2]).toBe(`${BASE_URL}/auth/refresh`);
+    expect(urls[0]).toBe(urls[1]);
   });
 });

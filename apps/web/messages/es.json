@@ -118,8 +118,78 @@
     "twoFactorAlreadyEnabled": "La verificación en dos pasos ya está activada.",
     "twoFactorNotEnabled": "La verificación en dos pasos ya está desactivada.",
     "twoFactorSetupRequired": "La activación cambió en otra sesión. Vuelve a empezar.",
+    "accountNameTaken": "Ya existe una cuenta con ese nombre.",
+    "accountHasMovements": "Esta cuenta tiene movimientos, por eso no se puede eliminar. Archívala en su lugar.",
     "totpCodeFormat": "Ingresa los 6 dígitos del código.",
     "secondFactorCodeFormat": "Ingresa un código de 6 dígitos o un código de recuperación."
+  },
+  "accounts": {
+    "title": "Cuentas",
+    "link": "Ir a tus cuentas",
+    "new": {
+      "title": "Nueva cuenta",
+      "description": "Agrega un lugar donde guardas tu dinero."
+    },
+    "fields": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "currency": "Moneda",
+      "openingBalance": "Saldo inicial",
+      "openingBalanceHint": "Opcional. Usa un signo menos para un saldo negativo.",
+      "typePlaceholder": "Elige un tipo",
+      "currencyPlaceholder": "Elige una moneda"
+    },
+    "types": {
+      "cash": "Efectivo",
+      "bank_account": "Cuenta bancaria",
+      "digital_wallet": "Billetera virtual",
+      "credit_card": "Tarjeta de crédito",
+      "savings": "Ahorros"
+    },
+    "currencies": {
+      "ARS": "Pesos argentinos (ARS)",
+      "USD": "Dólares estadounidenses (USD)"
+    },
+    "form": {
+      "submit": "Crear cuenta",
+      "pending": "Creando…",
+      "back": "Volver a las cuentas"
+    },
+    "list": {
+      "activeTitle": "Cuentas activas",
+      "archivedTitle": "Cuentas archivadas",
+      "newAccount": "Nueva cuenta",
+      "empty": "Todavía no tienes cuentas. Crea una para empezar.",
+      "emptyArchived": "No tienes cuentas archivadas.",
+      "showArchived": "Ver cuentas archivadas",
+      "showActive": "Ver cuentas activas",
+      "totals": "Totales"
+    },
+    "totals": {
+      "ARS": "Total en pesos",
+      "USD": "Total en dólares"
+    },
+    "actions": {
+      "rename": "Renombrar",
+      "renameField": "Nuevo nombre de {name}",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "archive": "Archivar",
+      "unarchive": "Desarchivar",
+      "delete": "Eliminar",
+      "confirmDelete": "¿Eliminar {name}? Esta acción no se puede deshacer.",
+      "confirmDeleteYes": "Sí, eliminar",
+      "archiveInstead": "Archivar en vez de eliminar"
+    },
+    "errors": {
+      "nameRequired": "Ingresa un nombre.",
+      "nameTooLong": "El nombre puede tener como máximo {max} caracteres.",
+      "nameInvalidCharacters": "El nombre contiene caracteres que no se pueden mostrar. Quítalos e inténtalo de nuevo.",
+      "typeRequired": "Elige un tipo de cuenta.",
+      "currencyRequired": "Elige una moneda.",
+      "amountInvalid": "Ingresa un monto válido, por ejemplo 1.500,00.",
+      "amountOutOfRange": "El saldo inicial no puede superar {max} en valor absoluto."
+    }
   },
   "security": {
     "title": "Seguridad",

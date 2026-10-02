@@ -1,5 +1,7 @@
 import {
+  accountResponseSchema,
   errorResponseSchema,
+  listAccountsResponseSchema,
   passwordResetConfirmResponseSchema,
   passwordResetResponseSchema,
   profileResponseSchema,
@@ -13,7 +15,11 @@ import {
   twoFactorSetupResponseSchema,
   twoFactorStatusResponseSchema,
   verifyEmailResponseSchema,
+  type AccountResponse,
+  type createAccountRequestSchema,
   type ErrorCode,
+  type ListAccountsQuery,
+  type ListAccountsResponse,
   type PasswordResetConfirmRequest,
   type PasswordResetConfirmResponse,
   type PasswordResetRequest,
@@ -21,6 +27,7 @@ import {
   type ProfileResponse,
   type RegisterRequest,
   type RegisterResponse,
+  type RenameAccountRequest,
   type ResendVerificationResponse,
   type SecondFactorVerifyRequest,
   type SecondFactorVerifyResponse,
@@ -56,7 +63,9 @@ export type ApiErrorKey =
   | 'secondFactorExpired'
   | 'twoFactorAlreadyEnabled'
   | 'twoFactorNotEnabled'
-  | 'twoFactorSetupRequired';
+  | 'twoFactorSetupRequired'
+  | 'accountNameTaken'
+  | 'accountHasMovements';
 
 /** `NETWORK`: the request never got an HTTP answer (offline, DNS, CORS, aborted). */
 export type ApiFailureCode = ErrorCode | 'NETWORK';
@@ -89,7 +98,15 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
   TWO_FACTOR_UNAVAILABLE: 'retryLater',
   SECOND_FACTOR_INVALID: 'codeInvalid',
   SECOND_FACTOR_EXPIRED: 'secondFactorExpired',
+  ACCOUNT_NAME_TAKEN: 'accountNameTaken',
+  ACCOUNT_HAS_MOVEMENTS: 'accountHasMovements',
 };
+
+/** `null` when the id is not a plain path segment: '.' and '..' survive encoding and would be normalized. */
+function accountPath(id: string): string | null {
+  if (id === '' || id === '.' || id === '..') return null;
+  return `/accounts/${encodeURIComponent(id)}`;
+}
 
 function failure(code: ApiFailureCode): ApiFailure {
   return { ok: false, code, messageKey: MESSAGE_KEY_BY_CODE[code] };
@@ -102,7 +119,7 @@ const REQUESTED_WITH = 'argent';
 const REFRESH_LOCK = 'argent-refresh';
 
 interface RequestOptions<T> {
-  method: 'GET' | 'POST' | 'PATCH';
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
   body?: unknown;
   /** `null` for answers without a body (204). */
@@ -110,6 +127,14 @@ interface RequestOptions<T> {
   /** Session-bound calls try `POST /auth/refresh` once when the access token is refused. */
   refreshOnUnauthenticated?: boolean;
 }
+
+/** What the containers send to create an account; the opening balance defaults to "0" server-side. */
+export type CreateAccountInput = z.input<typeof createAccountRequestSchema>;
+
+/** Only `name` is renameable; type and currency are immutable. */
+export type RenameAccountInput = Pick<RenameAccountRequest, 'name'>;
+
+export type ListAccountsParams = Partial<Pick<ListAccountsQuery, 'archived' | 'limit' | 'offset'>>;
 
 export interface ApiClientOptions {
   /** The API origin, e.g. `https://api.argent.app`. */
@@ -138,6 +163,13 @@ export interface ApiClient {
   verifySecondFactor(
     body: SecondFactorVerifyRequest,
   ): Promise<ApiResult<SecondFactorVerifyResponse>>;
+  listAccounts(query: ListAccountsParams): Promise<ApiResult<ListAccountsResponse>>;
+  createAccount(body: CreateAccountInput): Promise<ApiResult<AccountResponse>>;
+  getAccount(id: string): Promise<ApiResult<AccountResponse>>;
+  renameAccount(id: string, body: RenameAccountInput): Promise<ApiResult<AccountResponse>>;
+  archiveAccount(id: string): Promise<ApiResult<AccountResponse>>;
+  unarchiveAccount(id: string): Promise<ApiResult<AccountResponse>>;
+  deleteAccount(id: string): Promise<ApiResult<undefined>>;
   getProfile(): Promise<ApiResult<ProfileResponse>>;
   updateProfile(body: UpdateProfileRequest): Promise<ApiResult<ProfileResponse>>;
 }
@@ -224,6 +256,14 @@ export function createApiClient({
     return withRefreshLock(() => recoverSession(options));
   }
 
+  function onAccount<T>(
+    id: string,
+    build: (path: string) => Promise<ApiResult<T>>,
+  ): Promise<ApiResult<T>> {
+    const path = accountPath(id);
+    return path === null ? Promise.resolve(failure('VALIDATION_FAILED')) : build(path);
+  }
+
   return {
     register: (body) =>
       request({ method: 'POST', path: '/auth/register', body, response: registerResponseSchema }),
@@ -305,6 +345,75 @@ export function createApiClient({
         body,
         response: secondFactorVerifyResponseSchema,
       }),
+    listAccounts: ({ archived, limit, offset }) => {
+      const query = new URLSearchParams();
+      if (archived !== undefined) query.set('archived', archived ? 'true' : 'false');
+      if (limit !== undefined) query.set('limit', String(limit));
+      if (offset !== undefined) query.set('offset', String(offset));
+      const queryString = query.toString();
+      return request({
+        method: 'GET',
+        path: queryString ? `/accounts?${queryString}` : '/accounts',
+        response: listAccountsResponseSchema,
+        refreshOnUnauthenticated: true,
+      });
+    },
+    createAccount: (body) =>
+      request({
+        method: 'POST',
+        path: '/accounts',
+        body,
+        response: accountResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    getAccount: (id) =>
+      onAccount(id, (path) =>
+        request({
+          method: 'GET',
+          path,
+          response: accountResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    renameAccount: (id, body) =>
+      onAccount(id, (path) =>
+        request({
+          method: 'PATCH',
+          path,
+          body,
+          response: accountResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    archiveAccount: (id) =>
+      onAccount(id, (path) =>
+        request({
+          method: 'POST',
+          path: `${path}/archive`,
+          body: {},
+          response: accountResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    unarchiveAccount: (id) =>
+      onAccount(id, (path) =>
+        request({
+          method: 'POST',
+          path: `${path}/unarchive`,
+          body: {},
+          response: accountResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    deleteAccount: (id) =>
+      onAccount(id, (path) =>
+        request({
+          method: 'DELETE',
+          path,
+          response: null,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
     getProfile: () =>
       request({
         method: 'GET',

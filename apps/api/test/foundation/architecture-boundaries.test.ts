@@ -90,3 +90,42 @@ describe('hexagonal import boundaries', () => {
     expect(await restrictedImports(APPLICATION_FILE, source)).toEqual([]);
   });
 });
+
+describe('hexagonal import boundaries in the accounts module', () => {
+  const ACCOUNTS_DOMAIN_FILE = 'apps/api/src/accounts/domain/probe.ts';
+  const ACCOUNTS_APPLICATION_FILE = 'apps/api/src/accounts/application/probe.ts';
+
+  it.each([
+    "import { eq } from 'drizzle-orm';",
+    "import pg from 'pg';",
+    "import express from 'express';",
+    "import { accounts } from '../infrastructure/db/schema';",
+    "import { scopedTo } from '../../shared/access/infrastructure/drizzle-access-scope';",
+  ])('rejects in accounts domain: %s', async (source) => {
+    expect(await restrictedImports(ACCOUNTS_DOMAIN_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it.each([
+    "import { accounts } from '../infrastructure/db/schema';",
+    "import { x } from '../infrastructure/http/account-routes';",
+    "import { x } from '../infrastructure/movements/no-movements-adapter';",
+    "import { scopedTo } from '../../shared/access/infrastructure/drizzle-access-scope';",
+  ])('rejects in accounts application: %s', async (source) => {
+    expect(await restrictedImports(ACCOUNTS_APPLICATION_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it('allows accounts application code to import its domain, ports and the shared access port', async () => {
+    const source =
+      "import { x } from '../domain/account';\nimport type { AccountMovements } from './ports/account-movements';\nimport type { AccessScope } from '../../shared/access';\n";
+    expect(await restrictedImports(ACCOUNTS_APPLICATION_FILE, source)).toEqual([]);
+  });
+
+  it('allows accounts domain code to import shared schemas and its own files', async () => {
+    const source = "import { z } from 'zod';\nimport { y } from './account-name';\n";
+    expect(await restrictedImports(ACCOUNTS_DOMAIN_FILE, source)).toEqual([]);
+  });
+});

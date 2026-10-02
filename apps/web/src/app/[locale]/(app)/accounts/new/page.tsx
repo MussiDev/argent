@@ -1,0 +1,9 @@
+import { CreateAccountContainer } from '@/features/accounts/containers/create-account-container';
+
+export default function NewAccountPage() {
+  return (
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-4">
+      <CreateAccountContainer />
+    </main>
+  );
+}

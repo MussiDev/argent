@@ -118,8 +118,78 @@
     "twoFactorAlreadyEnabled": "Two-step verification is already on.",
     "twoFactorNotEnabled": "Two-step verification is already off.",
     "twoFactorSetupRequired": "The setup changed in another session. Start again.",
+    "accountNameTaken": "You already have an account with that name.",
+    "accountHasMovements": "This account has movements, so it cannot be deleted. Archive it instead.",
     "totpCodeFormat": "Enter the 6 digits of the code.",
     "secondFactorCodeFormat": "Enter a 6-digit code or a recovery code."
+  },
+  "accounts": {
+    "title": "Accounts",
+    "link": "Go to your accounts",
+    "new": {
+      "title": "New account",
+      "description": "Add a place where you keep your money."
+    },
+    "fields": {
+      "name": "Name",
+      "type": "Type",
+      "currency": "Currency",
+      "openingBalance": "Opening balance",
+      "openingBalanceHint": "Optional. Use a minus sign for a negative balance.",
+      "typePlaceholder": "Choose a type",
+      "currencyPlaceholder": "Choose a currency"
+    },
+    "types": {
+      "cash": "Cash",
+      "bank_account": "Bank account",
+      "digital_wallet": "Digital wallet",
+      "credit_card": "Credit card",
+      "savings": "Savings"
+    },
+    "currencies": {
+      "ARS": "Argentine pesos (ARS)",
+      "USD": "US dollars (USD)"
+    },
+    "form": {
+      "submit": "Create account",
+      "pending": "Creating…",
+      "back": "Back to accounts"
+    },
+    "list": {
+      "activeTitle": "Active accounts",
+      "archivedTitle": "Archived accounts",
+      "newAccount": "New account",
+      "empty": "You have no accounts yet. Create one to get started.",
+      "emptyArchived": "You have no archived accounts.",
+      "showArchived": "Show archived accounts",
+      "showActive": "Show active accounts",
+      "totals": "Totals"
+    },
+    "totals": {
+      "ARS": "Total in pesos",
+      "USD": "Total in dollars"
+    },
+    "actions": {
+      "rename": "Rename",
+      "renameField": "New name for {name}",
+      "save": "Save",
+      "cancel": "Cancel",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "delete": "Delete",
+      "confirmDelete": "Delete {name}? This cannot be undone.",
+      "confirmDeleteYes": "Yes, delete",
+      "archiveInstead": "Archive instead"
+    },
+    "errors": {
+      "nameRequired": "Enter a name.",
+      "nameTooLong": "The name can be at most {max} characters long.",
+      "nameInvalidCharacters": "The name contains characters that cannot be shown. Remove them and try again.",
+      "typeRequired": "Choose an account type.",
+      "currencyRequired": "Choose a currency.",
+      "amountInvalid": "Enter a valid amount, for example 1,500.00.",
+      "amountOutOfRange": "The opening balance cannot exceed {max} in absolute value."
+    }
   },
   "security": {
     "title": "Security",

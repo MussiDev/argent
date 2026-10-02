@@ -45,6 +45,17 @@ All notable changes to this project are documented in this file. The format foll
   none until the user sets one.
 - DISC-001-01d Shared integer-only amount formatter that follows the interface language (`1,557.30`
   in English, `1.557,30` in Spanish).
+- DISC-001-02a Accounts: create, rename, archive, unarchive and delete accounts (cash, bank
+  account, digital wallet, credit card, savings) in ARS or USD, with the currency and the type fixed
+  at creation, unique names per user and 404 for anything that is not the user's. The list shows
+  each balance and one total per currency, computed exactly, and screens in Spanish and English
+  reach it from the home page. Migration `0006_accounts` adds the `accounts` table; the opening
+  balance is optional, may be negative and is limited to 10^13 major units. Balances read their
+  movements through a port, so they equal the opening balance until PRD 03 supplies movements, and
+  an account that has movements cannot be deleted. Names refuse control, zero-width and
+  bidirectional characters.
+- DISC-001-02a Shared integer-only money helpers: exact sums, locale-aware formatting and parsing
+  of amounts, and amounts that travel as decimal strings.
 - FEAT-002 The product is named Pesly everywhere a user sees it: the web title and PWA name, the
   screens, the recovery codes file and every email, in Spanish and English. The workspace packages
   are `@pesly/*`, and Railway builds the services by path, so a package rename cannot break a

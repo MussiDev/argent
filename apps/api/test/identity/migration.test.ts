@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { migrationsFolder, runMigrations } from '../../src/shared/db/migrate';
 import { ensureTestDatabase, testDatabaseUrl } from '../helpers/test-database';
 
-const ALL_MIGRATIONS = 7;
+const ALL_MIGRATIONS = 8;
 const TABLES_BEFORE_0004 = [
   'auth_attempts',
   'email_outbox',
@@ -21,7 +21,8 @@ const TABLES_AT_0004 = [
   'user_identities',
   'users',
 ];
-const IDENTITY_TABLES = [
+const ALL_TABLES = [
+  'accounts',
   'auth_attempts',
   'email_outbox',
   'oauth_states',
@@ -33,11 +34,14 @@ const IDENTITY_TABLES = [
   'user_two_factor',
   'users',
 ];
+const TABLES_WITHOUT_ACCOUNTS = ALL_TABLES.filter((name) => name !== 'accounts');
 
 /** A throwaway database next to the test database, so the migration runs on a truly empty one. */
 const emptyDatabaseUrl = (() => {
   const url = new URL(testDatabaseUrl);
-  url.pathname = '/argent_migration_test';
+  // Derived from the test database name so parallel worktrees on one server do not share it.
+  const testName = url.pathname.replace(/^\//, '').replace(/_test$/, '');
+  url.pathname = `/${testName}_migration_test`;
   return url.toString();
 })();
 
@@ -110,7 +114,7 @@ describe('0000_identity migration', () => {
 
     await runMigrations(emptyDatabaseUrl);
 
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(ALL_TABLES);
   });
 
   it('creates the listed defaults, constraints and indexes', async () => {
@@ -201,6 +205,7 @@ describe('0000_identity migration', () => {
 
   it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
     await client.query(await rollback('0007_profile_display_name'));
+    await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     await client.query(await rollback('0004_google_identity'));
     await client.query(await rollback('0003_outbox_retry'));
@@ -211,7 +216,7 @@ describe('0000_identity migration', () => {
     expect(await appliedMigrations()).toBe(0);
 
     await runMigrations(emptyDatabaseUrl);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(ALL_TABLES);
   });
 });
 
@@ -237,6 +242,7 @@ describe('0001_outbox_hardening migration', () => {
     await client.query('delete from email_outbox');
     // Newest first: drizzle only applies migrations newer than the last one recorded.
     await client.query(await rollback('0007_profile_display_name'));
+    await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     await client.query(await rollback('0004_google_identity'));
     await client.query(await rollback('0003_outbox_retry'));
@@ -320,6 +326,7 @@ describe('0002_credentials_version migration', () => {
 
   it('is reverted by its rollback script (after the newer ones), keeping the data of the older columns, and re-applies', async () => {
     await client.query(await rollback('0007_profile_display_name'));
+    await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     await client.query(await rollback('0004_google_identity'));
     await client.query(await rollback('0003_outbox_retry'));
@@ -378,6 +385,7 @@ describe('0003_outbox_retry migration', () => {
 
   it('is reverted by its rollback script (after the newer ones), restoring the previous index and keeping the rows, and re-applies', async () => {
     await client.query(await rollback('0007_profile_display_name'));
+    await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     await client.query(await rollback('0004_google_identity'));
     await client.query(await rollback('0003_outbox_retry'));
@@ -385,7 +393,7 @@ describe('0003_outbox_retry migration', () => {
     expect(await nextAttemptColumn()).toEqual([]);
     expect(await outboxIndexes()).toEqual([PENDING_BY_SENT_AT]);
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
     const kept = await client.query("select 1 from email_outbox where kind = 'discard'");
     expect(kept.rowCount).toBe(1);
 
@@ -411,15 +419,16 @@ async function countOf(statement: string): Promise<number> {
 describe('0004_google_identity migration', () => {
   it('applies on a database at 0003: password_hash nullable, user_identities, oauth_states and the google_start_ip kind', async () => {
     await client.query(await rollback('0007_profile_display_name'));
+    await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     await client.query(await rollback('0004_google_identity'));
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
 
     await runMigrations(emptyDatabaseUrl);
 
     expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(ALL_TABLES);
     expect(await passwordHashNullable()).toBe('YES');
     const inserted = await client.query<{ id: string }>(
       "insert into users (email, time_zone, language, email_verified_at) values ('google@gmail.com', 'UTC', 'es', now()) returning id",
@@ -463,12 +472,13 @@ describe('0004_google_identity migration', () => {
     expect(await countOf('select count(*) as n from users where password_hash is null')).toBe(1);
 
     await client.query(await rollback('0007_profile_display_name'));
+    await client.query(await rollback('0006_accounts'));
 
     await client.query(await rollback('0005_two_factor'));
     expect(await sqlState(await rollback('0004_google_identity'))).toBe('23502');
 
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
     expect(
       await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
     ).toBe(1);
@@ -483,7 +493,7 @@ describe('0004_google_identity migration', () => {
     await client.query(await rollback('0004_google_identity'));
 
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
     expect(await passwordHashNullable()).toBe('NO');
     expect(
       await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
@@ -499,7 +509,7 @@ describe('0004_google_identity migration', () => {
     expect(await countOf("select count(*) as n from users where email = 'cv@example.com'")).toBe(1);
 
     await runMigrations(emptyDatabaseUrl);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(ALL_TABLES);
     expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
   });
 });
@@ -534,16 +544,17 @@ function insertOutbox(kind: string): Promise<string | undefined> {
 describe('0005_two_factor migration', () => {
   it('applies on a database at 0004: user_two_factor, recovery_codes, sign_in_challenges and the new kinds', async () => {
     await client.query(await rollback('0007_profile_display_name'));
+    await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
     for (const kind of TWO_FACTOR_ATTEMPT_KINDS) expect(await insertAttempt(kind)).toBe('23514');
     for (const kind of TWO_FACTOR_OUTBOX_KINDS) expect(await insertOutbox(kind)).toBe('23514');
 
     await runMigrations(emptyDatabaseUrl);
 
     expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(ALL_TABLES);
     for (const kind of TWO_FACTOR_ATTEMPT_KINDS) expect(await insertAttempt(kind)).toBeUndefined();
     for (const kind of TWO_FACTOR_OUTBOX_KINDS) expect(await insertOutbox(kind)).toBeUndefined();
     expect(await insertAttempt('two_factor_other')).toBe('23514');
@@ -618,11 +629,12 @@ describe('0005_two_factor migration', () => {
     const before = { attempts: await countOf(otherAttempts), outbox: await countOf(otherOutbox) };
 
     await client.query(await rollback('0007_profile_display_name'));
+    await client.query(await rollback('0006_accounts'));
 
     await client.query(await rollback('0005_two_factor'));
 
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
     const attemptKinds = TWO_FACTOR_ATTEMPT_KINDS.map((kind) => `'${kind}'`).join(', ');
     const outboxKinds = TWO_FACTOR_OUTBOX_KINDS.map((kind) => `'${kind}'`).join(', ');
     expect(
@@ -639,8 +651,121 @@ describe('0005_two_factor migration', () => {
     expect(await countOf("select count(*) as n from users where email = 'bob@2fa.test'")).toBe(1);
 
     await runMigrations(emptyDatabaseUrl);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(ALL_TABLES);
     expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+  });
+});
+
+function insertAccount(owner: string, name: string): Promise<string | undefined> {
+  return sqlState(
+    `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${owner}', '${name}', 'cash', 'ARS', 0)`,
+  );
+}
+
+describe('0006_accounts migration', () => {
+  it('applies on a database at 0005: the accounts table with its checks, defaults, indexes and immutability trigger', async () => {
+    await client.query(await rollback('0006_accounts'));
+    expect(await publicTables()).not.toContain('accounts');
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+
+    await runMigrations(emptyDatabaseUrl);
+
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(await publicTables()).toEqual(ALL_TABLES);
+    const ana = await insertUser('ana@accounts.test');
+    const bob = await insertUser('bob@accounts.test');
+    const inserted = await client.query<{ id: string; archived_at: Date | null; balance: string }>(
+      `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'Caja', 'cash', 'ARS', -1000000000000000) returning id, archived_at, opening_balance as balance`,
+    );
+    expect(inserted.rows[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(inserted.rows[0]?.archived_at).toBeNull();
+    expect(inserted.rows[0]?.balance).toBe('-1000000000000000');
+
+    // unique lower(name) per owner; the same name for another owner is fine
+    expect(await insertAccount(ana, 'CAJA')).toBe('23505');
+    expect(await insertAccount(bob, 'caja')).toBeUndefined();
+    // check constraints
+    expect(await insertAccount(ana, '')).toBe('23514');
+    expect(await insertAccount(ana, 'x'.repeat(51))).toBe('23514');
+    expect(
+      await sqlState(
+        `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'T', 'crypto', 'ARS', 0)`,
+      ),
+    ).toBe('23514');
+    expect(
+      await sqlState(
+        `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'C', 'cash', 'EUR', 0)`,
+      ),
+    ).toBe('23514');
+    // opening balance bound: exactly plus or minus 10^15 is accepted, one more is not (FR-13)
+    const withBalance = (name: string, balance: string) =>
+      sqlState(
+        `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', '${name}', 'cash', 'ARS', ${balance})`,
+      );
+    expect(await withBalance('Max', '1000000000000000')).toBeUndefined();
+    await client.query("delete from accounts where name = 'Max'");
+    expect(await withBalance('Over', '1000000000000001')).toBe('23514');
+    expect(await withBalance('Under', '-1000000000000001')).toBe('23514');
+    expect(
+      await countOf(
+        "select count(*) as n from pg_constraint where conname = 'accounts_opening_balance_range_check'",
+      ),
+    ).toBe(1);
+    // owner must exist
+    expect(await insertAccount('00000000-0000-4000-8000-000000000000', 'Huerfana')).toBe('23503');
+    // immutable fields
+    expect(await sqlState(`update accounts set currency = 'USD' where owner_id = '${ana}'`)).toBe(
+      '23514',
+    );
+    expect(await sqlState(`update accounts set type = 'savings' where owner_id = '${ana}'`)).toBe(
+      '23514',
+    );
+    expect(
+      await sqlState(`update accounts set owner_id = '${bob}' where owner_id = '${ana}'`),
+    ).toBe('23514');
+    expect(await sqlState(`update accounts set name = 'Otra' where owner_id = '${ana}'`)).toBe(
+      undefined,
+    );
+
+    expect(await indexDefinition('accounts_owner_name_unique')).toBe(
+      'CREATE UNIQUE INDEX accounts_owner_name_unique ON public.accounts USING btree (owner_id, lower(name))',
+    );
+    expect(await indexDefinition('accounts_owner_created_idx')).toBe(
+      'CREATE INDEX accounts_owner_created_idx ON public.accounts USING btree (owner_id, created_at, id)',
+    );
+  });
+
+  it('cascades on user deletion', async () => {
+    const carla = await insertUser('carla@accounts.test');
+    await insertAccount(carla, 'Banco');
+    const before = await countOf('select count(*) as n from accounts');
+
+    await client.query(`delete from users where id = '${carla}'`);
+
+    expect(await countOf('select count(*) as n from accounts')).toBe(before - 1);
+    expect(await countOf(`select count(*) as n from accounts where owner_id = '${carla}'`)).toBe(0);
+  });
+
+  it('is reverted by its rollback (dropping table, function and trigger), and re-applies', async () => {
+    await client.query(await rollback('0006_accounts'));
+
+    expect(await publicTables()).not.toContain('accounts');
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(
+      await countOf(
+        "select count(*) as n from pg_proc where proname = 'accounts_immutable_fields'",
+      ),
+    ).toBe(0);
+
+    await runMigrations(emptyDatabaseUrl);
+
+    expect(await publicTables()).toEqual(ALL_TABLES);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(
+      await countOf(
+        "select count(*) as n from pg_proc where proname = 'accounts_immutable_fields'",
+      ),
+    ).toBe(1);
   });
 });
 
@@ -655,15 +780,17 @@ async function displayNameColumn(): Promise<ColumnInfo[]> {
 
 describe('0007_profile_display_name migration', () => {
   it('applies on a database at 0005 with existing users, who keep a null display name', async () => {
+    // 0006_accounts has the later journal `when`, so it is the newest for the migrator: roll it back first.
+    await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0007_profile_display_name'));
     expect(await displayNameColumn()).toEqual([]);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
     await insertUser('before@profile.test');
 
     await runMigrations(emptyDatabaseUrl);
 
     expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
+    expect(await publicTables()).toEqual(ALL_TABLES);
     expect(await displayNameColumn()).toEqual([
       {
         table_name: 'users',
@@ -686,11 +813,12 @@ describe('0007_profile_display_name migration', () => {
   });
 
   it('is reverted by its rollback (dropping the column, keeping the users), and re-applies', async () => {
+    await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0007_profile_display_name'));
 
     expect(await displayNameColumn()).toEqual([]);
-    expect(await publicTables()).toEqual(IDENTITY_TABLES);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await publicTables()).toEqual(TABLES_WITHOUT_ACCOUNTS);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
     expect(
       await countOf("select count(*) as n from users where email = 'before@profile.test'"),
     ).toBe(1);

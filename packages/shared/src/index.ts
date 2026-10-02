@@ -9,6 +9,8 @@ export * from './auth/session';
 export * from './auth/password-reset';
 export * from './auth/google';
 export * from './auth/two-factor';
+export * from './money';
+export * from './accounts/account';
 export * from './profile/profile';
 export * from './profile/time-zone';
 export * from './money/format-minor-units';

@@ -11,7 +11,7 @@
 | Sub-ticket | Title | PRD | Dependencies | Status |
 |---|---|---|---|---|
 | DISC-001-03a | Exchange Rates, Store and Sync | prd-DISC-001-03a.md | PRD 01 (sessions); no code dependency on the open branches | done: draft PR #18, merges when the PR merges, after 07a (0008) if that lands first (migration 0012; its journal `when` 1790945403578 must stay greater than main's maximum, re-check before merging); #15 (02b, 0009), #16 (01f, 0010) and #17 (FEAT-003, 0011) are already merged and this branch is rebased on them |
-| DISC-001-03b | Expense and Income | prd-DISC-001-03b.md | depends on a (merged, #18); DISC-001-02b is merged into main (#15), so that condition is met (decision 2, resolved) | done: draft PR (see the PR list), migration 0014 `0014_movements`, journal `when` 1790966184307 must stay greater than main's maximum at merge time; next: 03c and 03d |
+| DISC-001-03b | Expense and Income | prd-DISC-001-03b.md | depends on a (merged, #18); DISC-001-02b is merged into main (#15), so that condition is met (decision 2, resolved) | done: draft PR #20, migration 0014 `0014_movements`, journal `when` 1790966184307 must stay greater than main's maximum at merge time; next: 03c and 03d |
 | DISC-001-03c | Transfers and Currency Exchange | prd-DISC-001-03c.md | depends on b | pending |
 | DISC-001-03d | Tags and Filters | prd-DISC-001-03d.md | depends on b; DISC-001-02b merged | pending |
 | DISC-001-03e | Edit and Delete Movements | prd-DISC-001-03e.md | depends on b, c and d | pending |

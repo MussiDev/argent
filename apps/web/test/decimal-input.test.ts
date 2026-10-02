@@ -22,8 +22,6 @@ describe('parseQuantityInput', () => {
     ['.', 'notANumber'],
     ['+5', 'notANumber'],
     ['1,2,3', 'notANumber'],
-    ['1.000,5', 'notANumber'],
-    ['1,000.5', 'notANumber'],
     ['0', 'notPositive'],
     ['0.00', 'notPositive'],
     ['-0', 'notPositive'],
@@ -108,5 +106,46 @@ describe('parseAmountInput', () => {
   it('rejects empty and non numeric text without throwing (AC-03, AC-08)', () => {
     expect(parseAmountInput('', 'es')).toEqual({ ok: false, error: 'empty' });
     expect(parseAmountInput('1e5', 'en')).toEqual({ ok: false, error: 'notANumber' });
+  });
+});
+
+describe('grouped typed numbers (AC-02)', () => {
+  it('reads the language decimal separator after the other one used as thousands mark', () => {
+    expect(parseAmountInput('150,000.00', 'en')).toEqual({ ok: true, value: '15000000' });
+    expect(parseAmountInput('150.000,00', 'es')).toEqual({ ok: true, value: '15000000' });
+    expect(parseAmountInput('1,234.5', 'en')).toEqual({ ok: true, value: '123450' });
+    expect(parseAmountInput('1.234,5', 'es')).toEqual({ ok: true, value: '123450' });
+    expect(parseQuantityInput('1,000.5', 'en')).toEqual({ ok: true, value: '100050000000' });
+    expect(parseQuantityInput('1.000,5', 'es')).toEqual({ ok: true, value: '100050000000' });
+    expect(parseAmountInput('1,234,567.89', 'en')).toEqual({ ok: true, value: '123456789' });
+    expect(parseAmountInput('1.234.567,89', 'es')).toEqual({ ok: true, value: '123456789' });
+  });
+
+  it('rejects the language decimal separator when it is not the last one', () => {
+    expect(parseAmountInput('1,234.56', 'es')).toEqual({ ok: false, error: 'notANumber' });
+    expect(parseAmountInput('1.234,56', 'en')).toEqual({ ok: false, error: 'notANumber' });
+    expect(parseQuantityInput('1.000,5', 'en')).toEqual({ ok: false, error: 'notANumber' });
+    expect(parseQuantityInput('1,000.5', 'es')).toEqual({ ok: false, error: 'notANumber' });
+  });
+
+  it.each(['1,2,3', '1.2.3', '1,23,456.5', '12,3456.5', ',123.5', '1,000.5.5', '1.5,000'])(
+    'rejects the irregular grouping "%s"',
+    (text) => {
+      expect(parseAmountInput(text, 'en')).toEqual({ ok: false, error: 'notANumber' });
+      expect(parseAmountInput(text, 'es')).toEqual({ ok: false, error: 'notANumber' });
+    },
+  );
+
+  it('accepts a repeated separator in exact groups only as the language group separator', () => {
+    expect(parseAmountInput('1,000,000', 'en')).toEqual({ ok: true, value: '100000000' });
+    expect(parseAmountInput('1.000.000', 'es')).toEqual({ ok: true, value: '100000000' });
+    expect(parseAmountInput('1,000,000', 'es')).toEqual({ ok: false, error: 'notANumber' });
+    expect(parseAmountInput('1.000.000', 'en')).toEqual({ ok: false, error: 'notANumber' });
+    expect(parseAmountInput('1,00,000', 'en')).toEqual({ ok: false, error: 'notANumber' });
+  });
+
+  it('still applies the positive and decimals rules to grouped text', () => {
+    expect(parseAmountInput('0,000.00', 'en')).toEqual({ ok: false, error: 'notPositive' });
+    expect(parseAmountInput('1,000.123', 'en')).toEqual({ ok: false, error: 'tooManyDecimals' });
   });
 });

@@ -528,11 +528,14 @@
       "nameTooLong": "El nombre puede tener como máximo 60 caracteres.",
       "tickerInvalid": "Ingresa un ticker de hasta 20 letras, dígitos, puntos o guiones.",
       "instrumentNameRequired": "Ingresa el nombre del instrumento (hasta 100 caracteres).",
+      "instrumentNameTooLong": "El nombre del instrumento puede tener como máximo 100 caracteres.",
       "ambiguousSeparator": "Número ambiguo. Escribe el separador decimal de tu idioma y sin separador de miles.",
       "empty": "Ingresa un número.",
       "notANumber": "Ingresa un número válido.",
       "tooManyDecimals": "Demasiados decimales.",
-      "notPositive": "El número debe ser mayor que cero."
+      "notPositive": "El número debe ser mayor que cero.",
+      "quantityInvalid": "Ingresa una cantidad válida.",
+      "amountInvalid": "Ingresa un monto dentro del rango permitido."
     }
   }
 }

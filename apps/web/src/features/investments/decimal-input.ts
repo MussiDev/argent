@@ -9,9 +9,29 @@ export type DecimalInputResult =
 
 const AMOUNT_SCALE = 100n;
 const NEGATIVE_NUMBER = /^-\s*[0-9]*[.,]?[0-9]+$/;
-// At most one separator in total; several separators (thousands grouping) are not accepted.
+// At most one separator in total; text with several separators goes through `ungroup` first.
 const TYPED_DECIMAL = /^[0-9]*[.,]?[0-9]*$/;
 const DECIMAL_SEPARATOR: Record<Locale, string> = { es: ',', en: '.' };
+const GROUP_SEPARATOR: Record<Locale, string> = { es: '.', en: ',' };
+
+/**
+ * Text with several separators is only a number when it is unambiguously grouped: thousands
+ * groups of exactly three digits in the language's group separator, optionally followed by its
+ * decimal separator and the fraction ("150,000.00" in English, "150.000,00" in Spanish). The
+ * result is plain digits with "." as the decimal point, or null when the text is not grouped
+ * that way.
+ */
+function ungroup(typed: string, language: Locale): string | null {
+  const decimal = `[${DECIMAL_SEPARATOR[language]}]`;
+  const group = `[${GROUP_SEPARATOR[language]}]`;
+  const withFraction = new RegExp(`^([0-9]{1,3}(?:${group}[0-9]{3})+)${decimal}([0-9]*)$`);
+  const integerOnly = new RegExp(`^([0-9]{1,3}(?:${group}[0-9]{3}){2,})$`);
+  const match = withFraction.exec(typed) ?? integerOnly.exec(typed);
+  if (!match) return null;
+  const [, whole = '', fraction] = match;
+  const digits = whole.split(GROUP_SEPARATOR[language]).join('');
+  return fraction === undefined ? digits : `${digits}.${fraction}`;
+}
 
 /**
  * A lone separator that is not the language's own is read as a decimal point, except when it is
@@ -31,11 +51,20 @@ function parseScaled(text: string, scale: bigint, language: Locale): DecimalInpu
   if (typed === '') return { ok: false, error: 'empty' };
   if (typed.length > MAX_TEXT_LENGTH) return { ok: false, error: 'notANumber' };
   if (NEGATIVE_NUMBER.test(typed)) return { ok: false, error: 'notPositive' };
-  if (!TYPED_DECIMAL.test(typed) || !/[0-9]/.test(typed)) return { ok: false, error: 'notANumber' };
-  if (isAmbiguous(typed, language)) return { ok: false, error: 'ambiguousSeparator' };
+  let plain: string;
+  if ((typed.match(/[.,]/g) ?? []).length > 1) {
+    const ungrouped = ungroup(typed, language);
+    if (ungrouped === null) return { ok: false, error: 'notANumber' };
+    plain = ungrouped;
+  } else {
+    if (!TYPED_DECIMAL.test(typed) || !/[0-9]/.test(typed))
+      return { ok: false, error: 'notANumber' };
+    if (isAmbiguous(typed, language)) return { ok: false, error: 'ambiguousSeparator' };
+    plain = typed.replace(',', '.');
+  }
 
   // ".5" and "5." are valid typing; the shared parser wants digits on both sides of the dot.
-  const [whole = '', fraction] = typed.replace(',', '.').split('.');
+  const [whole = '', fraction] = plain.split('.');
   const normalized = fraction === undefined ? whole : `${whole || '0'}.${fraction || '0'}`;
   // Padding ".5" to "0.5" can push the text past the limit the shared parser enforces.
   if (normalized.length > MAX_TEXT_LENGTH) return { ok: false, error: 'notANumber' };

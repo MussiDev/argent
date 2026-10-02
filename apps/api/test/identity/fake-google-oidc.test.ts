@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   fakeGoogleLoginHint,
   pkceChallenge,
@@ -204,5 +204,76 @@ describe('fake Google name claim and profile scope (FR-04)', () => {
     expect(hint({ ...IDENTITY, name: 'Ana Gómez' })).toBe('Ana Gómez');
     expect(hint({ ...IDENTITY, name: '' })).toBe('');
     expect(hint(IDENTITY)).toBeNull();
+  });
+});
+
+describe('fake Google re-authentication: recorded requests and auth_time (NFR-04)', () => {
+  const VERIFIER = 'the-verifier';
+
+  afterEach(() => {
+    google.resetTokenOptions();
+  });
+
+  async function claimsFor(
+    overrides: Record<string, string> = {},
+    identity: FakeGoogleIdentity = IDENTITY,
+  ): Promise<Record<string, unknown>> {
+    const { continueUrl } = await google.consent(
+      authorizeUrl(google.origin, { code_challenge: pkceChallenge(VERIFIER), ...overrides }).href,
+      identity,
+    );
+    const response = await fetch(google.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: new URL(continueUrl).searchParams.get('code') ?? '',
+        code_verifier: VERIFIER,
+        redirect_uri: REGISTERED_REDIRECT_URI,
+        client_id: google.clientId,
+        client_secret: google.clientSecret,
+      }),
+    });
+    const body = (await response.json()) as { id_token: string };
+    const payload = body.id_token.split('.')[1] ?? '';
+    return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
+  }
+
+  it('records every request to /authorize with its prompt and max_age', async () => {
+    const before = google.authorizationRequests.length;
+
+    await google.consent(
+      authorizeUrl(google.origin, { prompt: 'login', max_age: '0', state: 'recorded' }).href,
+      IDENTITY,
+    );
+
+    const recorded = google.authorizationRequests.slice(before);
+    expect(recorded.length).toBeGreaterThan(0);
+    expect(recorded.at(-1)).toMatchObject({ prompt: 'login', max_age: '0', state: 'recorded' });
+  });
+
+  it('issues auth_time, close to now, when max_age was requested', async () => {
+    const before = Math.floor(Date.now() / 1000);
+
+    const claims = await claimsFor({ max_age: '0' });
+
+    expect(claims.auth_time).toBeGreaterThanOrEqual(before);
+    expect(claims.auth_time).toBeLessThanOrEqual(before + 60);
+  });
+
+  it('issues no auth_time when max_age was not requested', async () => {
+    expect(await claimsFor()).not.toHaveProperty('auth_time');
+  });
+
+  it('lets a test choose the auth_time, or omit it with null, whatever max_age says', async () => {
+    google.setTokenOptions({ authTime: 1_700_000_000 });
+    expect((await claimsFor({ max_age: '0' })).auth_time).toBe(1_700_000_000);
+    expect((await claimsFor()).auth_time).toBe(1_700_000_000);
+
+    google.setTokenOptions({ authTime: null });
+    expect(await claimsFor({ max_age: '0' })).not.toHaveProperty('auth_time');
   });
 });

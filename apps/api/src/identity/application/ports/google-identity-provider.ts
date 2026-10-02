@@ -9,6 +9,11 @@ export interface GoogleClaims {
   hostedDomain: string | null;
   /** The `name` claim as Google sent it (untrusted free text), or null when absent or not text. */
   name: string | null;
+  /**
+   * When the person last authenticated at Google (`auth_time`, seconds since the epoch), or null
+   * when the token does not carry a numeric one. Google sends it for requests with `max_age`.
+   */
+  authTime: number | null;
 }
 
 export interface GoogleAuthorizationRequest {
@@ -16,6 +21,11 @@ export interface GoogleAuthorizationRequest {
   nonce: string;
   /** Plain PKCE verifier; the adapter derives the S256 challenge sent to Google. */
   codeVerifier: string;
+  /**
+   * Ask Google to authenticate the person again (`prompt=login`, `max_age=0`) instead of offering
+   * the account chooser; used to confirm a destructive action.
+   */
+  reauthenticate?: boolean;
 }
 
 export interface GoogleCodeExchange {

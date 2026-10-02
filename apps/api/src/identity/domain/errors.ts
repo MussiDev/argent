@@ -141,6 +141,13 @@ export class EmailChangeNotAllowed extends AppError {
   }
 }
 
+/** Google re-authentication was asked for an account that has a password: it deletes with it. */
+export class GoogleReauthenticationNotAllowed extends AppError {
+  constructor() {
+    super('VALIDATION_FAILED', 'This account confirms with its password');
+  }
+}
+
 /** The re-authentication for a sensitive action is missing, expired or already used. */
 export class ReauthenticationRequired extends AppError {
   constructor() {

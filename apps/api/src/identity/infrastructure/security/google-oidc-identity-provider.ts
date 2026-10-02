@@ -40,6 +40,8 @@ const idTokenClaimsSchema = z.object({
   azp: z.string().optional(),
   // Display text only: an odd value is read as missing so it can never fail a sign-in.
   name: z.string().optional().catch(undefined),
+  // Informational for the caller, so an odd value is read as missing, never a failed token.
+  auth_time: z.number().optional().catch(undefined),
 });
 
 export interface GoogleOidcOptions {
@@ -84,9 +86,14 @@ export class GoogleOidcIdentityProvider implements GoogleIdentityProvider {
     });
   }
 
-  authorizationUrl({ state, nonce, codeVerifier }: GoogleAuthorizationRequest): string {
+  authorizationUrl({
+    state,
+    nonce,
+    codeVerifier,
+    reauthenticate = false,
+  }: GoogleAuthorizationRequest): string {
     const url = new URL(this.options.authorizationUrl);
-    const params = {
+    const params: Record<string, string> = {
       client_id: this.options.clientId,
       redirect_uri: this.redirectUri,
       response_type: 'code',
@@ -95,7 +102,9 @@ export class GoogleOidcIdentityProvider implements GoogleIdentityProvider {
       nonce,
       code_challenge: createHash('sha256').update(codeVerifier).digest('base64url'),
       code_challenge_method: 'S256',
-      prompt: 'select_account',
+      // Re-authentication must show the login form again, not offer the signed-in account.
+      prompt: reauthenticate ? 'login' : 'select_account',
+      ...(reauthenticate ? { max_age: '0' } : {}),
     };
     for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
     return url.href;
@@ -130,6 +139,7 @@ export class GoogleOidcIdentityProvider implements GoogleIdentityProvider {
       emailVerified: claims.email_verified,
       hostedDomain: claims.hd ?? null,
       name: claims.name ?? null,
+      authTime: claims.auth_time ?? null,
     };
   }
 

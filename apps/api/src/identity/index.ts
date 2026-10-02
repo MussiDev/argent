@@ -2,6 +2,7 @@ import type { RequestHandler, Router } from 'express';
 import type { Env } from '../shared/config/env';
 import { createRequireSession } from '../shared/http/require-session';
 import type { Logger } from '../shared/logging/logger';
+import { CompleteDeletionReauth } from './application/complete-deletion-reauth';
 import { CompleteGoogleSignIn } from './application/complete-google-sign-in';
 import { ConfirmPasswordReset } from './application/confirm-password-reset';
 import { CreateSignInChallenge } from './application/create-sign-in-challenge';
@@ -18,6 +19,7 @@ import { ResendVerification } from './application/resend-verification';
 import { SignIn } from './application/sign-in';
 import { SignOut } from './application/sign-out';
 import { SignOutAll } from './application/sign-out-all';
+import { StartDeletionReauth } from './application/start-deletion-reauth';
 import { StartGoogleSignIn } from './application/start-google-sign-in';
 import { StartSession } from './application/start-session';
 import { StartTwoFactorSetup } from './application/start-two-factor-setup';
@@ -432,6 +434,13 @@ export function createIdentityModule({
         unitOfWork: identity.unitOfWork,
         startSession,
         createSignInChallenge,
+        completeDeletionReauth: new CompleteDeletionReauth({
+          identities: identity.identities,
+          sessions: identity.sessions,
+          deletionGrants: identity.deletionGrants,
+          tokenGenerator: identity.tokenGenerator,
+          clock: identity.clock,
+        }),
         clock: identity.clock,
       }),
       webBaseUrl: env.WEB_BASE_URL,
@@ -516,6 +525,9 @@ export function createIdentityModule({
         passwordHasher: identity.passwordHasher,
         attemptLimiter: identity.attemptLimiter,
         userDeletion: identity.userDeletion,
+        sessions: identity.sessions,
+        deletionGrants: identity.deletionGrants,
+        tokenGenerator: identity.tokenGenerator,
         clock: identity.clock,
         reportRefundFailure: (error) => {
           dependencies.logger.warn(
@@ -524,6 +536,15 @@ export function createIdentityModule({
           );
         },
         reportRecordFailure,
+      }),
+      startDeletionReauth: new StartDeletionReauth({
+        attemptLimiter: identity.attemptLimiter,
+        users: identity.users,
+        sessions: identity.sessions,
+        oauthStates: identity.oauthStates,
+        google,
+        tokenGenerator: identity.tokenGenerator,
+        clock: identity.clock,
       }),
       requireSession: routeSession,
       logger: dependencies.logger,

@@ -12,8 +12,10 @@ import { exportJWK, generateKeyPair, SignJWT, type CryptoKey, type JWK } from 'j
  *   `google.consent(location, identity)` and request `continueUrl` (or `cancelUrl`) against the
  *   API with the binding cookie. `google.setTokenOptions(...)` makes the next token responses
  *   misbehave (wrong audience, issuer, nonce, expiry, foreign key, algorithm, kid, future `iat`,
- *   delays, oversized body); `resetTokenOptions()`
- *   restores them. `issueCode(...)` mints a code without the consent page (benchmarks that seed
+ *   delays, oversized body, `auth_time`); `resetTokenOptions()`
+ *   restores them. `authorizationRequests` lists the queries `/authorize` received (a test reads
+ *   `prompt` and `max_age` there); an authorization that asked for `max_age` gets an `auth_time`
+ *   claim. `issueCode(...)` mints a code without the consent page (benchmarks that seed
  *   OAuth states directly).
  * - End-to-end tests (Block 4): Playwright starts `test/fake-google-oidc-server.ts` on 127.0.0.1.
  *   Google's redirect carries no `login_hint`, so the consent page first shows a form: fill the
@@ -71,6 +73,11 @@ export interface FakeTokenOptions {
   claimOverrides?: Record<string, unknown>;
   /** Waits this long before answering `/jwks`. */
   jwksDelayMs?: number;
+  /**
+   * The `auth_time` claim in seconds; null omits it. Left out, it is issued (as now) only for an
+   * authorization that asked for `max_age`.
+   */
+  authTime?: number | null;
 }
 
 export interface FakeGoogleOidcOptions {
@@ -91,6 +98,8 @@ export interface IssueCodeInput {
   redirectUri: string;
   /** Scope the authorization requested; defaults to `openid email`. */
   scope?: string;
+  /** The `max_age` the authorization asked for; Google then reports `auth_time` in the token. */
+  maxAge?: string;
 }
 
 export interface FakeGoogleOidc {
@@ -106,6 +115,8 @@ export interface FakeGoogleOidc {
   readonly env: Record<string, string>;
   /** Token requests received, successful or not. */
   readonly tokenRequests: number;
+  /** The query of every request to `/authorize`, in arrival order. */
+  readonly authorizationRequests: readonly Readonly<Record<string, string>>[];
   setTokenOptions(options: FakeTokenOptions): void;
   resetTokenOptions(): void;
   issueCode(input: IssueCodeInput): string;
@@ -200,6 +211,7 @@ interface PendingCode {
   codeChallenge: string;
   redirectUri: string;
   scope?: string;
+  maxAge?: string;
   expiresAt: number;
 }
 
@@ -223,6 +235,7 @@ export async function startFakeGoogleOidc(
   const codes = new Map<string, PendingCode>();
   let tokenOptions: FakeTokenOptions = {};
   let tokenRequests = 0;
+  const authorizationRequests: Record<string, string>[] = [];
   let origin = '';
 
   function issueCode(input: IssueCodeInput): string {
@@ -233,6 +246,7 @@ export async function startFakeGoogleOidc(
 
   function authorize(url: URL, response: ServerResponse) {
     const params = url.searchParams;
+    authorizationRequests.push(Object.fromEntries(params));
     const redirectUri = params.get('redirect_uri');
     const state = params.get('state');
     const nonce = params.get('nonce');
@@ -289,6 +303,7 @@ export async function startFakeGoogleOidc(
       codeChallenge: challenge,
       redirectUri,
       scope: params.get('scope') ?? undefined,
+      maxAge: params.get('max_age') ?? undefined,
     });
     const approve = new URL(redirectUri);
     approve.searchParams.set('state', state);
@@ -327,6 +342,13 @@ export async function startFakeGoogleOidc(
       iat: now + (tokenOptions.issuedAtOffsetSeconds ?? 0),
       exp: now + (tokenOptions.expiresInSeconds ?? ID_TOKEN_TTL_SECONDS),
       ...(pending.identity.hd ? { hd: pending.identity.hd } : {}),
+      ...(tokenOptions.authTime === undefined
+        ? pending.maxAge === undefined
+          ? {}
+          : { auth_time: now }
+        : tokenOptions.authTime === null
+          ? {}
+          : { auth_time: tokenOptions.authTime }),
       ...(pending.identity.name !== undefined && requestedScopes(pending).includes('profile')
         ? { name: pending.identity.name }
         : {}),
@@ -443,6 +465,9 @@ export async function startFakeGoogleOidc(
     },
     get tokenRequests() {
       return tokenRequests;
+    },
+    get authorizationRequests() {
+      return authorizationRequests;
     },
     setTokenOptions(next) {
       tokenOptions = { ...tokenOptions, ...next };

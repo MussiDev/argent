@@ -15,10 +15,19 @@ import type {
   UserDeletionRepository,
 } from '../../src/identity/application/ports/user-deletion-repository';
 import type { User, UserRepository } from '../../src/identity/application/ports/user-repository';
-import { TotpInvalid, Unauthenticated } from '../../src/identity/domain/errors';
+import type { SessionRepository } from '../../src/identity/application/ports/session-repository';
+import type { DeletionGrantRepository } from '../../src/identity/application/ports/deletion-grant-repository';
+import {
+  ReauthenticationRequired,
+  TotpInvalid,
+  Unauthenticated,
+} from '../../src/identity/domain/errors';
+import { CryptoTokenGenerator } from '../../src/identity/infrastructure/security/crypto-token-generator';
 
 const USER_ID = '00000000-0000-4000-8000-000000000001';
 const PASSWORD = 'a long enough passphrase';
+const FAMILY_ID = '00000000-0000-4000-8000-0000000000f1';
+const GRANT_TOKEN = 'a-grant-token';
 const GOOD_CODE = '123456';
 const WRONG_CODE = '654321';
 
@@ -64,9 +73,16 @@ interface World {
   findByIdCalls: number;
   failSecondFindById: boolean;
   erased: boolean;
+  /** The session family of the asking session; null when the session row is gone. */
+  familyId: string | null;
+  /** Whether `findLive` finds the grant; its arguments are recorded in `findLiveCalls`. */
+  grantLive: boolean;
+  findLiveCalls: unknown[][];
+  eraseResult: EraseUserResult | null;
+  eraseInputs: EraseUserInput[];
 }
 
-function build(world: World) {
+function build(world: World, { withTwoFactor = true }: { withTwoFactor?: boolean } = {}) {
   const limiter = new InMemoryLimiter();
   const refundFailures: unknown[] = [];
   const users = {
@@ -80,13 +96,17 @@ function build(world: World) {
   } as unknown as UserRepository;
   const twoFactor: TwoFactorRepository = {
     findByUserId: () =>
-      Promise.resolve({
-        userId: USER_ID,
-        secretSealed: 'sealed',
-        enabledAt: new Date('2026-01-01T00:00:00Z'),
-        lastUsedStep: 0,
-        createdAt: new Date('2026-01-01T00:00:00Z'),
-      }),
+      Promise.resolve(
+        withTwoFactor
+          ? {
+              userId: USER_ID,
+              secretSealed: 'sealed',
+              enabledAt: new Date('2026-01-01T00:00:00Z'),
+              lastUsedStep: 0,
+              createdAt: new Date('2026-01-01T00:00:00Z'),
+            }
+          : null,
+      ),
     advanceLastUsedStep: () => Promise.resolve(true),
   } as unknown as TwoFactorRepository;
   const totp = {
@@ -101,7 +121,10 @@ function build(world: World) {
     verify: (hash, password) => Promise.resolve(hash === `hash:${password}`),
   };
   const userDeletion: UserDeletionRepository = {
-    erase: ({ credentialsVersion }: EraseUserInput): Promise<EraseUserResult> => {
+    erase: (input: EraseUserInput): Promise<EraseUserResult> => {
+      const { credentialsVersion } = input;
+      world.eraseInputs.push(input);
+      if (world.eraseResult) return Promise.resolve(world.eraseResult);
       if (!world.user || world.user.credentialsVersion !== credentialsVersion) {
         return Promise.resolve('stale');
       }
@@ -118,6 +141,18 @@ function build(world: World) {
     passwordHasher,
     attemptLimiter: limiter,
     userDeletion,
+    sessions: {
+      findById: () =>
+        Promise.resolve(world.familyId === null ? null : { familyId: world.familyId }),
+    } as unknown as SessionRepository,
+    deletionGrants: {
+      replace: () => Promise.resolve(),
+      findLive: (...args: unknown[]) => {
+        world.findLiveCalls.push(args);
+        return Promise.resolve(world.grantLive ? ({} as never) : null);
+      },
+    } satisfies DeletionGrantRepository,
+    tokenGenerator: new CryptoTokenGenerator(),
     clock: { now: () => new Date('2026-06-01T00:00:00Z') },
     reportRefundFailure: (error) => refundFailures.push(error),
     reportRecordFailure: () => undefined,
@@ -131,6 +166,11 @@ const newWorld = (overrides: Partial<World> = {}): World => ({
   findByIdCalls: 0,
   failSecondFindById: false,
   erased: false,
+  familyId: FAMILY_ID,
+  grantLive: true,
+  findLiveCalls: [],
+  eraseResult: null,
+  eraseInputs: [],
   ...overrides,
 });
 
@@ -201,5 +241,104 @@ describe('DeleteUser second-factor outcomes with fake ports', () => {
     expect(limiter.counts.get('sign_in_account|ana@example.com')).toBe(1);
     expect(limiter.total()).toBeGreaterThan(1);
     expect(world.erased).toBe(false);
+  });
+});
+
+describe('DeleteUser password-less path with fake ports', () => {
+  const passwordless = (): User => ({ ...baseUser, passwordHash: null });
+  const withGrant = (deleteUser: DeleteUser, grantToken: string | null = GRANT_TOKEN) =>
+    deleteUser.execute({
+      userId: USER_ID,
+      sessionId: '00000000-0000-4000-8000-0000000000aa',
+      password: undefined,
+      secondFactorCode: undefined,
+      grantToken: grantToken ?? undefined,
+      ip: '127.0.0.1',
+    });
+
+  it('looks the grant up by the hash of the cookie, the user, the session family and the credentials version, then erases with it (AC-08)', async () => {
+    const world = newWorld({ user: passwordless() });
+    const { deleteUser } = build(world, { withTwoFactor: false });
+
+    await withGrant(deleteUser);
+
+    const tokenHash = new CryptoTokenGenerator().hash(GRANT_TOKEN);
+    expect(world.findLiveCalls).toHaveLength(1);
+    expect(world.findLiveCalls[0]?.slice(0, 4)).toEqual([tokenHash, USER_ID, FAMILY_ID, 1]);
+    expect(world.eraseInputs).toEqual([
+      {
+        userId: USER_ID,
+        credentialsVersion: 1,
+        grant: { tokenHash, sessionFamilyId: FAMILY_ID, now: new Date('2026-06-01T00:00:00Z') },
+      },
+    ]);
+    expect(world.erased).toBe(true);
+  });
+
+  it('answers ReauthenticationRequired without reserving or erasing when there is no live grant or no cookie (AC-09, sad path)', async () => {
+    for (const [grantLive, grantToken] of [
+      [false, GRANT_TOKEN],
+      [true, null],
+    ] as const) {
+      const world = newWorld({ user: passwordless(), grantLive });
+      const { deleteUser, limiter } = build(world, { withTwoFactor: true });
+
+      await expect(withGrant(deleteUser, grantToken)).rejects.toBeInstanceOf(
+        ReauthenticationRequired,
+      );
+
+      expect(limiter.total()).toBe(0);
+      expect(world.eraseInputs).toEqual([]);
+    }
+  });
+
+  it('answers ReauthenticationRequired when the grant is used up between the lookup and the erase (AC-09, race, sad path)', async () => {
+    const world = newWorld({ user: passwordless(), eraseResult: 'grant_invalid' });
+    const { deleteUser } = build(world, { withTwoFactor: false });
+
+    await expect(withGrant(deleteUser)).rejects.toBeInstanceOf(ReauthenticationRequired);
+  });
+
+  it('answers Unauthenticated when the erase finds the credentials version stale (sad path)', async () => {
+    const world = newWorld({ user: passwordless(), eraseResult: 'stale' });
+    const { deleteUser } = build(world, { withTwoFactor: false });
+
+    await expect(withGrant(deleteUser)).rejects.toBeInstanceOf(Unauthenticated);
+  });
+
+  it('answers Unauthenticated when the asking session is gone (sad path)', async () => {
+    const world = newWorld({ user: passwordless(), familyId: null });
+    const { deleteUser } = build(world, { withTwoFactor: false });
+
+    await expect(withGrant(deleteUser)).rejects.toBeInstanceOf(Unauthenticated);
+    expect(world.eraseInputs).toEqual([]);
+  });
+
+  it('keeps the grant for a wrong second-factor code and erases nothing (AC-08, sad path)', async () => {
+    const world = newWorld({ user: passwordless() });
+    const { deleteUser } = build(world, { withTwoFactor: true });
+
+    await expect(
+      deleteUser.execute({
+        userId: USER_ID,
+        sessionId: '00000000-0000-4000-8000-0000000000aa',
+        password: undefined,
+        secondFactorCode: WRONG_CODE,
+        grantToken: GRANT_TOKEN,
+        ip: '127.0.0.1',
+      }),
+    ).rejects.toBeInstanceOf(TotpInvalid);
+
+    expect(world.eraseInputs).toEqual([]);
+  });
+
+  it('never uses a grant for a user with a password (AC-10, sad path)', async () => {
+    const world = newWorld();
+    const { deleteUser } = build(world, { withTwoFactor: false });
+
+    await expect(withGrant(deleteUser)).rejects.toThrow();
+
+    expect(world.findLiveCalls).toEqual([]);
+    expect(world.eraseInputs).toEqual([]);
   });
 });

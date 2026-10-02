@@ -3,6 +3,7 @@ import { Email } from '../domain/email';
 import { displayNameFromGoogleClaim } from '../domain/display-name';
 import { DuplicateEmail, IdentityAlreadyLinked } from '../domain/errors';
 import { isGoogleAuthoritative } from '../domain/google-authority';
+import type { CompleteDeletionReauth, DeletionReauthRefusal } from './complete-deletion-reauth';
 import type { CreateSignInChallenge } from './create-sign-in-challenge';
 import type { Clock } from './ports/clock';
 import {
@@ -11,7 +12,11 @@ import {
   type GoogleIdentityProvider,
   type GoogleSignInFailureReason,
 } from './ports/google-identity-provider';
-import type { OAuthState, OAuthStateRepository } from './ports/oauth-state-repository';
+import type {
+  OAuthState,
+  OAuthStatePurpose,
+  OAuthStateRepository,
+} from './ports/oauth-state-repository';
 import type { TokenGenerator } from './ports/token-generator';
 import type { TransactionalRepositories, UnitOfWork } from './ports/unit-of-work';
 import type { User } from './ports/user-repository';
@@ -25,6 +30,8 @@ export interface CompleteGoogleSignInDependencies {
   startSession: StartSession;
   /** For users with 2FA: the session waits for the second factor (PRD 01c FR-04, AC-06). */
   createSignInChallenge: CreateSignInChallenge;
+  /** For `delete_account` states: proves the user is present and issues the deletion grant. */
+  completeDeletionReauth: CompleteDeletionReauth;
   clock: Clock;
 }
 
@@ -46,6 +53,7 @@ export type GoogleSignInFailure =
   | 'email_not_authoritative'
   | 'another_identity_linked'
   | 'conflict'
+  | DeletionReauthRefusal
   | GoogleSignInFailureReason;
 
 /** How the signed-in user was reached; for logs. */
@@ -53,7 +61,8 @@ export type GoogleSignInPath = 'existing_identity' | 'linked' | 'superseded' | '
 
 /**
  * Every expected failure is one outcome, answered the same way (threat R-29); `reason` is for logs
- * only and `language` is the consumed state's, when there was one.
+ * only, and `language` and `purpose` are the consumed state's, null when none was consumed. The
+ * purpose tells the route where to send the browser (A-11).
  */
 export type CompleteGoogleSignInResult =
   | { outcome: 'signed_in'; via: GoogleSignInPath; user: User; session: SessionTokens }
@@ -64,7 +73,20 @@ export type CompleteGoogleSignInResult =
       /** For the browser's challenge cookie; no session exists yet. */
       challengeToken: string;
     }
-  | { outcome: 'failed'; reason: GoogleSignInFailure; language: Language | null };
+  | {
+      outcome: 'deletion_grant_issued';
+      /** The plain grant token, for its cookie; only its hash is stored. */
+      token: string;
+      language: Language;
+      /** For logs. */
+      userId: string;
+    }
+  | {
+      outcome: 'failed';
+      reason: GoogleSignInFailure;
+      language: Language | null;
+      purpose: OAuthStatePurpose | null;
+    };
 
 type AccountResult =
   | { outcome: 'resolved'; via: GoogleSignInPath; user: User; twoFactorEnabled: boolean }
@@ -81,8 +103,15 @@ export class CompleteGoogleSignIn {
     params,
     binding,
   }: CompleteGoogleSignInInput): Promise<CompleteGoogleSignInResult> {
-    const fail = (reason: GoogleSignInFailure, language: Language | null = null) =>
-      ({ outcome: 'failed', reason, language }) as const;
+    const fail = (
+      reason: GoogleSignInFailure,
+      pending: OAuthState | null = null,
+    ): CompleteGoogleSignInResult => ({
+      outcome: 'failed',
+      reason,
+      language: pending?.language ?? null,
+      purpose: pending?.purpose ?? null,
+    });
 
     if (Object.values(params).some((value) => Array.isArray(value))) {
       return fail('repeated_parameter');
@@ -99,8 +128,8 @@ export class CompleteGoogleSignIn {
     );
     if (!pending) return fail('unknown_state');
     // From here on the state is spent: every failure shows the error in the flow's language.
-    if (error !== undefined) return fail('denied_at_google', pending.language);
-    if (typeof code !== 'string') return fail('missing_code', pending.language);
+    if (error !== undefined) return fail('denied_at_google', pending);
+    if (typeof code !== 'string') return fail('missing_code', pending);
 
     let claims: GoogleClaims;
     try {
@@ -111,13 +140,27 @@ export class CompleteGoogleSignIn {
       });
     } catch (exchangeError) {
       if (!(exchangeError instanceof GoogleSignInFailed)) throw exchangeError;
-      return fail(exchangeError.reason, pending.language);
+      return fail(exchangeError.reason, pending);
     }
+
+    // The stored purpose picks the branch: a delete_account state resolves, links and creates
+    // nothing, and a sign_in state never reaches the grant.
+    if (pending.purpose === 'delete_account') {
+      const reauth = await this.deps.completeDeletionReauth.execute({ pending, claims });
+      if (reauth.outcome === 'refused') return fail(reauth.reason, pending);
+      return {
+        outcome: 'deletion_grant_issued',
+        token: reauth.token,
+        language: pending.language,
+        userId: reauth.userId,
+      };
+    }
+
     // AC-05, AC-08 (FR-06): an unverified Google email never creates, links or signs in.
-    if (!claims.emailVerified) return fail('email_unverified', pending.language);
+    if (!claims.emailVerified) return fail('email_unverified', pending);
 
     const account = await this.resolveAccountWithRetry(claims, pending);
-    if (account.outcome === 'refused') return fail(account.reason, pending.language);
+    if (account.outcome === 'refused') return fail(account.reason, pending);
 
     // A Google link written above stays in place: it grants nothing without the second factor
     // (threat R-50).

@@ -385,7 +385,7 @@ async function nextAttemptColumn(): Promise<ColumnInfo[]> {
   const result = await client.query<ColumnInfo>(
     `select table_name, column_name, data_type, is_nullable, column_default
        from information_schema.columns
-      where table_schema = 'public' and column_name = 'next_attempt_at'`,
+      where table_schema = 'public' and table_name = 'email_outbox' and column_name = 'next_attempt_at'`,
   );
   return result.rows;
 }

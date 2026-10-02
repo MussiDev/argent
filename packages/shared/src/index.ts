@@ -14,5 +14,6 @@ export * from './accounts/account';
 export * from './categories/default-categories';
 export * from './categories/category';
 export * from './profile/profile';
+export * from './profile/delete-user';
 export * from './profile/time-zone';
 export * from './money/format-minor-units';

@@ -140,3 +140,10 @@ export class EmailChangeNotAllowed extends AppError {
     super('VALIDATION_FAILED', 'The email cannot be changed here');
   }
 }
+
+/** The re-authentication for a sensitive action is missing, expired or already used. */
+export class ReauthenticationRequired extends AppError {
+  constructor() {
+    super('REAUTHENTICATION_REQUIRED');
+  }
+}

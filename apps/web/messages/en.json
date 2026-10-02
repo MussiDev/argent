@@ -123,6 +123,7 @@
     "twoFactorNotEnabled": "Two-step verification is already off.",
     "twoFactorSetupRequired": "The setup changed in another session. Start again.",
     "accountNameTaken": "You already have an account with that name.",
+    "reauthenticationRequired": "Your confirmation expired. Start again.",
     "accountHasMovements": "This account has movements, so it cannot be deleted. Archive it instead.",
     "categoryNameTaken": "You already have a category with that name.",
     "categoryInUse": "This category is in use, so it cannot be deleted. Archive it instead.",

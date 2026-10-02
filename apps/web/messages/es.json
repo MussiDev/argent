@@ -123,6 +123,7 @@
     "twoFactorNotEnabled": "La verificación en dos pasos ya está desactivada.",
     "twoFactorSetupRequired": "La activación cambió en otra sesión. Vuelve a empezar.",
     "accountNameTaken": "Ya existe una cuenta con ese nombre.",
+    "reauthenticationRequired": "La confirmación venció. Empieza de nuevo.",
     "accountHasMovements": "Esta cuenta tiene movimientos, por eso no se puede eliminar. Archívala en su lugar.",
     "categoryNameTaken": "Ya existe una categoría con ese nombre.",
     "categoryInUse": "Esta categoría está en uso, por eso no se puede eliminar. Archívala en su lugar.",

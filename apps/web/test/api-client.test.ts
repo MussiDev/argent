@@ -346,6 +346,7 @@ describe('api client: two-factor authentication', () => {
     [409, 'TWO_FACTOR_SETUP_REQUIRED', 'twoFactorSetupRequired'],
     [503, 'TWO_FACTOR_UNAVAILABLE', 'retryLater'],
     [429, 'RATE_LIMITED', 'retryLater'],
+    [401, 'REAUTHENTICATION_REQUIRED', 'reauthenticationRequired'],
   ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
     const { client } = clientWith(jsonResponse(status, { code }));
 

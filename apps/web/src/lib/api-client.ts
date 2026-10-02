@@ -76,7 +76,8 @@ export type ApiErrorKey =
   | 'categoryNameTaken'
   | 'categoryInUse'
   | 'categoryNestingTooDeep'
-  | 'categoryParentKindMismatch';
+  | 'categoryParentKindMismatch'
+  | 'reauthenticationRequired';
 
 /** `NETWORK`: the request never got an HTTP answer (offline, DNS, CORS, aborted). */
 export type ApiFailureCode = ErrorCode | 'NETWORK';
@@ -115,6 +116,7 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
   CATEGORY_IN_USE: 'categoryInUse',
   CATEGORY_NESTING_TOO_DEEP: 'categoryNestingTooDeep',
   CATEGORY_PARENT_KIND_MISMATCH: 'categoryParentKindMismatch',
+  REAUTHENTICATION_REQUIRED: 'reauthenticationRequired',
 };
 
 /** `null` when the id is not a plain path segment: '.' and '..' survive encoding and would be normalized. */

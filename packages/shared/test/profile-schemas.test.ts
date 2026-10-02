@@ -83,6 +83,7 @@ describe('profileResponseSchema', () => {
     displayName: null,
     email: 'ana@example.com',
     twoFactorEnabled: false,
+    deletionReauth: 'password',
     preferences: {
       defaultRateType: 'mep',
       displayCurrency: 'ARS',
@@ -93,6 +94,19 @@ describe('profileResponseSchema', () => {
 
   it('accepts a null display name', () => {
     expect(profileResponseSchema.safeParse(base).success).toBe(true);
+  });
+
+  it('carries deletionReauth as password or google and rejects any other value (FR-01)', () => {
+    expect(profileResponseSchema.parse(base).deletionReauth).toBe('password');
+    expect(profileResponseSchema.parse({ ...base, deletionReauth: 'google' }).deletionReauth).toBe(
+      'google',
+    );
+    expect(profileResponseSchema.safeParse({ ...base, deletionReauth: 'email' }).success).toBe(
+      false,
+    );
+    expect(profileResponseSchema.safeParse({ ...base, deletionReauth: undefined }).success).toBe(
+      false,
+    );
   });
 
   it('accepts a stored time zone the strict request check would refuse', () => {

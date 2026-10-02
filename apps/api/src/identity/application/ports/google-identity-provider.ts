@@ -7,6 +7,8 @@ export interface GoogleClaims {
   emailVerified: boolean;
   /** Google Workspace domain (`hd` claim), or null for consumer accounts. */
   hostedDomain: string | null;
+  /** The `name` claim as Google sent it (untrusted free text), or null when absent or not text. */
+  name: string | null;
 }
 
 export interface GoogleAuthorizationRequest {

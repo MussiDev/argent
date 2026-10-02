@@ -12,8 +12,13 @@ export function uniqueEmail(label: string): string {
 }
 
 /** Registers through the form and opens the verification link from the email. */
-export async function registerAndVerify(page: Page, email: string): Promise<void> {
+export async function registerAndVerify(
+  page: Page,
+  email: string,
+  displayName = 'Ana Pérez',
+): Promise<void> {
   await page.goto('/es/register');
+  await page.getByLabel(es.auth.fields.displayName).fill(displayName);
   await page.getByLabel(es.auth.fields.email).fill(email);
   await page.getByLabel(es.auth.fields.password).fill(PASSWORD);
   await page.getByRole('button', { name: es.auth.register.submit }).click();

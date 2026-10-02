@@ -5,7 +5,10 @@ import { rateTypeSchema } from '../rate-types';
 import { ianaTimeZoneSchema } from './time-zone';
 
 export const DISPLAY_NAME_MAX_CODE_POINTS = 50;
-/** Raw UTF-16 cap checked before counting code points, so an oversized string is not iterated. */
+/**
+ * Raw UTF-16 cap checked before counting code points, so an oversized string is not iterated.
+ * A code point takes at most 2 UTF-16 units, so 50 code points fit in 100; 200 is a generous guard.
+ */
 const DISPLAY_NAME_MAX_UTF16_LENGTH = 200;
 
 export const DISPLAY_CURRENCY_VALUES = ['ARS', 'USD'] as const;
@@ -14,6 +17,7 @@ export const displayNameSchema = z
   .string()
   .trim()
   .max(DISPLAY_NAME_MAX_UTF16_LENGTH)
+  .refine((value) => !value.includes('\u0000'), { message: 'must not contain a NUL character' })
   .refine(
     (value) => {
       const length = Array.from(value).length;

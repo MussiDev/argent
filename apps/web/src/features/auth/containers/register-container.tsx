@@ -20,7 +20,7 @@ export function RegisterContainer() {
     // FR-10 / FR-11: the account starts in the device's time zone and language.
     const parsed = registerRequestSchema.safeParse({ ...values, ...readDeviceContext() });
     if (!parsed.success) {
-      setErrors(toValidationErrors(parsed.error));
+      setErrors(toValidationErrors(parsed.error, values));
       return;
     }
     setPending(true);

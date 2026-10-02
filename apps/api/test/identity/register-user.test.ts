@@ -112,7 +112,12 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
   return { registerUser, calls, created, emailSender };
 }
 
-const INPUT = { email: 'Ana@Example.com', password: 'a long enough passphrase', ip: '203.0.113.9' };
+const INPUT = {
+  email: 'Ana@Example.com',
+  password: 'a long enough passphrase',
+  displayName: 'Ana Pérez',
+  ip: '203.0.113.9',
+};
 
 describe('RegisterUser', () => {
   it('limits registrations to 5 per IP per hour', () => {
@@ -136,6 +141,25 @@ describe('RegisterUser', () => {
     expect(emailSender.enqueued).toEqual([
       { kind: 'verification', userId: 'user-1', toEmail: 'ana@example.com', language: 'es' },
     ]);
+  });
+
+  it('stores the display name on the created account only', async () => {
+    const created = buildRegisterUser();
+    await created.registerUser.execute(INPUT);
+    expect(created.created[0]?.displayName).toBe('Ana Pérez');
+
+    const existing = buildRegisterUser({ existing: ['ana@example.com'] });
+    await existing.registerUser.execute(INPUT);
+    expect(existing.created).toEqual([]);
+    expect(existing.calls).not.toContain('create');
+  });
+
+  it('stores nothing from a concurrent duplicate registration', async () => {
+    const raced = buildRegisterUser({ raceOn: 'ana@example.com' });
+
+    await raced.registerUser.execute(INPUT);
+
+    expect(raced.created).toEqual([]);
   });
 
   it('rejects over the limit with RATE_LIMITED before touching the password', async () => {

@@ -23,7 +23,8 @@ import { PASSWORD_MAX_LENGTH } from '../../src/identity/domain/password-rules';
 const LOCK_EMOJI = '\u{1F512}';
 
 function passwordAccepted(password: string): boolean {
-  return registerRequestSchema.safeParse({ email: 'ana@example.com', password }).success;
+  return registerRequestSchema.safeParse({ email: 'ana@example.com', password, displayName: 'Ana' })
+    .success;
 }
 
 describe('shared auth schemas', () => {
@@ -40,6 +41,7 @@ describe('shared auth schemas', () => {
     const result = registerRequestSchema.safeParse({
       email: 'ana@example.com',
       password: 'x'.repeat(PASSWORD_MAX_UTF16_LENGTH + 1),
+      displayName: 'Ana',
     });
     expect(result.success).toBe(false);
   });
@@ -53,6 +55,7 @@ describe('shared auth schemas', () => {
     const parsed = registerRequestSchema.parse({
       email: ' ana@example.com ',
       password: 'a long enough passphrase',
+      displayName: ' Ana ',
       timeZone: 'America/Cordoba',
       language: 'es-AR',
       emailVerifiedAt: '2026-01-01',
@@ -60,6 +63,7 @@ describe('shared auth schemas', () => {
     expect(parsed).toEqual({
       email: 'ana@example.com',
       password: 'a long enough passphrase',
+      displayName: 'Ana',
       timeZone: 'America/Cordoba',
       language: 'es-AR',
     });
@@ -67,6 +71,7 @@ describe('shared auth schemas', () => {
       registerRequestSchema.safeParse({
         email: 'ana@example.com',
         password: 'a long enough passphrase',
+        displayName: 'Ana',
         [field]: 'x'.repeat(length),
       }).success;
     expect(tooLong('timeZone', 65)).toBe(false);
@@ -75,8 +80,51 @@ describe('shared auth schemas', () => {
       registerRequestSchema.safeParse({
         email: `${'a'.repeat(250)}@x.io`,
         password: 'long enough 1',
+        displayName: 'Ana',
       }).success,
     ).toBe(false);
+  });
+
+  describe('registration display name', () => {
+    const accepts = (displayName: unknown) =>
+      registerRequestSchema.safeParse({
+        email: 'ana@example.com',
+        password: 'a long enough passphrase',
+        displayName,
+      }).success;
+
+    it('accepts 1 and 50 characters and trims the value', () => {
+      expect(accepts('A')).toBe(true);
+      expect(accepts('a'.repeat(50))).toBe(true);
+      const parsed = registerRequestSchema.parse({
+        email: 'ana@example.com',
+        password: 'a long enough passphrase',
+        displayName: '  Ana  ',
+      });
+      expect(parsed.displayName).toBe('Ana');
+    });
+
+    it('reports a missing display name as invalid', () => {
+      const result = registerRequestSchema.safeParse({
+        email: 'ana@example.com',
+        password: 'a long enough passphrase',
+      });
+      expect(result.success).toBe(false);
+      expect(!result.success && result.error.issues[0]?.path).toEqual(['displayName']);
+    });
+
+    it('reports an empty and a whitespace-only display name as invalid', () => {
+      expect(accepts('')).toBe(false);
+      expect(accepts('   ')).toBe(false);
+    });
+
+    it('reports 51 characters and a NUL character as invalid; 50 emoji pass', () => {
+      expect(accepts('a'.repeat(51))).toBe(false);
+      expect(accepts('Ana\u0000')).toBe(false);
+      expect(accepts('A\u0000na')).toBe(false);
+      expect(accepts(LOCK_EMOJI.repeat(50))).toBe(true);
+      expect(accepts(LOCK_EMOJI.repeat(51))).toBe(false);
+    });
   });
 
   it('accepts only 43-character base64url tokens', () => {

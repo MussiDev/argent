@@ -95,7 +95,7 @@ describe('EmailWorker', () => {
     const response = await request(harness.app)
       .post('/auth/register')
       .set(trustedHeaders)
-      .send({ email: 'ana@example.com', password: PASSWORD });
+      .send({ email: 'ana@example.com', password: PASSWORD, displayName: 'Ana' });
     expect(response.status).toBe(202);
     expect(response.body).toEqual({ status: 'verification_sent' });
 
@@ -141,7 +141,7 @@ describe('EmailWorker', () => {
     await request(harness.app)
       .post('/auth/register')
       .set(trustedHeaders)
-      .send({ email: 'ana@example.com', password: PASSWORD });
+      .send({ email: 'ana@example.com', password: PASSWORD, displayName: 'Ana' });
 
     await harness.worker.runOnce();
     expect(harness.transport.attempts).toBe(1);

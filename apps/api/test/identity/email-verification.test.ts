@@ -29,7 +29,7 @@ async function registerAndSend(harness: IdentityHarness, email = EMAIL): Promise
   const response = await request(harness.app)
     .post('/auth/register')
     .set(trustedHeaders)
-    .send({ email, password: PASSWORD });
+    .send({ email, password: PASSWORD, displayName: 'Ana' });
   expect(response.status).toBe(202);
   await harness.worker.runOnce();
   return harness.transport.lastTokenFor(email);
@@ -131,7 +131,7 @@ describe('POST /auth/verify-email', () => {
       .set('Host', 'evil.example')
       .set('X-Forwarded-Host', 'evil.example')
       .set('X-Forwarded-Proto', 'https')
-      .send({ email: EMAIL, password: PASSWORD, language: 'en' });
+      .send({ email: EMAIL, password: PASSWORD, displayName: 'Ana', language: 'en' });
     expect(response.status).toBe(202);
     await harness.worker.runOnce();
 

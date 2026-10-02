@@ -115,6 +115,7 @@ describe('toValidationErrors', () => {
       validationErrorsOf(registerRequestSchema, {
         email: 'ana@example.com',
         password: 'correct horse battery',
+        displayName: 'Ana',
         timeZone: 'x'.repeat(65),
         language: 'y'.repeat(36),
       }),
@@ -122,10 +123,19 @@ describe('toValidationErrors', () => {
   });
 
   it('only produces keys that exist in both catalogs', () => {
-    const keys = ['emailRequired', 'emailTooLong', 'passwordRequired', 'passwordTooLong'];
+    const keys = [
+      'emailRequired',
+      'emailTooLong',
+      'passwordRequired',
+      'passwordTooLong',
+      'displayNameRequired',
+      'displayNameTooLong',
+    ];
     for (const key of keys) {
       expect(es.errors).toHaveProperty(key);
       expect(en.errors).toHaveProperty(key);
     }
+    expect(es.auth.fields).toHaveProperty('displayName');
+    expect(en.auth.fields).toHaveProperty('displayName');
   });
 });

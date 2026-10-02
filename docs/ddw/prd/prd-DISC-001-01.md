@@ -14,8 +14,8 @@
 | DISC-001-01b | Google Sign-In | prd-DISC-001-01b.md | depends on a | done — merged to main (PR #5) |
 | DISC-001-01c | Two-Factor Authentication | prd-DISC-001-01c.md | depends on a | done — draft PR #8, rebased on main; merges when the PR merges (needs TOTP_ENCRYPTION_KEY on the Railway API service; check `.railway/railway.ts` preserves it) |
 | DISC-001-01d | Profile & Preferences | prd-DISC-001-01d.md | depends on a; shows 2FA status from c (merged) | done — draft PR; merges when the PR merges, after DISC-001-02a (migration 0006_accounts; this ticket's migration is 0007 and its journal `when` must stay later than 0006's) |
-| DISC-001-01e | Display Name at Sign-Up | prd-DISC-001-01e.md | depends on d (display name storage), a and b | active |
-| DISC-001-01f | Account Deletion | prd-DISC-001-01f.md | depends on a, b, c and d | pending |
+| DISC-001-01e | Display Name at Sign-Up | prd-DISC-001-01e.md | depends on d (display name storage), a and b | done — draft PR; merges when the PR merges (no migration; independent of the DISC-001-02a merge order) |
+| DISC-001-01f | Account Deletion | prd-DISC-001-01f.md | depends on a, b, c and d | active |
 
 ## Suggested implementation order
 a → d → b → c → e → f

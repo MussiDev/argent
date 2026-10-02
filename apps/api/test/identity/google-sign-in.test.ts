@@ -15,6 +15,7 @@ import {
 } from '../helpers/identity-harness';
 import {
   ACCESS_COOKIE,
+  cookieHeader,
   currentSession,
   parseSetCookies,
   REFRESH_COOKIE,
@@ -177,6 +178,31 @@ function gmail(sub: string, email: string, emailVerified = true): FakeGoogleIden
   return { sub, email, emailVerified };
 }
 
+function named(identity: FakeGoogleIdentity, name: string): FakeGoogleIdentity {
+  return { ...identity, name };
+}
+
+async function displayNameOf(email: string): Promise<string | null> {
+  const result = await connection.pool.query<{ display_name: string | null }>(
+    'select display_name from users where email = $1',
+    [email],
+  );
+  return result.rows[0]?.display_name ?? null;
+}
+
+async function setDisplayName(userId: string, displayName: string): Promise<void> {
+  await connection.pool.query('update users set display_name = $1 where id = $2', [
+    displayName,
+    userId,
+  ]);
+}
+
+function profileOf(harness: IdentityHarness, response: Response) {
+  return request(harness.app)
+    .get('/profile')
+    .set('Cookie', cookieHeader(sessionFrom(response)));
+}
+
 describe('GET /auth/google/start', () => {
   it('redirects to Google, stores one state with hashes only and sets the Lax binding cookie (FR-01)', async () => {
     const harness = harnessFor();
@@ -314,6 +340,82 @@ describe('GET /auth/google/callback', () => {
     expect(await stateRows()).toEqual([]);
   });
 
+  it('creates the account with the Google name as display name, shown by GET /profile (AC-05)', async () => {
+    const harness = harnessFor();
+
+    const response = await googleSignIn(
+      harness,
+      named(gmail('sub-ana', 'ana@gmail.com'), '  Ana Gómez  '),
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe(`${LINK_BASE_URL}/en`);
+    expect(await displayNameOf('ana@gmail.com')).toBe('Ana Gómez');
+    const profile = await profileOf(harness, response);
+    expect(profile.status).toBe(200);
+    expect(profile.body).toMatchObject({ displayName: 'Ana Gómez', email: 'ana@gmail.com' });
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['whitespace only', '   '],
+  ])(
+    'creates the account with a null display name and signs in when the name claim is %s (AC-06)',
+    async (_label, name) => {
+      const harness = harnessFor();
+      const identity = gmail('sub-ana', 'ana@gmail.com');
+
+      const response = await googleSignIn(
+        harness,
+        name === undefined ? identity : named(identity, name),
+      );
+
+      expect(response.status).toBe(302);
+      expect(response.headers.location).toBe(`${LINK_BASE_URL}/en`);
+      expect(await displayNameOf('ana@gmail.com')).toBeNull();
+      expect((await profileOf(harness, response)).body).toMatchObject({ displayName: null });
+    },
+  );
+
+  it('stores the first 50 code points of a longer Google name (AC-07)', async () => {
+    const harness = harnessFor();
+
+    const response = await googleSignIn(
+      harness,
+      named(gmail('sub-ana', 'ana@gmail.com'), '😀'.repeat(60)),
+    );
+
+    expect(response.status).toBe(302);
+    expect(await displayNameOf('ana@gmail.com')).toBe('😀'.repeat(50));
+    expect((await profileOf(harness, response)).body).toMatchObject({
+      displayName: '😀'.repeat(50),
+    });
+  });
+
+  it('signs in with no display name when the name claim is not a string (FR-05)', async () => {
+    const harness = harnessFor();
+    const prepared = await prepare(harness, named(gmail('sub-ana', 'ana@gmail.com'), 'Ana'));
+    google.setTokenOptions({ claimOverrides: { name: { first: 'Ana' } } });
+
+    const response = await callback(harness, prepared.continueUrl, prepared.binding);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe(`${LINK_BASE_URL}/en`);
+    expect(await displayNameOf('ana@gmail.com')).toBeNull();
+  });
+
+  it('still fails and creates nothing when a required claim is malformed next to a name (FR-05)', async () => {
+    const harness = harnessFor();
+    const prepared = await prepare(harness, named(gmail('sub-ana', 'ana@gmail.com'), 'Ana'));
+    google.setTokenOptions({ claimOverrides: { email_verified: 'true' } });
+
+    const response = await callback(harness, prepared.continueUrl, prepared.binding);
+
+    expect(response.headers.location).toBe(failureUrl('en'));
+    expect(await userRows()).toEqual([]);
+  });
+
   it('creates the user with a non-authoritative identity for a verified email of another domain (AC-01, FR-07)', async () => {
     const harness = harnessFor();
 
@@ -404,6 +506,55 @@ describe('GET /auth/google/callback', () => {
     });
     expect((await signIn(harness.app, 'carla@gmail.com', PASSWORD)).status).toBe(200);
   });
+
+  it('keeps the display name of a verified account when Google is linked, and on a repeat sign-in (AC-08)', async () => {
+    const harness = harnessFor();
+    const userId = await seedUser(connection, { email: 'carla@gmail.com', password: PASSWORD });
+    await setDisplayName(userId, 'Carla Mine');
+
+    const linked = await googleSignIn(
+      harness,
+      named(gmail('sub-carla', 'carla@gmail.com'), 'Carla Google'),
+    );
+    expect(linked.status).toBe(302);
+    expect(await displayNameOf('carla@gmail.com')).toBe('Carla Mine');
+
+    const repeat = await googleSignIn(
+      harness,
+      named(gmail('sub-carla', 'carla@gmail.com'), 'Carla Renamed'),
+    );
+    expect(repeat.status).toBe(302);
+    expect(await displayNameOf('carla@gmail.com')).toBe('Carla Mine');
+    expect((await profileOf(harness, repeat)).body).toMatchObject({ displayName: 'Carla Mine' });
+  });
+
+  it.each([
+    ['the Google name', 'Dan Google', 'Dan Google'],
+    ['null when the claim is missing', undefined, null],
+    ['null when the claim is empty', '', null],
+    ['its first 50 code points when longer', '😀'.repeat(60), '😀'.repeat(50)],
+  ])(
+    'replaces the name typed at registration on a supersede with %s (AC-10)',
+    async (_label, claim, expected) => {
+      const harness = harnessFor();
+      const userId = await seedUser(connection, {
+        email: 'dan@gmail.com',
+        password: PASSWORD,
+        verified: false,
+      });
+      await setDisplayName(userId, 'Typed By Squatter');
+      const identity = gmail('sub-dan', 'dan@gmail.com');
+
+      const response = await googleSignIn(
+        harness,
+        claim === undefined ? identity : named(identity, claim),
+      );
+
+      expect(response.status).toBe(302);
+      expect(await displayNameOf('dan@gmail.com')).toBe(expected);
+      expect((await profileOf(harness, response)).body).toMatchObject({ displayName: expected });
+    },
+  );
 
   it('supersedes an unverified password account: password removed, sessions revoked, verified, linked (AC-07)', async () => {
     const harness = harnessFor();
@@ -626,7 +777,7 @@ describe('GET /auth/google/callback', () => {
 
   it('writes no code, ID token, state, binding, verifier or email to the logs', async () => {
     const harness = harnessFor();
-    const identity = gmail('sub-log', 'logged.person@gmail.com');
+    const identity = named(gmail('sub-log', 'logged.person@gmail.com'), 'Zelda Quuxington');
     const prepared = await prepare(harness, identity);
     const [row] = await stateRows();
     const approve = new URL(prepared.continueUrl);
@@ -636,6 +787,7 @@ describe('GET /auth/google/callback', () => {
       prepared.binding,
       String(row?.code_verifier),
       'logged.person',
+      'Zelda',
     ];
 
     expect((await callback(harness, prepared.continueUrl, prepared.binding)).status).toBe(302);

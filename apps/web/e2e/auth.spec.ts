@@ -17,6 +17,7 @@ function uniqueEmail(label: string): string {
 
 async function register(page: Page, email: string, password = PASSWORD): Promise<void> {
   await page.goto('/es/register');
+  await page.getByLabel(es.auth.fields.displayName).fill('Ana Pérez');
   await page.getByLabel(es.auth.fields.email).fill(email);
   await page.getByLabel(es.auth.fields.password).fill(password);
   await page.getByRole('button', { name: es.auth.register.submit }).click();
@@ -103,6 +104,21 @@ test('a short password is rejected naming the 10-character rule (AC-02)', async 
   await register(page, uniqueEmail('short'), 'short123');
 
   await expect(page.getByText(es.errors.passwordTooShort)).toBeVisible();
+  await expect(page).toHaveURL(/\/es\/register$/);
+});
+
+test('registering without a display name keeps the visitor on the form with the required message (AC-04)', async ({
+  page,
+}) => {
+  await page.goto('/es/register');
+  await page.getByLabel(es.auth.fields.email).fill(uniqueEmail('noname'));
+  await page.getByLabel(es.auth.fields.password).fill(PASSWORD);
+  await page.getByRole('button', { name: es.auth.register.submit }).click();
+
+  await expect(page.getByText(es.errors.displayNameRequired)).toBeVisible();
+  const name = page.getByLabel(es.auth.fields.displayName);
+  await expect(name).toBeFocused();
+  await expect(name).toHaveAttribute('aria-invalid', 'true');
   await expect(page).toHaveURL(/\/es\/register$/);
 });
 
@@ -311,6 +327,7 @@ test.describe('in an English browser', () => {
     await expect(page).toHaveURL(/\/en\/sign-in$/);
     await page.getByRole('link', { name: en.auth.signIn.registerLink }).click();
     await expect(page).toHaveURL(/\/en\/register$/);
+    await page.getByLabel(en.auth.fields.displayName).fill('Ana Pérez');
     await page.getByLabel(en.auth.fields.email).fill(email);
     await page.getByLabel(en.auth.fields.password).fill(PASSWORD);
     await page.getByRole('button', { name: en.auth.register.submit }).click();

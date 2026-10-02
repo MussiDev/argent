@@ -147,7 +147,7 @@ describe('unverified email (AC-04, AC-05)', () => {
     const registered = await request(harness.app)
       .post('/auth/register')
       .set(trustedHeaders)
-      .send({ email: BOB, password: PASSWORD });
+      .send({ email: BOB, password: PASSWORD, displayName: 'Bob' });
     expect(registered.status).toBe(202);
     await harness.worker.runOnce();
     const token = harness.transport.lastTokenFor(BOB);

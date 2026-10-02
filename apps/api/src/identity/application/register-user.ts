@@ -31,6 +31,7 @@ export interface RegisterUserDependencies {
 export interface RegisterUserInput {
   email: string;
   password: string;
+  displayName: string;
   timeZone?: string | undefined;
   language?: string | undefined;
   ip: string | undefined;
@@ -67,7 +68,12 @@ export class RegisterUser {
     const passwordHash = await this.deps.passwordHasher.hash(input.password);
     try {
       const userId = await this.deps.unitOfWork.run(async ({ users, emailSender }) => {
-        const user = await users.create({ email, passwordHash, ...defaults });
+        const user = await users.create({
+          email,
+          passwordHash,
+          displayName: input.displayName,
+          ...defaults,
+        });
         await emailSender.enqueue({
           kind: 'verification',
           userId: user.id,

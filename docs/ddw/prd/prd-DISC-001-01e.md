@@ -5,7 +5,7 @@
 | Ticket | DISC-001-01e |
 | Tracker | none |
 | Date | 2026-10-01 |
-| PRD loops | 0 |
+| PRD loops | 2 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -32,9 +32,12 @@ decision).
   `name` claim of the Google ID token.
 - FR-05: The system must create an account without a display name when the `name` claim is
   missing or empty, and must truncate a `name` longer than 50 characters to its first 50
-  characters. *(Pending human confirmation: proposed by the agent, not decided by the user.)*
+  characters.
 - FR-06: The system must leave the display name unchanged when Google is linked to an existing
-  account and when an existing Google user signs in.
+  verified account and when an existing Google user signs in.
+- FR-07: The system must replace the display name of an unverified password account with the
+  Google `name` claim, under the rules of FR-05, when a Google sign-in takes that account over
+  (DISC-001-01b FR-05).
 
 ## Non-Functional Requirements
 - NFR-01: Registration with the new field must still answer in < 500 ms at p95, measured
@@ -57,16 +60,18 @@ decision).
 - AC-05 (FR-04): WHEN an account is created through Google and the `name` claim has between 1 and
   50 characters, THE system SHALL store it as the display name.
 - AC-06 (FR-05): WHEN an account is created through Google and the `name` claim is missing or
-  empty, THE system SHALL create the account with no display name. *(Pending human
-  confirmation.)*
+  empty, THE system SHALL create the account with no display name.
 - AC-07 (FR-05): WHEN an account is created through Google and the `name` claim is longer than 50
-  characters, THE system SHALL store its first 50 characters as the display name. *(Pending human
-  confirmation.)*
-- AC-08 (FR-06): WHEN Google is linked to an existing account, or a user whose account is already
-  linked signs in with Google, THE system SHALL leave the display name of that account unchanged.
+  characters, THE system SHALL store its first 50 characters as the display name.
+- AC-08 (FR-06): WHEN Google is linked to an existing verified account, or a user whose account
+  is already linked signs in with Google, THE system SHALL leave the display name of that account
+  unchanged.
 - AC-09 (NFR-02): IF a visitor registers with an already registered email and a valid display
   name, THEN THE system SHALL answer with the same status code and body as for an unregistered
   email.
+- AC-10 (FR-07): WHEN a Google sign-in takes over an unverified password account, THE system SHALL
+  replace that account's display name with the Google `name` claim, or with no display name when
+  the claim is missing or empty, truncated to its first 50 characters when longer.
 
 ## Out of Scope
 - Giving a display name to existing accounts (they keep none until the user sets one in
@@ -80,7 +85,7 @@ decision).
 - **The new field leaks whether an email exists** → the name is validated before the email is
   looked up and the answer stays identical (NFR-02, AC-09).
 - **A very long Google name breaks the 1 to 50 character rule of DISC-001-01d** → truncation to 50
-  characters (FR-05, pending human confirmation).
+  characters (FR-05).
 - **Registration clients that do not send a name stop working** → the web app is the only client
   and ships the field in the same change (FR-03).
 
@@ -96,6 +101,17 @@ decision).
   email/password sign-ups the registration form requires a name, which modifies the registration
   API, schema and screen of DISC-001-01a (user decision). Existing users keep no name until they
   set it in the profile.
-- 2026-10-01: Pending human confirmation: FR-05, AC-06 and AC-07 (a Google `name` that is missing
-  or empty gives no display name, and one longer than 50 characters is truncated to 50). They are
-  the agent's defaults, not user decisions, and they do not block DISC-001-01d.
+- 2026-10-01: The user confirmed the defaults that the PRD had marked as pending (human decision): a
+  Google `name` that is missing or empty gives an account with no display name, and one longer than
+  50 characters is truncated to its first 50 characters (FR-05, AC-06, AC-07). They no longer block
+  anything.
+- 2026-10-01: Human decisions on the PLAN review of this ticket. O-1: the Google flow requests the
+  `profile` scope next to `openid email`, so Google includes the `name` claim; the human adds the
+  `.../auth/userinfo.profile` scope to the consent screen of the Google Cloud client "Argent API"
+  before this ships (a deploy prerequisite). O-2: when a Google sign-in takes over an unverified
+  password account (DISC-001-01b supersede), the display name is replaced with the Google `name`
+  claim under the same rules (missing or empty gives none, longer than 50 characters is truncated),
+  so a name typed by whoever registered that account does not survive; AC-08 is reworded to
+  "existing verified account" and FR-07 and AC-10 are added. O-3: the risk of impersonation through
+  a free-text display name is accepted by the owner and is to be revisited in PRD 05 (groups), where
+  names become visible to others and should be shown together with the email.

@@ -26,13 +26,20 @@ function googleUser(
   {
     email = uniqueEmail(label),
     emailVerified = true,
-  }: { email?: string; emailVerified?: boolean } = {},
+    name,
+  }: { email?: string; emailVerified?: boolean; name?: string } = {},
 ): FakeGoogleIdentity {
-  return { sub: uniqueSubject(label), email, emailVerified };
+  return {
+    sub: uniqueSubject(label),
+    email,
+    emailVerified,
+    ...(name === undefined ? {} : { name }),
+  };
 }
 
 async function register(page: Page, email: string): Promise<void> {
   await page.goto('/es/register');
+  await page.getByLabel(es.auth.fields.displayName).fill('Ana Pérez');
   await page.getByLabel(es.auth.fields.email).fill(email);
   await page.getByLabel(es.auth.fields.password).fill(PASSWORD);
   await page.getByRole('button', { name: es.auth.register.submit }).click();
@@ -109,6 +116,21 @@ test('a new Google user with a verified gmail.com email lands signed in, then si
   await signOut(page);
   await page.goto('/es');
   await expect(page).toHaveURL(/\/es\/sign-in$/);
+});
+
+test('a Google sign-up shows the name from the Google profile on the profile screen (AC-05)', async ({
+  page,
+}) => {
+  const identity = googleUser('named', { name: 'Lucía Gómez' });
+
+  await signInWithGoogle(page, identity);
+
+  await expectSignedIn(page);
+  await page.getByRole('link', { name: es.app.nav.profile }).click();
+  await expect(page).toHaveURL(/\/es\/settings\/profile$/);
+  await expect(page.getByLabel(es.profile.account.displayName, { exact: true })).toHaveValue(
+    'Lucía Gómez',
+  );
 });
 
 test('cancelling on the Google screen returns to sign-in with the Google error (AC-02)', async ({

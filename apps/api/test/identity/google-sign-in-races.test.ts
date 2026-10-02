@@ -15,7 +15,7 @@ import type {
 import type { UserRepository } from '../../src/identity/application/ports/user-repository';
 import { StartSession } from '../../src/identity/application/start-session';
 import { Email } from '../../src/identity/domain/email';
-import { IdentityAlreadyLinked } from '../../src/identity/domain/errors';
+import { DuplicateEmail, IdentityAlreadyLinked } from '../../src/identity/domain/errors';
 import { DrizzleSessionRepository } from '../../src/identity/infrastructure/db/drizzle-session-repository';
 import { DrizzleSignInChallengeRepository } from '../../src/identity/infrastructure/db/drizzle-sign-in-challenge-repository';
 import { DrizzleUnitOfWork } from '../../src/identity/infrastructure/db/drizzle-unit-of-work';
@@ -54,6 +54,7 @@ const CLAIMS: GoogleClaims = {
   email: 'race@gmail.com',
   emailVerified: true,
   hostedDomain: null,
+  name: null,
 };
 const STATE: OAuthState = {
   stateHash: 'state-hash',
@@ -207,7 +208,8 @@ describe('concurrent Google callbacks', () => {
             findByEmail: (email) => repositories.users.findByEmail(email),
             markEmailVerified: (id, at) => repositories.users.markEmailVerified(id, at),
             changePassword: (id, hash, at) => repositories.users.changePassword(id, hash, at),
-            supersedeUnverified: (id, at) => repositories.users.supersedeUnverified(id, at),
+            supersedeUnverified: (id, at, displayName) =>
+              repositories.users.supersedeUnverified(id, at, displayName),
             bumpCredentialsVersion: (id) => repositories.users.bumpCredentialsVersion(id),
             create: async (user) => {
               const winner = await new DrizzleUserRepository(connection.db).create({
@@ -237,6 +239,38 @@ describe('concurrent Google callbacks', () => {
       Email.parse(CLAIMS.email),
     );
     expect(result.outcome === 'signed_in' && result.user.id).toBe(winner?.id);
+  });
+
+  it('stores no display name when creating the account fails, and passes the Google name only to the create call (FR-04)', async () => {
+    const real = new DrizzleUnitOfWork(connection.db, new MutableClock(NOW));
+    const named: GoogleClaims = { ...CLAIMS, name: 'Race Runner' };
+    const created: (string | null | undefined)[] = [];
+    const failingInsert: UnitOfWork = {
+      run: (work) =>
+        real.run((repositories: TransactionalRepositories) => {
+          const users: UserRepository = {
+            findById: (id) => repositories.users.findById(id),
+            findByEmail: (email) => repositories.users.findByEmail(email),
+            markEmailVerified: (id, at) => repositories.users.markEmailVerified(id, at),
+            changePassword: (id, hash, at) => repositories.users.changePassword(id, hash, at),
+            supersedeUnverified: (id, at, displayName) =>
+              repositories.users.supersedeUnverified(id, at, displayName),
+            bumpCredentialsVersion: (id) => repositories.users.bumpCredentialsVersion(id),
+            create: async (user) => {
+              created.push(user.displayName);
+              await repositories.users.create(user);
+              throw new DuplicateEmail();
+            },
+          };
+          return work({ ...repositories, users });
+        }),
+    };
+
+    const result = await completeWith(failingInsert, named).execute(INPUT);
+
+    expect(result).toEqual({ outcome: 'failed', reason: 'conflict', language: 'en' });
+    expect(created).toEqual(['Race Runner', 'Race Runner']);
+    expect(await count('users')).toBe(0);
   });
 
   it('signs in to the account a concurrent callback created between the identity and the email lookups', async () => {
@@ -327,6 +361,7 @@ describe('concurrent Google callbacks', () => {
       email: 'gil@example.com',
       emailVerified: true,
       hostedDomain: null,
+      name: null,
     }).execute(INPUT);
 
     expect(await count('user_identities')).toBe(0);

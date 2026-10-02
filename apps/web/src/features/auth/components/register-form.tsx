@@ -13,6 +13,7 @@ import { FormAlert } from './form-alert';
 import { GoogleSignInOption } from './google-sign-in-button';
 
 export interface RegisterFormValues {
+  displayName: string;
   email: string;
   password: string;
 }
@@ -32,6 +33,7 @@ export function RegisterForm({ pending, errors, googleStartUrl, onSubmit }: Regi
   function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     onSubmit({
+      displayName: readField(event.currentTarget, 'displayName'),
       email: readField(event.currentTarget, 'email'),
       password: readField(event.currentTarget, 'password'),
     });
@@ -47,6 +49,14 @@ export function RegisterForm({ pending, errors, googleStartUrl, onSubmit }: Regi
         {googleStartUrl === undefined ? null : <GoogleSignInOption href={googleStartUrl} />}
         <form ref={formRef} className="grid gap-4" noValidate onSubmit={handleSubmit}>
           <FormAlert error={errors.form} />
+          <AuthField
+            label={t('fields.displayName')}
+            name="displayName"
+            type="text"
+            autoComplete="name"
+            required
+            error={errors.fields?.displayName}
+          />
           <AuthField
             label={t('fields.email')}
             name="email"

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   fakeGoogleLoginHint,
+  pkceChallenge,
   startFakeGoogleOidc,
   type FakeGoogleIdentity,
   type FakeGoogleOidc,
@@ -126,5 +127,82 @@ describe('fake Google /authorize', () => {
     expect(approved.searchParams.get('state')).toBe('the-state');
     expect(approved.searchParams.get('code')).toBeTruthy();
     expect(consentPage).toContain('id="cancel"');
+  });
+});
+
+describe('fake Google name claim and profile scope (FR-04)', () => {
+  const VERIFIER = 'the-verifier';
+
+  async function tokenFor(
+    identity: FakeGoogleIdentity,
+    scope: string,
+  ): Promise<{ scope: string; claims: Record<string, unknown>; approveScope: string }> {
+    const { continueUrl } = await google.consent(
+      authorizeUrl(google.origin, { scope, code_challenge: pkceChallenge(VERIFIER) }).href,
+      identity,
+    );
+    const approved = new URL(continueUrl);
+    const response = await fetch(google.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: approved.searchParams.get('code') ?? '',
+        code_verifier: VERIFIER,
+        redirect_uri: REGISTERED_REDIRECT_URI,
+        client_id: google.clientId,
+        client_secret: google.clientSecret,
+      }),
+    });
+    const body = (await response.json()) as { id_token: string; scope: string };
+    const payload = body.id_token.split('.')[1] ?? '';
+    return {
+      scope: body.scope,
+      claims: JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as Record<
+        string,
+        unknown
+      >,
+      approveScope: approved.searchParams.get('scope') ?? '',
+    };
+  }
+
+  it('issues the name when the identity has one and the scope includes profile', async () => {
+    const { claims } = await tokenFor({ ...IDENTITY, name: 'Ana Gómez' }, 'openid email profile');
+
+    expect(claims.name).toBe('Ana Gómez');
+  });
+
+  it('issues an empty name as the empty string, as Google could', async () => {
+    const { claims } = await tokenFor({ ...IDENTITY, name: '' }, 'openid email profile');
+
+    expect(claims.name).toBe('');
+  });
+
+  it('issues no name without the profile scope, even when the identity has one', async () => {
+    const { claims } = await tokenFor({ ...IDENTITY, name: 'Ana Gómez' }, 'openid email');
+
+    expect(claims).not.toHaveProperty('name');
+  });
+
+  it('issues no name when the identity has none, even with the profile scope', async () => {
+    const { claims } = await tokenFor(IDENTITY, 'openid email profile');
+
+    expect(claims).not.toHaveProperty('name');
+  });
+
+  it('lists profile in the scope of the approve redirect and of the token response', async () => {
+    const { scope, approveScope } = await tokenFor(IDENTITY, 'openid email profile');
+
+    expect(approveScope.split(' ')).toContain('profile');
+    expect(scope.split(' ')).toContain('https://www.googleapis.com/auth/userinfo.profile');
+  });
+
+  it('carries the name through the login hint, including an empty one', () => {
+    const hint = (identity: FakeGoogleIdentity) =>
+      new URLSearchParams(fakeGoogleLoginHint(identity)).get('name');
+
+    expect(hint({ ...IDENTITY, name: 'Ana Gómez' })).toBe('Ana Gómez');
+    expect(hint({ ...IDENTITY, name: '' })).toBe('');
+    expect(hint(IDENTITY)).toBeNull();
   });
 });

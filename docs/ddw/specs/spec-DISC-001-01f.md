@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-DISC-001-01f.md |
 | Tier | FEATURE |
 | Date | 2026-10-02 |
-| Spec loops | 2 |
-| Loops since last human decision | 2 |
+| Spec loops | 3 |
+| Loops since last human decision | 0 |
 
 ## Summary
 A signed-in user deletes the account and every row that belongs to it with `POST /profile/delete`,
@@ -43,7 +43,7 @@ path with the erasure test; Block 4 the Google re-authentication; Block 5 the we
 | NFR-01 | Strategy: deletion removes the `users` row and every dependent row in one transaction through `ON DELETE CASCADE`, then the `email_outbox` rows of the user (no foreign key; matched by `payload->>'userId'` and by address, both indexed so the statement does not scan the table under the user's row lock). `apps/api/test/identity/user-erasure.test.ts` keeps a registry of every table that stores user data, each with a seeder, discovers the whole foreign-key graph reachable from `users` in `pg_constraint` (direct and indirect references, ignoring the two test-only tables `test_fixture_resources` and `test_fixture_group_members` by exact name), and fails when a reachable table is not registered or a foreign key in the graph is not `ON DELETE CASCADE`; it seeds one row per registered table for a user (accounts of DISC-001-02a included), deletes the account and counts 0 rows for that user in every registered table, and it proves that another user's rows stay. Tables of DISC-001-02b and DISC-001-07a register themselves when they merge: the guard fails until they do (Block 3). |
 | NFR-02 | Strategy: a wrong password is handled by `DeleteUser` with the sign-in policies `SIGN_IN_ACCOUNT_POLICY` (5 per 15 minutes per account) and `SIGN_IN_IP_POLICY` (20 per 15 minutes per IP) of `attempt-policies.ts`, reserved before any Argon2id work and kept on failure; a wrong second-factor code is handled with `TWO_FACTOR_DISABLE_POLICIES` (5 per 15 minutes and 20 per 24 hours per user), reserved before the code is checked, refused with 429 without checking the code when over the limit, kept on failure and refunded on success, and it also records one unit in the sign-in account policy as 01c does. Tests: the 6th wrong password for an email answers 429; the 6th wrong code within 15 minutes answers 429 without checking the code (Block 3). |
 | NFR-03 | Strategy: `deletion_grants` rows hold `token_hash` (SHA-256 of 256 random bits, the token only in the cookie), `user_id`, `session_family_id`, `credentials_version` and `expires_at = issued + 5 minutes` (`DELETION_GRANT_TTL_MS`). The grant is consumed with one conditional `DELETE … WHERE token_hash AND user_id AND session_family_id AND credentials_version AND expires_at > now RETURNING` inside the erase transaction, so it is usable once and only by that user in that session family; issuing a new grant replaces the user's previous one; the worker purges expired rows (Block 2, Block 4). |
-| NFR-04 | Strategy: the Google flow reuses `GoogleOidcIdentityProvider.exchangeCode` unchanged for the signature, audience, issuer, expiry and nonce checks, and the existing state, nonce and PKCE storage and single-use consumption; the authorization request for this purpose adds `prompt=login` and `max_age=0` so Google asks for the credentials again, and the verified `auth_time` claim, when Google sends it, must be between the creation of the state minus 60 seconds and now plus 60 seconds; the Google subject must equal the one linked to the state's user. Residual: if Google never sends `auth_time`, the control is `prompt=login` plus the single-use state (open decision O-1) (Block 4). |
+| NFR-04 | Strategy: the Google flow reuses `GoogleOidcIdentityProvider.exchangeCode` unchanged for the signature, audience, issuer, expiry and nonce checks, and the existing state, nonce and PKCE storage and single-use consumption; the authorization request for this purpose adds `prompt=login` and `max_age=0` so Google asks for the credentials again, and the verified `auth_time` claim, when Google sends it, must be between the creation of the state minus 60 seconds and now plus 60 seconds; the Google subject must equal the one linked to the state's user. Residual: if Google never sends `auth_time`, the control is `prompt=login` plus the single-use state (decision O-1, accepted by the owner) (Block 4). |
 
 ## Dependencies between blocks
 Block 1 → Block 2 → Block 3 → Block 4 → Block 5. Block 2 creates the grant and state storage that
@@ -84,17 +84,24 @@ diff, and its `when` is bumped above every other entry.
 Deploy order: the API first, then the web app, because `GET /profile` gains a required
 `deletionReauth` field (a new web build parsing an old API response would report `INTERNAL`).
 
-Open decisions for the human (the spec carries the recommended answer; none blocks CODE):
-- O-1 (`auth_time`): the spec enforces `auth_time` when Google sends it and otherwise relies on
-  `prompt=login` and the single-use state; failing closed when it is absent would break deletion for
-  Google users if Google omits the claim. Recommended: keep this, and check with a real Google
-  account (a manual step before the release) whether the ID token carries `auth_time` for a request
-  with `max_age=0`; recorded as accepted risk R-09 of the threat model, to be confirmed by the owner.
-  If Google does not send it, a later ticket may add a switch to fail closed.
+Decided by the human on 2026-10-02 after the PLAN review (not in the PRD's log, because they settle
+design choices and change no requirement):
+- O-1 (`auth_time`): R-09 of the threat model is accepted as designed. The spec enforces `auth_time`
+  when Google sends it and otherwise relies on `prompt=login` and the single-use state; failing
+  closed when it is absent would break deletion for Google users if Google omits the claim. A manual
+  verification step follows the deploy (see below). If Google does not send the claim, a later
+  ticket may add a switch to fail closed.
 - O-2 (an account without a password and without a Google link): such an account cannot
-  re-authenticate and is answered `REAUTHENTICATION_REQUIRED`; the web screen tells the user to set a
-  password first (forgot password). It should not exist in practice (Google creation and supersede
-  always link). Recommended: keep.
+  re-authenticate and is answered `REAUTHENTICATION_REQUIRED`; the web screen asks the user to set a
+  password first (forgot password). Kept as designed.
+
+Manual verification after the deploy (a checklist item for the pull request): sign in for deletion
+with a real Google account that has no password (start the re-authentication from the
+delete-account screen, stop before confirming the deletion of a throwaway account, or use an account
+created for the check) and record whether the ID token carries `auth_time` for the request with
+`max_age=0` (for example with one temporary, redacted debug log line outside the repository or by
+reading the token in a controlled environment, never by logging claims in production); write the
+result in the pull request and, if the claim is absent, open the ticket for the fail-closed switch.
 
 Assumptions (interpretations, not human decisions; each can be changed in a new loop):
 - A-1: a user with a password who sends no password (or a user without a password who sends none and
@@ -403,4 +410,4 @@ Block 3's tests pass.
 - After a deletion no row of the user remains in any registered table (accounts included), the erasure guard fails for an unregistered or non-cascading table, and the user's outbox rows are gone.
 - `pnpm test`, `pnpm e2e`, `pnpm test:perf`, `pnpm lint`, `pnpm typecheck` and `pnpm audit --prod --audit-level high` pass; coverage stays at or above 80% lines, branches and functions.
 - No UI string is hard-coded, no secret, code or grant is logged, and no new runtime dependency was added.
-- Open decisions O-1 and O-2 and assumptions A-1 to A-13 are accepted or changed in a new loop before the branch is merged; the `auth_time` behaviour is checked once with a real Google account; the migration journal is checked against `origin/main` at merge time.
+- Assumptions A-1 to A-13 are accepted or changed in a new loop before the branch is merged; the `auth_time` behaviour is checked once with a real Google account after the deploy (manual verification above); the migration journal is checked against `origin/main` at merge time.

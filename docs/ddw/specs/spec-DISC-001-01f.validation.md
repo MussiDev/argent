@@ -17,7 +17,7 @@
   ⚠️ W-SPEC-02: large block, consider splitting: Block 1 (Shared contracts, the new error code and log redaction) (8 files, 383 words), Block 2 (Migration 0010, grant and state storage, deletion repository) (11 files, 1409 words), Block 3 (Deleting with the password and a second factor, and the erasure guard) (6 files, 1542 words), Block 4 (Google re-authentication and the deletion grant) (10 files, 1502 words), Block 5 (Web: delete-account screen) (8 files, 1173 words)
   👁  F-SPEC-12 (contradicts the PRD) and F-SPEC-13 (terminology diverging from
       the PRD) are MANUAL: judge them and say so explicitly in your report.
-  ✅ F-SPEC-LOOP: 2 loop(s) since a human decided, under the ceiling of 3; 2 in total for this document
+  ✅ F-SPEC-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 3 in total for this document
 ────────────────────────────────────────────────────────────────
 Total: 13 passed, 0 failed, 1 warnings
 Result: PASSED

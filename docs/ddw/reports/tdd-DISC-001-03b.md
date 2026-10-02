@@ -111,3 +111,19 @@ Fact recorded: a bare `delete from users` with movements present succeeds, by th
 Review: verifier PASS, auditor no blockers. Advisories left: the guard cannot itself prove the step is wired (the `server.ts` source check does), the ESLint regex only names the four layer folders, two timing and weak assertions in the race tests, and a rare 40P01 between an erasure and a concurrent account delete (retryable). Comments added about the trigger-order assumption and the lock.
 
 After: 120 files, 2014 tests in `apps/api` pass; typecheck, eslint and prettier clean.
+
+## Block 7 — Obligations of 02a/02b, FEAT-003 totals and performance (12 tests)
+
+No production code changes in this block: Blocks 4 and 5 already satisfy every test, so none could fail first. Red evidence was obtained by temporarily swapping the real adapters in the test harness for `NoMovementsAdapter` and `NoUsageAdapter` (harness restored afterwards); the perf files were not run that way.
+
+| Test file | Tests | Result with the No* adapters |
+|---|---|---|
+| `apps/api/test/movements/account-obligations.test.ts` | 4 | 1 red: archive keeps the balance `expected '1000' to be '700'`; balance formula `expected '2500' to be '11950'` |
+| `apps/api/test/movements/category-obligations.test.ts` | 4 | 0 red: the foreign key restrict maps to the same 409/404 codes, so these cannot detect an unwired adapter; the wiring is pinned by the `server.ts` source check in `erasure-step.test.ts` (comment added in both files) |
+| `apps/api/test/movements/totals.test.ts` | 2 | 1 red: `expected { available: 50000n, netWorth: 70000n } to deeply equal { available: 40000n, netWorth: 60000n }` |
+| `apps/api/test/perf/movements-save.perf.test.ts` | 1 | not run with No*: nothing to fail against; asserts 500 saved rows exist so a 201 without an insert cannot pass |
+| `apps/api/test/perf/accounts-list.perf.test.ts` | modified | now uses the real adapter on a real movements table (100 accounts, 100,000 movements) and asserts balances and totals against a JS formula |
+
+Perf (threshold p95 under 300 ms, 500 requests, 20 warm-up, 8 connections): accounts list 37.5 ms, saving a movement 80.2 ms.
+
+Review: verifier PASS, auditor no blockers. Fixed after review: the shared fixture `newCategory` used an icon outside the public palette (now `wallet`), a vacuous assertion removed. Advisories left: the harness does not pass the identity hooks (`seedDefaultCategories`, `beforeUserErased`) so the router list is duplicated by hand across `server.ts`, the harness and the perf test; perf helpers duplicated across perf files; fixed emails in perf seeds.

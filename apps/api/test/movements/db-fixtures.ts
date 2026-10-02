@@ -59,7 +59,7 @@ export async function newCategory(
 ): Promise<string> {
   const result = await pool.query<{ id: string }>(
     `insert into categories (owner_id, kind, name, icon, color, archived_at)
-     values ($1, $2, $3, 'tag', 'blue', $4) returning id`,
+     values ($1, $2, $3, 'wallet', 'blue', $4) returning id`,
     [ownerId, kind, `Cat ${randomUUID()}`, archived ? new Date() : null],
   );
   return firstId(result.rows);

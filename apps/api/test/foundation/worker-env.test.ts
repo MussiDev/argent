@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { parseWorkerEnv } from '../../src/shared/config/env';
 
-/** Exactly the seven settings the email worker reads, as a production service would set them. */
+/**
+ * The seven settings without a default that the worker reads, as a production service sets them.
+ * RATE_PROVIDER and DOLARAPI_BASE_URL are optional with production-safe defaults, so they are absent.
+ */
 const WORKER_PRODUCTION = {
   NODE_ENV: 'production',
   LOG_LEVEL: 'info',
@@ -25,6 +28,31 @@ describe('worker environment', () => {
     expect(env.EMAIL_FROM).toBe('App <no-reply@example.com>');
     expect(env).not.toHaveProperty('JWT_SECRET');
     expect(env).not.toHaveProperty('GOOGLE_CLIENT_ID');
+  });
+
+  it('accepts the exchange rate settings with defaults, and no API-only setting', () => {
+    const env = parseWorkerEnv(WORKER_PRODUCTION);
+
+    expect(env.RATE_PROVIDER).toBe('dolarapi');
+    expect(env.DOLARAPI_BASE_URL).toBe('https://dolarapi.com');
+    expect(env).not.toHaveProperty('TOTP_ENCRYPTION_KEY');
+
+    const local = parseWorkerEnv({
+      ...WORKER_PRODUCTION,
+      NODE_ENV: 'development',
+      EMAIL_PROVIDER: 'console',
+      RATE_PROVIDER: 'fake',
+      DOLARAPI_BASE_URL: 'http://127.0.0.1:4200',
+    });
+    expect(local.RATE_PROVIDER).toBe('fake');
+    expect(local.DOLARAPI_BASE_URL).toBe('http://127.0.0.1:4200');
+  });
+
+  it('refuses fake and a changed base URL in production, naming the variable only', () => {
+    expect(parseProduction({ RATE_PROVIDER: 'fake' })).toThrow(/RATE_PROVIDER/);
+    const changed = parseProduction({ DOLARAPI_BASE_URL: 'https://evil.example.com' });
+    expect(changed).toThrow(/DOLARAPI_BASE_URL/);
+    expect(changed).not.toThrow(/evil\.example/);
   });
 
   it('invalid WEB_BASE_URL error: refuses http links in production', () => {

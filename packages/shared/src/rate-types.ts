@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** The seven ARS/USD quotes. Owned by the future exchange-rates module. */
+/** The seven ARS/USD quotes. Consumed by the exchange-rates module. */
 export const RATE_TYPES = [
   'oficial',
   'blue',

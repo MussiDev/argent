@@ -29,6 +29,8 @@ export const productionOverrides: Record<string, string> = {
   GOOGLE_CLIENT_ID: 'argent-test.apps.googleusercontent.com',
   GOOGLE_CLIENT_SECRET: 'google-test-client-secret',
   TOTP_ENCRYPTION_KEY: TEST_TOTP_ENCRYPTION_KEY,
+  // The test source defaults to the fake provider, which production refuses.
+  RATE_PROVIDER: 'dolarapi',
 };
 
 export function testEnvSource(
@@ -45,6 +47,7 @@ export function testEnvSource(
     BREACH_CHECKER: 'fake',
     TRUST_PROXY: '0',
     LOG_LEVEL: 'silent',
+    RATE_PROVIDER: 'fake',
     TOTP_ENCRYPTION_KEY: TEST_TOTP_ENCRYPTION_KEY,
     ...overrides,
   };

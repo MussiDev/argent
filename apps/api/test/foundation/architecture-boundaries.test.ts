@@ -301,3 +301,41 @@ describe('the categories persistence reaches identity only through its persisten
     ]);
   });
 });
+
+describe('hexagonal import boundaries in the exchange-rates module', () => {
+  const RATES_DOMAIN_FILE = 'apps/api/src/exchange-rates/domain/probe.ts';
+  const RATES_APPLICATION_FILE = 'apps/api/src/exchange-rates/application/probe.ts';
+
+  it.each([
+    "import { eq } from 'drizzle-orm';",
+    "import pg from 'pg';",
+    "import express from 'express';",
+    "import { randomUUID } from 'node:crypto';",
+    "import { rates } from '../infrastructure/db/schema';",
+  ])('rejects in exchange-rates domain: %s', async (source) => {
+    expect(await restrictedImports(RATES_DOMAIN_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it.each([
+    "import { rates } from '../infrastructure/db/schema';",
+    "import { x } from '../infrastructure/provider/dolarapi-rate-provider';",
+  ])('rejects in exchange-rates application: %s', async (source) => {
+    expect(await restrictedImports(RATES_APPLICATION_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it('allows exchange-rates domain code to import shared schemas and sibling domain files', async () => {
+    const source =
+      "import { z } from 'zod';\nimport { AppError } from '@pesly/shared';\nimport { y } from './rate-quote';\n";
+    expect(await restrictedImports(RATES_DOMAIN_FILE, source)).toEqual([]);
+  });
+
+  it('allows exchange-rates application code to import its own ports and domain files', async () => {
+    const source =
+      "import { x } from '../domain/rate-quote';\nimport type { RateProvider } from './ports/rate-provider';\nimport type { RateRepository } from './ports/rate-repository';\n";
+    expect(await restrictedImports(RATES_APPLICATION_FILE, source)).toEqual([]);
+  });
+});

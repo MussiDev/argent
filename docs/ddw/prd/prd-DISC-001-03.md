@@ -1,191 +1,164 @@
-# PRD DISC-001-03: Movements & Exchange Rates
+# Parent PRD: Movements & Exchange Rates
 
-| Field | Value |
-|-------|-------|
-| Ticket | DISC-001 |
-| Tracker | none |
-| Date | 2026-09-25 |
-| PRD loops | 1 |
-| Loops since last human decision | 0 |
+| Metric | Value |
+|--------|-------|
+| Ticket | DISC-001-03 |
+| Date | 2026-10-02 |
+| Status | Split |
 
-## Context and Problem
-Movements are the core of the finance PWA (see `docs/ddw/discovery/concept-DISC-001.md`): every
-expense, income, transfer and dollar purchase changes an account balance (PRD 02). Users in
-Argentina live in two currencies, and the ARS/USD rate moves constantly and has several
-"official" values (oficial, blue, MEP…). Every movement therefore needs a frozen exchange rate,
-so that converted totals and group balances do not change when the dollar moves.
+## Sub-tickets
 
-## Goals
-- Record expenses, income, transfers and currency exchanges quickly and correctly.
-- Freeze on every expense and income the ARS/USD rate used, with its source, so history never
-  changes.
-- Keep an up-to-date local copy of market rates so entry never depends on an external service.
-- Let users find their movements by account, category, date, type and tag.
+| Sub-ticket | Title | PRD | Dependencies | Status |
+|---|---|---|---|---|
+| DISC-001-03a | Exchange Rates, Store and Sync | prd-DISC-001-03a.md | PRD 01 (sessions); no code dependency on the open branches | done: draft PR #18, merges when the PR merges, after 07a (0008) if that lands first (migration 0012; its journal `when` 1790945403578 must stay greater than main's maximum, re-check before merging); #15 (02b, 0009), #16 (01f, 0010) and #17 (FEAT-003, 0011) are already merged and this branch is rebased on them |
+| DISC-001-03b | Expense and Income | prd-DISC-001-03b.md | depends on a (draft PR #18, not yet merged); DISC-001-02b is merged into main (#15), so that condition is met (decision 2, resolved) | active: next to start, once 03a's PR has merged |
+| DISC-001-03c | Transfers and Currency Exchange | prd-DISC-001-03c.md | depends on b | pending |
+| DISC-001-03d | Tags and Filters | prd-DISC-001-03d.md | depends on b; DISC-001-02b merged | pending |
+| DISC-001-03e | Edit and Delete Movements | prd-DISC-001-03e.md | depends on b, c and d | pending |
 
-## Functional Requirements
-- FR-01: The system must allow a user to record an expense with an amount greater than 0, a
-  date, one of their accounts, an expense category, an optional note and optional tags.
-- FR-02: The system must allow a user to record an income with an amount greater than 0, a date,
-  one of their accounts, an income category, an optional note and optional tags.
-- FR-03: The system must allow a user to record a transfer of an amount greater than 0 between
-  two different accounts of theirs with the same currency.
-- FR-04: The system must allow a user to record a currency exchange: an amount taken out of one
-  of their accounts in one currency and an amount put into one of their accounts in the other
-  currency (decision 2026-09-25: buying/selling USD is not an expense nor an income).
-- FR-05: The system must store on every currency exchange its implied rate, computed as the ARS
-  amount divided by the USD amount.
-- FR-06: The system must store on every expense and income the ARS-per-USD rate used to convert
-  it to the other currency, and the source of that rate (automatic with its rate type, or
-  manual).
-- FR-07: The system must prefill the rate of a new expense or income with the latest stored sell
-  price of the user's default rate type (PRD 01, FR-10).
-- FR-08: The system must allow a user to replace the prefilled rate with a manual rate before
-  saving the movement.
-- FR-09: The system must keep the rate stored on a movement unchanged when market rates are
-  updated.
-- FR-10: The system must fetch the buy and sell prices of the 7 rate types (oficial, blue,
-  bolsa/MEP, contado con liquidación, mayorista, cripto, tarjeta) from the rate provider and
-  store them with their update timestamp.
-- FR-11: The system must use the last stored rate when the rate provider does not answer, and
-  must show the age of that rate on the entry form.
-- FR-12: The system must update each account balance according to the movement type: an expense
-  subtracts from its account, an income adds to its account, a transfer or currency exchange
-  subtracts from the source account and adds to the destination account.
-- FR-13: The system must allow a user to edit any field of one of their movements.
-- FR-14: The system must allow a user to delete one of their movements.
-- FR-15: The system must list the user's movements ordered by date, newest first.
-- FR-16: The system must allow a user to filter the movement list by account, category, date
-  range, movement type and tag, alone or combined.
-- FR-17: The system must include the movements of a category's subcategories when the list is
-  filtered by a parent category.
-- FR-18: The system must allow a user to add up to 10 tags to an expense or income.
-- FR-19: The system must suggest the user's existing tags while they type a tag.
-- FR-20: The system must reject a movement with a date later than the current day in the user's
-  time zone (PRD 01, FR-24) (future
-  payments belong to PRD 08).
-- FR-21: The system must let a user read, edit and delete only their own movements (movements
-  shared through groups are governed by PRD 05).
+## Suggested implementation order
+a → b → (c and d, independent of each other) → e
 
-## Non-Functional Requirements
-- NFR-01: Amounts must be stored as 64-bit integers in minor units (1 unit = 0.01 ARS or 0.01
-  USD), with 0 floating-point columns or fields for money (concept decision).
-- NFR-02: Exchange rates must be stored as integers scaled by 10,000 (4 decimal places), with 0
-  floating-point columns or fields for rates.
-- NFR-03: The system must refresh market rates every 60 minutes.
-- NFR-04: Saving a movement must answer in < 300 ms at p95, measured server-side.
-- NFR-05: Listing and filtering movements must answer in < 500 ms at p95 for a user with 100,000
-  movements, measured server-side.
-- NFR-06: The movement list must be paginated with a maximum page size of 100 items.
-- NFR-07: Saving a movement must not call the rate provider synchronously: 0 provider calls in
-  the request path of a movement save.
-- NFR-08: Tags must be between 1 and 30 characters, and must be compared case-insensitively.
+## Pending decisions (not resolved in the sub-PRDs; original wording kept)
+1. RESOLVED (2026-10-02, human decision relayed by the orchestrator): **user deletion versus
+   restricting keys.** The keys from movements to accounts and categories keep `ON DELETE RESTRICT`;
+   deleting a user erases that user's movements FIRST through an ordered erasure step plus the
+   DISC-001-01f guard's `policy` value, both added by DISC-001-03b, which also proves the PostgreSQL
+   ordering with a test in its PLAN. Original analysis kept below for the record.
+   (Was: human decision pending, for DISC-001-03b's PLAN.)
+   DISC-001-02a and DISC-001-02b require movements to reference accounts and categories with
+   `ON DELETE RESTRICT`, while DISC-001-01f deletes a user through `ON DELETE CASCADE` and its
+   erasure guard fails on any foreign key in the graph that is not `CASCADE`. PostgreSQL checks
+   `RESTRICT` immediately, not at the end of the statement, so a user deletion that cascades to
+   accounts can fail depending on the order of the cascade (to be proven by a test in PLAN).
+   Recommended: keep `RESTRICT` and add an ordered erasure step that deletes the user's movements
+   before the `users` row, with the guard's `policy` value (the path 01f's spec already
+   anticipates). Alternative: `NO ACTION` on `account_id` and `category_id`, simpler but a
+   departure from the wording of 02a and 02b, and it still trips the guard.
+2. RESOLVED (2026-10-02, human decision relayed by the orchestrator): **DISC-001-02b merge
+   order.** DISC-001-03b waits for 02b to be merged into main; no stacking. Original note: movements need the categories table
+   (kind check, subcategories) and the real `CategoryUsage` adapter. Recommended: DISC-001-03b
+   starts its PLAN after 02b is merged. 03a does not depend on it.
+3. RESOLVED (2026-10-02, human decision relayed by the orchestrator): **no stored rate yet.** The
+   entry form requires a manual rate, which is frozen on the movement with source "manual"; to be
+   folded into DISC-001-03b's FR-04, FR-05 and ACs at its DEFINE. Original note: the original FR-07 does not
+   say what an expense or income form prefills when no rate has ever been stored (first run with
+   the provider down). Options: block the save, require a manual rate, or use a seeded value.
+   Recommended: require a manual rate.
+4. RESOLVED (2026-10-02, checked once with a plain GET of `https://dolarapi.com/v1/dolares`):
+   "tarjeta" has both `compra` and `venta` like the other six types, so FR-01 of DISC-001-03a
+   (buy and sell of each of the 7 types) holds as written. The adapter must still treat a missing
+   buy price as a failed refresh rather than store a partial set.
+5. **Rate age: which timestamp** (found while splitting; for DISC-001-03b's DEFINE). The provider
+   reports a per-type `fechaActualizacion` that can be a day old for oficial and tarjeta, even when
+   the refresh ran a minute ago. The original AC-18 shows "the age of the latest stored rate"
+   without saying whether that is the provider's timestamp or the time of our refresh.
+   DISC-001-03a stores and returns both, so either answer needs no change there.
+6. **Implied rate rounding** (found while splitting; for DISC-001-03c's PLAN). The original FR-05
+   divides the ARS amount by the USD amount and stores 4 decimals; it does not say how a division
+   that does not end in 4 decimals is rounded.
 
-## Acceptance Criteria
-- AC-01 (FR-01): WHEN a user saves an expense with an amount greater than 0, a date, one of their
-  accounts and an expense category, THE system SHALL store it and show it in the movement list.
-- AC-02 (FR-01): IF a user saves an expense with an amount of 0 or less, THEN THE system SHALL
-  reject it and show "Amount must be greater than 0".
-- AC-03 (FR-01): IF a user saves an expense with an income category, THEN THE system SHALL
-  reject it.
-- AC-04 (FR-02): WHEN a user saves an income with an amount greater than 0, a date, one of their
-  accounts and an income category, THE system SHALL store it and show it in the movement list.
-- AC-05 (FR-02): IF a user saves an income with an expense category, THEN THE system SHALL
-  reject it.
-- AC-06 (FR-03): WHEN a user saves a transfer of an amount greater than 0 between two different
-  accounts of theirs with the same currency, THE system SHALL store it.
-- AC-07 (FR-03): IF a user saves a transfer whose source and destination are the same account or
-  have different currencies, THEN THE system SHALL reject it.
-- AC-08 (FR-04): WHEN a user saves a currency exchange of 1,557,300.00 ARS out of an ARS account
-  and 1,000.00 USD into a USD account, THE system SHALL store it.
-- AC-09 (FR-04): IF a user saves a currency exchange whose two accounts have the same currency,
-  THEN THE system SHALL reject it.
-- AC-10 (FR-05): WHEN a currency exchange of 1,557,300.00 ARS for 1,000.00 USD is saved, THE
-  system SHALL store an implied rate of 1,557.3000 ARS per USD.
-- AC-11 (FR-06): WHEN a user saves an expense or income, THE system SHALL store with it the rate
-  used and its source ("automatic: <rate type>" or "manual").
-- AC-12 (FR-07): WHEN a user opens the form of a new expense or income, THE system SHALL prefill
-  the rate with the latest stored sell price of the user's default rate type.
-- AC-13 (FR-08): WHEN a user replaces the prefilled rate with a manual rate greater than 0 and
-  saves, THE system SHALL store that rate with source "manual".
-- AC-14 (FR-08): IF a user enters a manual rate of 0 or less, THEN THE system SHALL reject it.
-- AC-15 (FR-09): WHEN market rates are refreshed, THE system SHALL leave the rate stored on every
-  existing movement unchanged.
-- AC-16 (FR-10): WHEN a scheduled rate refresh succeeds, THE system SHALL store the buy price,
-  sell price and update timestamp of each of the 7 rate types.
-- AC-17 (FR-11): IF the rate provider fails or times out during a refresh, THEN THE system SHALL
-  keep the last stored rates and record the failure.
-- AC-18 (FR-11): WHILE the latest stored rate is older than 2 hours, THE system SHALL show its
-  age on the entry form (for example "rate from 3 h ago").
-- AC-19 (FR-12): WHEN an expense of 100.00 is saved on an account with a balance of 500.00, THE
-  system SHALL show a balance of 400.00 for that account.
-- AC-20 (FR-12): WHEN an income of 100.00 is saved on an account with a balance of 500.00, THE
-  system SHALL show a balance of 600.00 for that account.
-- AC-21 (FR-12): WHEN a transfer or currency exchange is saved, THE system SHALL subtract the
-  source amount from the source account and add the destination amount to the destination
-  account.
-- AC-22 (FR-13): WHEN a user edits the amount, date, account, category, note, tags or rate of a
-  movement and saves, THE system SHALL persist the change and recompute the balances of every
-  account involved before and after the edit.
-- AC-23 (FR-14): WHEN a user deletes a movement, THE system SHALL remove it and reverse its
-  effect on every account balance involved.
-- AC-24 (FR-15): WHEN a user opens the movement list, THE system SHALL show their movements
-  ordered by date, newest first, in pages of at most 100.
-- AC-25 (FR-16): WHEN a user filters by an account, a category, a date range, a movement type and
-  a tag at once, THE system SHALL show only the movements that match all of them.
-- AC-26 (FR-17): WHEN a user filters by a parent category, THE system SHALL include the
-  movements of its subcategories.
-- AC-27 (FR-18): WHEN a user saves an expense or income with between 1 and 10 tags, THE system
-  SHALL store all of them.
-- AC-28 (FR-18): IF a user adds an 11th tag to a movement, THEN THE system SHALL reject it.
-- AC-29 (FR-19): WHEN a user types the first characters of a tag they already used, THE system
-  SHALL suggest the matching existing tags.
-- AC-30 (FR-20): IF a user saves a movement dated after the current day, THEN THE system SHALL
-  reject it.
-- AC-31 (FR-21): IF a user requests to read, edit or delete a movement owned by another user and
-  not shared with them through a group, THEN THE system SHALL answer 404 Not Found and leave the
-  movement unchanged.
-- AC-32 (FR-21): WHEN a user opens the movement list, THE system SHALL show only movements they
-  own.
+## Added while splitting (not in the original text)
+The three DISC-001-03a additions (FR-03, AC-04, AC-05) were ACCEPTED by the human on 2026-10-02.
+Each is derived from an obligation or convention already on record; none changes an original
+requirement.
 
-## Out of Scope
-- Offline entry and synchronization (PRD 04).
-- Splitting movements between group members (PRD 05).
-- Credit card statements and installment purchases (PRD 10).
-- Future-dated and recurring movements (PRD 08).
-- Receipt photos or file attachments (candidate for a future PRD).
-- Currencies other than ARS and USD.
-- Full-text search in notes.
-- Bulk import of movements (CSV, bank statements).
-- Splitting one movement across several categories.
+| New ID | What | Why |
+|---|---|---|
+| 03a FR-03, AC-03, AC-04, AC-05 | Read endpoint for the latest stored rates | the original FR-07 and FR-11 need the rates readable, and a ticket that only writes rates cannot be shipped or tested alone |
+| 03a NFR-03 | 0 provider calls in the request path of any user request | generalizes the original NFR-07 beyond the movement save |
+| 03b FR-12, AC-18, AC-19 | Refuse to delete an account or category with movements | DISC-001-02a AC-10 and DISC-001-02b AC-10 deferred their end-to-end behavior to PRD 03 |
+| 03b NFR-06 | Account list with balances < 300 ms p95 at 100 accounts and 100,000 movements | DISC-001-02a NFR-02 deferred the real-table perf test to PRD 03 |
+| 03b NFR-07, 03c NFR-04, 03d NFR-04, 03e NFR-04 | Every query filtered by the owner | AGENTS.md rule and PRD 01 FR-23 |
+| 03c FR-05, AC-07 | Future-date rule for transfers and exchanges | the original FR-20 covers every movement |
+| 03c FR-06, AC-08 | Transfers and exchanges appear in the list | the original FR-15 covers every movement |
+| 03c AC-09 | Foreign account on a transfer answers 404 | AGENTS.md rule: data that is not the user's answers 404 |
+| 03d AC-06 | Tag length sad path | applies the original NFR-08 |
+| 03d AC-07 | Filters never reveal another user's data | AGENTS.md rule |
+| 03e FR-04, AC-04, AC-05 | Future date and non-positive amount rejected on edit | applies the original FR-20 and AC-02 to edits |
+| 03e NFR-03 | Edit and delete < 300 ms p95 | extends the original NFR-04 (saving) to edit and delete |
 
-## Risks and Mitigations
-- **The rate provider (dolarapi.com) disappears or changes its API** → rates are stored locally
-  (FR-10, FR-11) and the provider sits behind one adapter, so it can be replaced without touching
-  movements.
-- **Stale rates used without the user noticing** → the rate age is shown when older than 2 hours
-  (AC-18).
-- **Rounding errors in balances** → integer minor units and scaled integer rates (NFR-01,
-  NFR-02).
-- **Editing old movements changes past balances silently** → balances are recomputed on edit
-  (AC-22); an audit trail of edits is out of this PRD and can be added if disputes appear in
-  groups (PRD 05).
+## Deferred obligations discharged by this split
+- DISC-001-02a (deferred to PRD 03): AC-10 end to end, the history half of AC-07, NFR-01 and NFR-02
+  against the real table, and a foreign key from movements to accounts with `ON DELETE RESTRICT`
+  (DISC-001-03b).
+- DISC-001-02b (deferred to PRD 03): AC-05, AC-06 and AC-10 end to end, and a foreign key from
+  movements to categories with `ON DELETE RESTRICT` (DISC-001-03b).
+- DISC-001-01f: its erasure guard needs a registry entry for the movements tables (pending
+  decision 1).
 
-## Dependencies
-- dolarapi.com (`/v1/dolares`), the external rate provider — FR-10, FR-11.
-- PRD 01 (Identity & Access) — user default rate type (FR-07), user time zone (FR-20) and access
-  control (FR-21).
-- PRD 02 (Accounts & Categories) — accounts, currencies and categories (FR-01 to FR-04, FR-12,
-  FR-17).
-- PRD 05 (Groups & Expense Splitting) — movements shared through groups (FR-21).
-- PRD 08 (Recurring Payments & Reminders) — future-dated payments (FR-20).
+## Original context
+PRD 03 of discovery DISC-001 defined movements (expenses, income, transfers and currency exchanges)
+and the market exchange rates that every movement freezes. With 21 functional requirements, 8
+non-functional requirements and 32 acceptance criteria, three modules and an external provider, it
+was too large for one ticket, so it was split on 2026-10-02 (user decision). The full original text
+is in git history (file `docs/ddw/prd/prd-DISC-001-03.md` before the split).
 
-## Decision Log
-- 2026-09-25: FX conversion automatic by default, editable per movement, default rate type per
-  user and per group, rate frozen on each movement (concept).
-- 2026-09-25: Buying/selling USD is a cross-currency transfer with its implied rate stored.
-- 2026-09-25: Movements carry free tags; receipt photos deferred.
-- 2026-09-25: User approved: sell price of the default rate type, 60-minute refresh with a
-  2-hour staleness warning, no future dates, free editing without audit trail, up to 10 tags,
-  rates with 4 decimals as scaled integers.
-- 2026-09-25: User decision: per-user time zone, mandatory. Dates and scheduled times are
-  computed in the user's time zone (PRD 01, FR-24).
+## Traceability: original ID → sub-ticket ID
+
+Other PRDs of DISC-001 reference this PRD as "PRD 03, FR-xx"; use this table to resolve them. A row
+with two entries means the original requirement was divided.
+
+| Original | Now |
+|---|---|
+| FR-01 | DISC-001-03b FR-01 (tags: DISC-001-03d FR-01) |
+| FR-02 | DISC-001-03b FR-02 (tags: DISC-001-03d FR-01) |
+| FR-03 | DISC-001-03c FR-01 |
+| FR-04 | DISC-001-03c FR-02 |
+| FR-05 | DISC-001-03c FR-03 |
+| FR-06 | DISC-001-03b FR-03 |
+| FR-07 | DISC-001-03b FR-04 |
+| FR-08 | DISC-001-03b FR-05 |
+| FR-09 | DISC-001-03b FR-06 |
+| FR-10 | DISC-001-03a FR-01 |
+| FR-11 | DISC-001-03a FR-02 (use the last stored rates) and DISC-001-03b FR-11 (show the age) |
+| FR-12 | DISC-001-03b FR-07 (expense, income) and DISC-001-03c FR-04 (transfer, exchange) |
+| FR-13 | DISC-001-03e FR-01 |
+| FR-14 | DISC-001-03e FR-02 |
+| FR-15 | DISC-001-03b FR-08 (expenses, income) and DISC-001-03c FR-06 (transfers, exchanges) |
+| FR-16 | DISC-001-03d FR-03 |
+| FR-17 | DISC-001-03d FR-04 |
+| FR-18 | DISC-001-03d FR-01 |
+| FR-19 | DISC-001-03d FR-02 |
+| FR-20 | DISC-001-03b FR-09, DISC-001-03c FR-05 and DISC-001-03e FR-04 |
+| FR-21 | DISC-001-03b FR-10 (read) and DISC-001-03e FR-03 (edit, delete) |
+| NFR-01 | DISC-001-03b NFR-01, DISC-001-03c NFR-01, DISC-001-03e NFR-01 |
+| NFR-02 | DISC-001-03a NFR-01, DISC-001-03b NFR-02, DISC-001-03c NFR-02, DISC-001-03e NFR-02 |
+| NFR-03 | DISC-001-03a NFR-02 |
+| NFR-04 | DISC-001-03b NFR-03, DISC-001-03c NFR-03, DISC-001-03e NFR-03 |
+| NFR-05 | DISC-001-03d NFR-01 |
+| NFR-06 | DISC-001-03b NFR-04, DISC-001-03d NFR-02 |
+| NFR-07 | DISC-001-03a NFR-03 and DISC-001-03b NFR-05 |
+| NFR-08 | DISC-001-03d NFR-03 |
+| AC-01 | DISC-001-03b AC-01 |
+| AC-02 | DISC-001-03b AC-02 |
+| AC-03 | DISC-001-03b AC-03 |
+| AC-04 | DISC-001-03b AC-04 |
+| AC-05 | DISC-001-03b AC-05 |
+| AC-06 | DISC-001-03c AC-01 |
+| AC-07 | DISC-001-03c AC-02 |
+| AC-08 | DISC-001-03c AC-03 |
+| AC-09 | DISC-001-03c AC-04 |
+| AC-10 | DISC-001-03c AC-05 |
+| AC-11 | DISC-001-03b AC-06 |
+| AC-12 | DISC-001-03b AC-07 |
+| AC-13 | DISC-001-03b AC-08 |
+| AC-14 | DISC-001-03b AC-09 |
+| AC-15 | DISC-001-03b AC-10 |
+| AC-16 | DISC-001-03a AC-01 |
+| AC-17 | DISC-001-03a AC-02 |
+| AC-18 | DISC-001-03b AC-11 |
+| AC-19 | DISC-001-03b AC-12 |
+| AC-20 | DISC-001-03b AC-13 |
+| AC-21 | DISC-001-03c AC-06 |
+| AC-22 | DISC-001-03e AC-01 |
+| AC-23 | DISC-001-03e AC-02 |
+| AC-24 | DISC-001-03b AC-14 |
+| AC-25 | DISC-001-03d AC-01 |
+| AC-26 | DISC-001-03d AC-02 |
+| AC-27 | DISC-001-03d AC-03 |
+| AC-28 | DISC-001-03d AC-04 |
+| AC-29 | DISC-001-03d AC-05 |
+| AC-30 | DISC-001-03b AC-15 (copied to DISC-001-03c AC-07 and DISC-001-03e AC-04) |
+| AC-31 | DISC-001-03b AC-16 (read) and DISC-001-03e AC-03 (edit, delete) |
+| AC-32 | DISC-001-03b AC-17 |

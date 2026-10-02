@@ -118,6 +118,24 @@ All notable changes to this project are documented in this file. The format foll
   is scoped to its owner and answers 404 otherwise). Migration 0013 adds the `portfolios` and
   `holdings` tables; its rollback script is destructive. Deferred to DISC-001-07b and 07c:
   automatic crypto prices, daily value snapshots and the Balanz CSV import.
+- DISC-001-03b Expense and income: a user records expenses and income on their own accounts, each
+  with a category of the matching kind, an amount in minor units, a date and time (stored as a UTC
+  instant and shown in the user's time zone, a later time today is accepted, a later day is not),
+  an optional note and the ARS-per-USD rate frozen on the movement with its source. The rate is
+  prefilled from the latest stored sell price of the user's default rate type, can be replaced by a
+  manual rate, is required when none has ever been stored, and the entry screen warns when the
+  stored rate is older than 2 hours. A movement on an archived account or category is refused.
+- DISC-001-03b Movements list, newest first, in pages of at most 100, with names, signed amounts and
+  the date and time in the user's time zone; the frozen rate shows only on rows of USD accounts.
+  Account balances and the Available and Net worth totals now include movements, and an account or
+  category with movements can no longer be deleted (the real adapters replace the placeholders of
+  DISC-001-02a and DISC-001-02b).
+- DISC-001-03b Manual creation is limited to 60 movements per minute per user (429 with a
+  `Retry-After` header, counters stored in the database); a future import will not count against
+  it. Deleting a user erases their movements first, in the same transaction. Migration
+  `0014_movements` adds the `movements` and `movement_rate_limits` tables; its rollback script is
+  destructive. Known limitation: a create has no idempotency key, so a retry after a lost response
+  can duplicate a movement (follow-up for the offline sync ticket of PRD 04).
 
 ### Fixed
 

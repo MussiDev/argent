@@ -123,6 +123,10 @@
     "twoFactorSetupRequired": "The setup changed in another session. Start again.",
     "accountNameTaken": "You already have an account with that name.",
     "accountHasMovements": "This account has movements, so it cannot be deleted. Archive it instead.",
+    "categoryNameTaken": "You already have a category with that name.",
+    "categoryInUse": "This category is in use, so it cannot be deleted. Archive it instead.",
+    "categoryNestingTooDeep": "Subcategories cannot have subcategories.",
+    "categoryParentKindMismatch": "A subcategory must have the same kind as its parent.",
     "totpCodeFormat": "Enter the 6 digits of the code.",
     "secondFactorCodeFormat": "Enter a 6-digit code or a recovery code."
   },

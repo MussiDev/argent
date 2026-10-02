@@ -123,6 +123,10 @@
     "twoFactorSetupRequired": "La activación cambió en otra sesión. Vuelve a empezar.",
     "accountNameTaken": "Ya existe una cuenta con ese nombre.",
     "accountHasMovements": "Esta cuenta tiene movimientos, por eso no se puede eliminar. Archívala en su lugar.",
+    "categoryNameTaken": "Ya existe una categoría con ese nombre.",
+    "categoryInUse": "Esta categoría está en uso, por eso no se puede eliminar. Archívala en su lugar.",
+    "categoryNestingTooDeep": "Las subcategorías no pueden tener subcategorías.",
+    "categoryParentKindMismatch": "Una subcategoría debe ser del mismo tipo que su categoría principal.",
     "totpCodeFormat": "Ingresa los 6 dígitos del código.",
     "secondFactorCodeFormat": "Ingresa un código de 6 dígitos o un código de recuperación."
   },

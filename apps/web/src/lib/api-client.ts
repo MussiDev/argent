@@ -65,7 +65,11 @@ export type ApiErrorKey =
   | 'twoFactorNotEnabled'
   | 'twoFactorSetupRequired'
   | 'accountNameTaken'
-  | 'accountHasMovements';
+  | 'accountHasMovements'
+  | 'categoryNameTaken'
+  | 'categoryInUse'
+  | 'categoryNestingTooDeep'
+  | 'categoryParentKindMismatch';
 
 /** `NETWORK`: the request never got an HTTP answer (offline, DNS, CORS, aborted). */
 export type ApiFailureCode = ErrorCode | 'NETWORK';
@@ -100,6 +104,10 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
   SECOND_FACTOR_EXPIRED: 'secondFactorExpired',
   ACCOUNT_NAME_TAKEN: 'accountNameTaken',
   ACCOUNT_HAS_MOVEMENTS: 'accountHasMovements',
+  CATEGORY_NAME_TAKEN: 'categoryNameTaken',
+  CATEGORY_IN_USE: 'categoryInUse',
+  CATEGORY_NESTING_TOO_DEEP: 'categoryNestingTooDeep',
+  CATEGORY_PARENT_KIND_MISMATCH: 'categoryParentKindMismatch',
 };
 
 /** `null` when the id is not a plain path segment: '.' and '..' survive encoding and would be normalized. */

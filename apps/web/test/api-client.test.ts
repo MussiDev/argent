@@ -72,6 +72,10 @@ describe('api client', () => {
     [500, 'INTERNAL', 'unexpected'],
     [409, 'ACCOUNT_NAME_TAKEN', 'accountNameTaken'],
     [409, 'ACCOUNT_HAS_MOVEMENTS', 'accountHasMovements'],
+    [409, 'CATEGORY_NAME_TAKEN', 'categoryNameTaken'],
+    [409, 'CATEGORY_IN_USE', 'categoryInUse'],
+    [400, 'CATEGORY_NESTING_TOO_DEEP', 'categoryNestingTooDeep'],
+    [400, 'CATEGORY_PARENT_KIND_MISMATCH', 'categoryParentKindMismatch'],
   ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
     const { client } = clientWith(jsonResponse(status, { code }));
 

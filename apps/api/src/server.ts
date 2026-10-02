@@ -1,7 +1,8 @@
 import { createAccountRoutes } from './accounts';
 import { createApp } from './app';
 import { createCategoryRoutes, seedDefaultCategories } from './categories';
-import { createExchangeRateRoutes } from './exchange-rates';
+// Deep import on purpose: the exchange-rates barrel would load the providers and the sync job into the API process (NFR-03, R-08).
+import { createExchangeRateRoutes } from './exchange-rates/infrastructure/http/exchange-rate-routes';
 import { parseEnv } from './shared/config/env';
 import { createDatabase } from './shared/db/client';
 import { createLogger } from './shared/logging/logger';

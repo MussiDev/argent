@@ -17,3 +17,5 @@ export * from './profile/profile';
 export * from './profile/delete-user';
 export * from './profile/time-zone';
 export * from './money/format-minor-units';
+export * from './exchange-rates/scaled-rate';
+export * from './exchange-rates/exchange-rate';

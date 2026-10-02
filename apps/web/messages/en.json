@@ -180,12 +180,7 @@
       "empty": "You have no accounts yet. Create one to get started.",
       "emptyArchived": "You have no archived accounts.",
       "showArchived": "Show archived accounts",
-      "showActive": "Show active accounts",
-      "totals": "Totals"
-    },
-    "totals": {
-      "ARS": "Total in pesos",
-      "USD": "Total in dollars"
+      "showActive": "Show active accounts"
     },
     "actions": {
       "rename": "Rename",

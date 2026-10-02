@@ -180,12 +180,7 @@
       "empty": "Todavía no tienes cuentas. Crea una para empezar.",
       "emptyArchived": "No tienes cuentas archivadas.",
       "showArchived": "Ver cuentas archivadas",
-      "showActive": "Ver cuentas activas",
-      "totals": "Totales"
-    },
-    "totals": {
-      "ARS": "Total en pesos",
-      "USD": "Total en dólares"
+      "showActive": "Ver cuentas activas"
     },
     "actions": {
       "rename": "Renombrar",

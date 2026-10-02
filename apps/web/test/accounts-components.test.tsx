@@ -3,6 +3,7 @@ import {
   ACCOUNT_CURRENCIES,
   ACCOUNT_NAME_MAX_LENGTH,
   ACCOUNT_TYPES,
+  defaultIncludeInAvailable,
   formatMoney,
   type AccountResponse,
 } from '@pesly/shared';
@@ -15,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import en from '../messages/en.json';
 import es from '../messages/es.json';
 import { AccountForm } from '../src/features/accounts/components/account-form';
+import { AccountsHeadline } from '../src/features/accounts/components/accounts-headline';
 import {
   AccountList,
   type AccountListProps,
@@ -57,6 +59,7 @@ function account(overrides: Partial<AccountResponse> = {}): AccountResponse {
     currency: 'ARS',
     openingBalance: '0',
     balance: '150000',
+    includeInAvailable: true,
     archived: false,
     archivedAt: null,
     createdAt: '2026-10-01T00:00:00.000Z',
@@ -66,10 +69,39 @@ function account(overrides: Partial<AccountResponse> = {}): AccountResponse {
 
 const noop = () => undefined;
 
+const TEXT_SIZES = [
+  'text-xs',
+  'text-sm',
+  'text-base',
+  'text-lg',
+  'text-xl',
+  'text-2xl',
+  'text-3xl',
+];
+
+/** The Tailwind type-size rank of an element, so a test compares sizes without hardcoding one. */
+function sizeRank(element: Element): number {
+  const sizes = [...element.classList]
+    .map((name) => TEXT_SIZES.indexOf(name))
+    .filter((i) => i >= 0);
+  return sizes.length === 0 ? -1 : Math.max(...sizes);
+}
+
+/** The value (`dd`) shown next to a headline label inside a currency's group. */
+function metric(locale: 'es' | 'en', currency: 'ARS' | 'USD', label: string): HTMLElement {
+  const group = screen.getByRole('group', { name: CATALOGS[locale].accounts.currencies[currency] });
+  const value = within(group).getByText(label).nextElementSibling;
+  if (!(value instanceof HTMLElement)) throw new Error(`no value next to ${label}`);
+  return value;
+}
+
 function listProps(overrides: Partial<AccountListProps> = {}): AccountListProps {
   return {
     accounts: [account()],
-    totals: { ARS: '150000', USD: '0' },
+    availableTotals: { ARS: '150000', USD: '0' },
+    netWorthTotals: { ARS: '150000', USD: '0' },
+    debtTotals: { ARS: '0', USD: '0' },
+    creditCardCount: 0,
     showArchived: false,
     pending: false,
     editingId: undefined,
@@ -78,6 +110,7 @@ function listProps(overrides: Partial<AccountListProps> = {}): AccountListProps 
     renameError: undefined,
     actionError: undefined,
     onToggleArchived: noop,
+    onToggleAvailable: noop,
     onStartRename: noop,
     onCancelRename: noop,
     onRename: noop,
@@ -141,6 +174,7 @@ describe('AccountForm', () => {
       type: 'savings',
       currency: 'USD',
       openingBalance: '-1.500,00',
+      includeInAvailable: false,
     });
   });
 
@@ -310,49 +344,66 @@ describe('accounts error copy', () => {
 });
 
 describe('AccountList', () => {
-  it('shows each balance and both totals formatted for the active locale (AC-11, AC-12)', () => {
+  it('shows each balance and the headline totals formatted for the active locale (AC-14, AC-16)', () => {
     const accounts = [
       account({ id: 'a1', name: 'Caja', currency: 'ARS', balance: '150000' }),
       account({ id: 'a2', name: 'Dolares', currency: 'USD', balance: '-2550' }),
     ];
     for (const locale of ['es', 'en'] as const) {
       renderIntl(
-        <AccountList {...listProps({ accounts, totals: { ARS: '150000', USD: '-2550' } })} />,
+        <AccountList
+          {...listProps({
+            accounts,
+            availableTotals: { ARS: '150000', USD: '-2550' },
+            netWorthTotals: { ARS: '140000', USD: '-3000' },
+          })}
+        />,
         locale,
       );
-      const catalog = CATALOGS[locale];
+      const catalog = CATALOGS[locale].accounts.headline;
 
       const pesos = screen.getByRole('listitem', { name: 'Caja' });
       expect(within(pesos).getByText(money(150000n, 'ARS', locale))).toBeDefined();
       const dollars = screen.getByRole('listitem', { name: 'Dolares' });
       expect(within(dollars).getByText(money(-2550n, 'USD', locale))).toBeDefined();
 
-      const totals = screen.getByRole('group', { name: catalog.accounts.list.totals });
-      expect(within(totals).getByText(catalog.accounts.totals.ARS)).toBeDefined();
-      expect(within(totals).getByText(money(150000n, 'ARS', locale))).toBeDefined();
-      expect(within(totals).getByText(catalog.accounts.totals.USD)).toBeDefined();
-      expect(within(totals).getByText(money(-2550n, 'USD', locale))).toBeDefined();
+      expect(metric(locale, 'ARS', catalog.available).textContent).toBe(
+        formatMoney(150000n, 'ARS', locale),
+      );
+      expect(metric(locale, 'ARS', catalog.netWorth).textContent).toBe(
+        formatMoney(140000n, 'ARS', locale),
+      );
+      expect(metric(locale, 'USD', catalog.available).textContent).toBe(
+        formatMoney(-2550n, 'USD', locale),
+      );
+      expect(metric(locale, 'USD', catalog.netWorth).textContent).toBe(
+        formatMoney(-3000n, 'USD', locale),
+      );
       cleanup();
     }
     expect(money(150000n, 'ARS', 'es')).not.toBe(money(150000n, 'ARS', 'en'));
   });
 
-  it('formats balances and totals beyond int64 without throwing (AC-22, NFR-06)', () => {
+  it('formats balances and totals beyond int64 without throwing (AC-17, NFR-01)', () => {
     const accounts = [
       account({ id: 'a1', name: 'Caja', currency: 'ARS', balance: '9223372036854775808' }),
     ];
     for (const locale of ['es', 'en'] as const) {
       renderIntl(
         <AccountList
-          {...listProps({ accounts, totals: { ARS: '9300000000000000000', USD: '0' } })}
+          {...listProps({
+            accounts,
+            availableTotals: { ARS: '9300000000000000000', USD: '0' },
+            netWorthTotals: { ARS: '9300000000000000000', USD: '0' },
+          })}
         />,
         locale,
       );
-      const catalog = CATALOGS[locale];
       const row = screen.getByRole('listitem', { name: 'Caja' });
       expect(within(row).getByText(money(9223372036854775808n, 'ARS', locale))).toBeDefined();
-      const totals = screen.getByRole('group', { name: catalog.accounts.list.totals });
-      expect(within(totals).getByText(money(9300000000000000000n, 'ARS', locale))).toBeDefined();
+      expect(metric(locale, 'ARS', CATALOGS[locale].accounts.headline.available).textContent).toBe(
+        formatMoney(9300000000000000000n, 'ARS', locale),
+      );
       cleanup();
     }
   });
@@ -402,7 +453,7 @@ describe('AccountList', () => {
     expect(handlers.onAskDelete).toHaveBeenCalledExactlyOnceWith('a1');
   });
 
-  it('offers unarchive instead of archive on the archived view, without totals', async () => {
+  it('offers unarchive instead of archive on the archived view, with no headline, Debt section or setting (AC-12)', async () => {
     const onUnarchive = vi.fn();
     renderIntl(
       <AccountList
@@ -420,7 +471,10 @@ describe('AccountList', () => {
     await user.click(within(row).getByRole('button', { name: /^Desarchivar/ }));
 
     expect(onUnarchive).toHaveBeenCalledExactlyOnceWith('a1');
-    expect(screen.queryByRole('group', { name: es.accounts.list.totals })).toBeNull();
+    expect(screen.queryByText(es.accounts.headline.available)).toBeNull();
+    expect(screen.queryByText(es.accounts.headline.netWorth)).toBeNull();
+    expect(screen.queryByText(es.accounts.debt.title)).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
   });
 
   it('toggles between the active and the archived accounts', async () => {
@@ -560,5 +614,323 @@ describe('AccountList', () => {
     renderIntl(<AccountList {...listProps({ actionError: 'network' })} />);
 
     expect(screen.getByRole('alert').textContent).toContain(es.errors.network);
+  });
+});
+
+describe('AccountsHeadline', () => {
+  it('renders Available larger than Net worth for each currency with the formatted amounts (AC-14, AC-16, AC-18)', () => {
+    for (const locale of ['es', 'en'] as const) {
+      renderIntl(
+        <AccountsHeadline
+          availableTotals={{ ARS: '150000', USD: '2000' }}
+          netWorthTotals={{ ARS: '-50000', USD: '2500' }}
+        />,
+        locale,
+      );
+      const labels = CATALOGS[locale].accounts.headline;
+
+      for (const [currency, available, netWorth] of [
+        ['ARS', 150000n, -50000n],
+        ['USD', 2000n, 2500n],
+      ] as const) {
+        const availableValue = metric(locale, currency, labels.available);
+        const netWorthValue = metric(locale, currency, labels.netWorth);
+        expect(availableValue.textContent).toBe(formatMoney(available, currency, locale));
+        expect(netWorthValue.textContent).toBe(formatMoney(netWorth, currency, locale));
+        expect(sizeRank(availableValue)).toBeGreaterThan(sizeRank(netWorthValue));
+        expect(sizeRank(netWorthValue)).toBeGreaterThanOrEqual(0);
+      }
+      cleanup();
+    }
+  });
+
+  it('shows 0 Available for a currency with no included account (AC-15)', () => {
+    renderIntl(
+      <AccountsHeadline
+        availableTotals={{ ARS: '0', USD: '0' }}
+        netWorthTotals={{ ARS: '99000', USD: '0' }}
+      />,
+    );
+
+    expect(metric('es', 'ARS', es.accounts.headline.available).textContent).toBe(
+      formatMoney(0n, 'ARS', 'es'),
+    );
+    expect(metric('es', 'ARS', es.accounts.headline.netWorth).textContent).toBe(
+      formatMoney(99000n, 'ARS', 'es'),
+    );
+  });
+
+  it('falls back to 0 when a currency is missing from a totals map', () => {
+    renderIntl(<AccountsHeadline availableTotals={{}} netWorthTotals={{}} />);
+
+    expect(metric('es', 'USD', es.accounts.headline.available).textContent).toBe(
+      formatMoney(0n, 'USD', 'es'),
+    );
+  });
+});
+
+describe('AccountList Debt section', () => {
+  const VISA = account({
+    id: 'c1',
+    name: 'Visa',
+    type: 'credit_card',
+    balance: '-45000',
+    includeInAvailable: false,
+  });
+
+  it('lists cards only under Debt with the per-currency Debt total, never in the other section (AC-19)', () => {
+    const accounts = [account(), VISA];
+    for (const locale of ['es', 'en'] as const) {
+      renderIntl(
+        <AccountList
+          {...listProps({
+            accounts,
+            creditCardCount: 1,
+            debtTotals: { ARS: '-45000', USD: '0' },
+          })}
+        />,
+        locale,
+      );
+      const catalog = CATALOGS[locale].accounts;
+
+      const debt = screen.getByRole('region', { name: catalog.debt.title });
+      expect(within(debt).getByRole('listitem', { name: 'Visa' })).toBeDefined();
+      expect(within(debt).queryByRole('listitem', { name: 'Caja' })).toBeNull();
+      const total = within(debt).getByText(catalog.currencies.ARS).nextElementSibling;
+      expect(total?.textContent).toBe(formatMoney(-45000n, 'ARS', locale));
+
+      expect(screen.getAllByRole('listitem', { name: 'Visa' })).toHaveLength(1);
+      expect(screen.getAllByRole('listitem', { name: 'Caja' })).toHaveLength(1);
+      expect(debt.contains(screen.getByRole('listitem', { name: 'Caja' }))).toBe(false);
+      cleanup();
+    }
+  });
+
+  it('is absent when creditCardCount is 0 (AC-19)', () => {
+    renderIntl(<AccountList {...listProps({ creditCardCount: 0 })} />);
+
+    expect(screen.queryByText(es.accounts.debt.title)).toBeNull();
+    // Control: the rest of the active view is there, so the absence is the rule, not a blank page.
+    expect(screen.getAllByText(es.accounts.headline.available)).toHaveLength(2);
+  });
+
+  it('is present when creditCardCount is above 0 even if the page lists no card (AC-20)', () => {
+    renderIntl(
+      <AccountList
+        {...listProps({ creditCardCount: 2, debtTotals: { ARS: '-80000', USD: '0' } })}
+      />,
+    );
+
+    const debt = screen.getByRole('region', { name: es.accounts.debt.title });
+    expect(within(debt).queryAllByRole('listitem')).toHaveLength(0);
+    expect(within(debt).getByText(es.accounts.currencies.ARS).nextElementSibling?.textContent).toBe(
+      formatMoney(-80000n, 'ARS', 'es'),
+    );
+  });
+
+  it('follows creditCardCount exactly: a card on the page without a count shows no Debt section', () => {
+    renderIntl(<AccountList {...listProps({ accounts: [VISA], creditCardCount: 0 })} />);
+
+    expect(screen.queryByText(es.accounts.debt.title)).toBeNull();
+  });
+
+  it('keeps the card actions working inside Debt', async () => {
+    const onArchive = vi.fn();
+    renderIntl(<AccountList {...listProps({ accounts: [VISA], creditCardCount: 1, onArchive })} />);
+
+    const debt = screen.getByRole('region', { name: es.accounts.debt.title });
+    const row = within(debt).getByRole('listitem', { name: 'Visa' });
+    await userEvent.setup().click(within(row).getByRole('button', { name: /^Archivar/ }));
+
+    expect(onArchive).toHaveBeenCalledExactlyOnceWith('c1');
+  });
+});
+
+describe('AccountList include in available setting', () => {
+  it('shows the labelled checkbox with the account name on active non-card rows (AC-02, AC-23)', () => {
+    for (const locale of ['es', 'en'] as const) {
+      renderIntl(
+        <AccountList
+          {...listProps({
+            accounts: [
+              account({ id: 'a1', name: 'Caja', includeInAvailable: true }),
+              account({ id: 'a2', name: 'Ahorro', type: 'savings', includeInAvailable: false }),
+            ],
+          })}
+        />,
+        locale,
+      );
+      const label = CATALOGS[locale].accounts.fields.includeInAvailable;
+
+      const included = screen.getByRole<HTMLInputElement>('checkbox', { name: `${label} Caja` });
+      const excluded = screen.getByRole<HTMLInputElement>('checkbox', { name: `${label} Ahorro` });
+      expect(included.checked).toBe(true);
+      expect(excluded.checked).toBe(false);
+      expect(included.labels?.[0]?.textContent).toBe(label);
+      cleanup();
+    }
+    expect(es.accounts.fields.includeInAvailable).not.toBe(en.accounts.fields.includeInAvailable);
+  });
+
+  it('reports the opposite value with the account id when toggled, also from the keyboard (AC-07)', async () => {
+    const onToggleAvailable = vi.fn();
+    renderIntl(<AccountList {...listProps({ onToggleAvailable })} />);
+    const user = userEvent.setup();
+    const box = screen.getByRole('checkbox', {
+      name: `${es.accounts.fields.includeInAvailable} Caja`,
+    });
+
+    await user.click(box);
+    box.focus();
+    await user.keyboard(' ');
+
+    expect(onToggleAvailable).toHaveBeenCalledTimes(2);
+    expect(onToggleAvailable).toHaveBeenNthCalledWith(1, 'a1', false);
+    expect(onToggleAvailable).toHaveBeenNthCalledWith(2, 'a1', false);
+  });
+
+  it('reports true when an excluded account is toggled (AC-07)', async () => {
+    const onToggleAvailable = vi.fn();
+    renderIntl(
+      <AccountList
+        {...listProps({
+          accounts: [account({ type: 'savings', includeInAvailable: false })],
+          onToggleAvailable,
+        })}
+      />,
+    );
+
+    await userEvent.setup().click(screen.getByRole('checkbox'));
+
+    expect(onToggleAvailable).toHaveBeenCalledExactlyOnceWith('a1', true);
+  });
+
+  it('has no checkbox for credit cards or archived accounts (AC-11, AC-12)', () => {
+    const visa = account({
+      id: 'c1',
+      name: 'Visa',
+      type: 'credit_card',
+      includeInAvailable: false,
+    });
+    renderIntl(<AccountList {...listProps({ accounts: [account(), visa], creditCardCount: 1 })} />);
+    // Only the cash account has one.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(
+      within(screen.getByRole('listitem', { name: 'Visa' })).queryByRole('checkbox'),
+    ).toBeNull();
+    cleanup();
+
+    const archived = account({ archived: true, archivedAt: '2026-10-02T00:00:00.000Z' });
+    renderIntl(<AccountList {...listProps({ showArchived: true, accounts: [archived] })} />);
+    expect(screen.getByRole('listitem', { name: 'Caja' })).toBeDefined();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('keeps the checkbox focusable while pending but ignores a change (double submit, focus)', async () => {
+    const onToggleAvailable = vi.fn();
+    const { rerender } = renderIntl(<AccountList {...listProps({ onToggleAvailable })} />);
+    const box = screen.getByRole('checkbox');
+    box.focus();
+
+    rerender(
+      <NextIntlClientProvider locale="es" timeZone="UTC" messages={es}>
+        <AccountList {...listProps({ onToggleAvailable, pending: true })} />
+      </NextIntlClientProvider>,
+    );
+    await userEvent.setup().click(screen.getByRole('checkbox'));
+
+    const pendingBox = screen.getByRole<HTMLInputElement>('checkbox');
+    expect(pendingBox.hasAttribute('disabled')).toBe(false);
+    expect(pendingBox.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(pendingBox);
+    expect(pendingBox.checked).toBe(true);
+    expect(onToggleAvailable).not.toHaveBeenCalled();
+  });
+
+  it('is not aria-disabled when nothing is pending', () => {
+    renderIntl(<AccountList {...listProps()} />);
+
+    expect(screen.getByRole('checkbox').getAttribute('aria-disabled')).not.toBe('true');
+  });
+});
+
+describe('AccountForm include in available setting', () => {
+  const LABEL = es.accounts.fields.includeInAvailable;
+
+  it.each(ACCOUNT_TYPES.filter((type) => type !== 'credit_card'))(
+    'starts %s with the shared type default (AC-03, AC-04)',
+    async (type) => {
+      renderIntl(<AccountForm pending={false} errors={{}} onSubmit={noop} />);
+
+      await userEvent.setup().selectOptions(screen.getByLabelText(es.accounts.fields.type), type);
+
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: LABEL }).checked).toBe(
+        defaultIncludeInAvailable(type),
+      );
+    },
+  );
+
+  it('hides the checkbox for a credit card and shows it again for another type (AC-09)', async () => {
+    renderIntl(<AccountForm pending={false} errors={{}} onSubmit={noop} />);
+    const user = userEvent.setup();
+    const type = screen.getByLabelText(es.accounts.fields.type);
+
+    await user.selectOptions(type, 'credit_card');
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    await user.selectOptions(type, 'cash');
+
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: LABEL }).checked).toBe(true);
+  });
+
+  it('follows the type default until the user touches the checkbox (AC-05)', async () => {
+    renderIntl(<AccountForm pending={false} errors={{}} onSubmit={noop} />);
+    const user = userEvent.setup();
+    const type = screen.getByLabelText(es.accounts.fields.type);
+
+    await user.selectOptions(type, 'cash');
+    await user.selectOptions(type, 'savings');
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: LABEL }).checked).toBe(false);
+
+    await user.click(screen.getByRole('checkbox', { name: LABEL }));
+    await user.selectOptions(type, 'cash');
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: LABEL }).checked).toBe(true);
+    await user.click(screen.getByRole('checkbox', { name: LABEL }));
+    await user.selectOptions(type, 'savings');
+
+    // Touched twice: the user's last choice (excluded) stays although cash defaults to included.
+    await user.selectOptions(type, 'cash');
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: LABEL }).checked).toBe(false);
+  });
+
+  it('hands an explicit boolean for a non-card type and undefined for a card (AC-05, AC-09)', async () => {
+    const onSubmit = vi.fn();
+    renderIntl(<AccountForm pending={false} errors={{}} onSubmit={onSubmit} />);
+    const user = userEvent.setup();
+    const type = screen.getByLabelText(es.accounts.fields.type);
+
+    await user.selectOptions(type, 'savings');
+    await user.click(screen.getByRole('checkbox', { name: LABEL }));
+    await user.click(screen.getByRole('button', { name: es.accounts.form.submit }));
+    await user.selectOptions(type, 'credit_card');
+    await user.click(screen.getByRole('button', { name: es.accounts.form.submit }));
+
+    expect(onSubmit).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ includeInAvailable: true }),
+    );
+    expect(onSubmit).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ includeInAvailable: undefined }),
+    );
+  });
+
+  it('labels the checkbox in English too (AC-23)', async () => {
+    renderIntl(<AccountForm pending={false} errors={{}} onSubmit={noop} />, 'en');
+
+    await userEvent.setup().selectOptions(screen.getByLabelText(en.accounts.fields.type), 'cash');
+
+    expect(
+      screen.getByRole('checkbox', { name: en.accounts.fields.includeInAvailable }),
+    ).toBeDefined();
   });
 });

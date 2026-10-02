@@ -20,6 +20,7 @@ function account(overrides: Partial<AccountResponse> = {}): AccountResponse {
     currency: 'ARS',
     openingBalance: '0',
     balance: '150000',
+    includeInAvailable: true,
     archived: false,
     archivedAt: null,
     createdAt: '2026-10-01T00:00:00.000Z',
@@ -27,42 +28,78 @@ function account(overrides: Partial<AccountResponse> = {}): AccountResponse {
   };
 }
 
-function list(items: AccountResponse[], totals = { ARS: '0', USD: '0' }) {
-  return {
-    status: 200,
-    body: { items, totals, total: items.length, limit: 100, offset: 0 },
+interface Totals {
+  availableTotals: Record<'ARS' | 'USD', string>;
+  netWorthTotals: Record<'ARS' | 'USD', string>;
+  debtTotals: Record<'ARS' | 'USD', string>;
+  creditCardCount: number;
+}
+
+function list(items: AccountResponse[], overrides: Partial<Totals> = {}) {
+  const body: Totals & Record<string, unknown> = {
+    availableTotals: { ARS: '0', USD: '0' },
+    netWorthTotals: { ARS: '0', USD: '0' },
+    debtTotals: { ARS: '0', USD: '0' },
+    creditCardCount: 0,
+    ...overrides,
+    items,
+    total: items.length,
+    limit: 100,
+    offset: 0,
   };
+  return { status: 200, body };
 }
 
 function money(value: bigint, currency: 'ARS' | 'USD', locale: 'es' | 'en'): string {
   return formatMoney(value, currency, locale).replace(/\s+/g, ' ');
 }
 
+/** The text of the value shown next to a headline label inside a currency's group. */
+function headlineValue(locale: 'es' | 'en', currency: 'ARS' | 'USD', label: string): string {
+  const group = screen.getByRole('group', { name: CATALOGS[locale].accounts.currencies[currency] });
+  return within(group).getByText(label).nextElementSibling?.textContent ?? '';
+}
+
 const CAJA = account();
 const DOLARES = account({ id: 'a2', name: 'Dolares', currency: 'USD', balance: '-2550' });
 
 describe('AccountsContainer', () => {
-  it('lists the active accounts with locale-formatted balances and both totals (AC-11, AC-12)', async () => {
+  it('lists the active accounts with locale-formatted balances and the headline totals (AC-14, AC-16)', async () => {
     const { calls } = stubApi({
-      [ACTIVE]: list([CAJA, DOLARES], { ARS: '150000', USD: '-2550' }),
+      [ACTIVE]: list([CAJA, DOLARES], {
+        availableTotals: { ARS: '150000', USD: '0' },
+        netWorthTotals: { ARS: '140000', USD: '-2550' },
+      }),
     });
     renderApp(<AccountsContainer />, { locale: 'es' });
 
     const row = await screen.findByRole('listitem', { name: 'Caja' });
     expect(within(row).getByText(money(150000n, 'ARS', 'es'))).toBeDefined();
-    const totals = screen.getByRole('group', { name: es.accounts.list.totals });
-    expect(within(totals).getByText(money(150000n, 'ARS', 'es'))).toBeDefined();
-    expect(within(totals).getByText(money(-2550n, 'USD', 'es'))).toBeDefined();
+    expect(headlineValue('es', 'ARS', es.accounts.headline.available)).toBe(
+      formatMoney(150000n, 'ARS', 'es'),
+    );
+    expect(headlineValue('es', 'ARS', es.accounts.headline.netWorth)).toBe(
+      formatMoney(140000n, 'ARS', 'es'),
+    );
+    expect(headlineValue('es', 'USD', es.accounts.headline.available)).toBe(
+      formatMoney(0n, 'USD', 'es'),
+    );
+    expect(headlineValue('es', 'USD', es.accounts.headline.netWorth)).toBe(
+      formatMoney(-2550n, 'USD', 'es'),
+    );
     expect(calls.map((call) => call.path)).toEqual(['/accounts?archived=false&limit=100']);
   });
 
   it('formats amounts in the English locale too', async () => {
-    stubApi({ [ACTIVE]: list([CAJA], { ARS: '150000', USD: '0' }) });
+    stubApi({ [ACTIVE]: list([CAJA], { availableTotals: { ARS: '150000', USD: '0' } }) });
     renderApp(<AccountsContainer />, { locale: 'en' });
 
     const row = await screen.findByRole('listitem', { name: 'Caja' });
     expect(within(row).getByText(money(150000n, 'ARS', 'en'))).toBeDefined();
-    expect(screen.getByText(en.accounts.totals.USD)).toBeDefined();
+    expect(headlineValue('en', 'ARS', en.accounts.headline.available)).toBe(
+      formatMoney(150000n, 'ARS', 'en'),
+    );
+    expect(screen.getAllByText(en.accounts.headline.netWorth)).toHaveLength(2);
   });
 
   it('shows a negative balance as created (AC-17)', async () => {
@@ -295,6 +332,163 @@ describe('AccountsContainer', () => {
   });
 });
 
+describe('AccountsContainer include in available setting', () => {
+  const PUT = 'PUT /accounts/a1/include-in-available';
+  const AHORRO = account({ id: 'a3', name: 'Ahorro', type: 'savings', includeInAvailable: false });
+  const VISA = account({
+    id: 'c1',
+    name: 'Visa',
+    type: 'credit_card',
+    balance: '-45000',
+    includeInAvailable: false,
+  });
+
+  function checkbox(name: string): HTMLInputElement {
+    return screen.getByRole<HTMLInputElement>('checkbox', {
+      name: `${es.accounts.fields.includeInAvailable} ${name}`,
+    });
+  }
+
+  it('calls the API, updates the row and reloads the totals (AC-07)', async () => {
+    const excluded = account({ includeInAvailable: false });
+    const { calls } = stubApi({
+      [ACTIVE]: [
+        list([CAJA], {
+          availableTotals: { ARS: '150000', USD: '0' },
+          netWorthTotals: { ARS: '150000', USD: '0' },
+        }),
+        list([excluded], {
+          availableTotals: { ARS: '0', USD: '0' },
+          netWorthTotals: { ARS: '150000', USD: '0' },
+        }),
+      ],
+      [PUT]: { status: 200, body: excluded },
+    });
+    renderApp(<AccountsContainer />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('checkbox', { name: /Caja$/ }));
+
+    await waitFor(() => {
+      expect(checkbox('Caja').checked).toBe(false);
+    });
+    await waitFor(() => {
+      expect(headlineValue('es', 'ARS', es.accounts.headline.available)).toBe(
+        formatMoney(0n, 'ARS', 'es'),
+      );
+    });
+    expect(headlineValue('es', 'ARS', es.accounts.headline.netWorth)).toBe(
+      formatMoney(150000n, 'ARS', 'es'),
+    );
+    const put = calls.find((call) => call.method === 'PUT');
+    expect(put?.body).toEqual({ includeInAvailable: false });
+    expect(calls.filter((call) => call.method === 'GET')).toHaveLength(2);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('includes an excluded account when its checkbox is checked (AC-07)', async () => {
+    const included = account({
+      id: 'a3',
+      name: 'Ahorro',
+      type: 'savings',
+      includeInAvailable: true,
+    });
+    const { calls } = stubApi({
+      [ACTIVE]: [list([AHORRO]), list([included])],
+      'PUT /accounts/a3/include-in-available': { status: 200, body: included },
+    });
+    renderApp(<AccountsContainer />);
+
+    await userEvent.setup().click(await screen.findByRole('checkbox', { name: /Ahorro$/ }));
+
+    await waitFor(() => {
+      expect(checkbox('Ahorro').checked).toBe(true);
+    });
+    expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({
+      includeInAvailable: true,
+    });
+  });
+
+  it('shows the cards under Debt with the API total and no checkbox for them (AC-11, AC-19)', async () => {
+    stubApi({
+      [ACTIVE]: list([CAJA, VISA], {
+        creditCardCount: 1,
+        debtTotals: { ARS: '-45000', USD: '0' },
+      }),
+    });
+    renderApp(<AccountsContainer />);
+
+    const debt = await screen.findByRole('region', { name: es.accounts.debt.title });
+    expect(within(debt).getByRole('listitem', { name: 'Visa' })).toBeDefined();
+    expect(within(debt).queryByRole('checkbox')).toBeNull();
+    expect(within(debt).getByText(es.accounts.currencies.ARS).nextElementSibling?.textContent).toBe(
+      formatMoney(-45000n, 'ARS', 'es'),
+    );
+  });
+
+  it('keeps the previous value and shows the alert on 409 ACCOUNT_ARCHIVED (AC-12)', async () => {
+    const { calls } = stubApi({
+      [ACTIVE]: list([CAJA]),
+      [PUT]: { status: 409, body: { code: 'ACCOUNT_ARCHIVED' } },
+    });
+    renderApp(<AccountsContainer />);
+
+    await userEvent.setup().click(await screen.findByRole('checkbox', { name: /Caja$/ }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(es.errors.accountArchived);
+    expect(checkbox('Caja').checked).toBe(true);
+    expect(calls.filter((call) => call.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('keeps the previous value and shows the alert on a network failure (error path)', async () => {
+    stubApi({ [ACTIVE]: list([CAJA]), [PUT]: 'network-error' });
+    renderApp(<AccountsContainer />, { locale: 'en' });
+
+    await userEvent.setup().click(await screen.findByRole('checkbox', { name: /Caja$/ }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(en.errors.network);
+    expect(
+      screen.getByRole<HTMLInputElement>('checkbox', {
+        name: `${en.accounts.fields.includeInAvailable} Caja`,
+      }).checked,
+    ).toBe(true);
+  });
+
+  it('sends the user to sign-in on a 401 (error path)', async () => {
+    stubApi({
+      [ACTIVE]: list([CAJA]),
+      [PUT]: { status: 401, body: { code: 'UNAUTHENTICATED' } },
+    });
+    const { router } = renderApp(<AccountsContainer />);
+
+    await userEvent.setup().click(await screen.findByRole('checkbox', { name: /Caja$/ }));
+
+    await waitFor(() => {
+      expect(router.replace).toHaveBeenCalledWith('/es/sign-in');
+    });
+    expect(checkbox('Caja').checked).toBe(true);
+  });
+
+  it('shows no headline, Debt section or checkbox on the archived view (AC-12)', async () => {
+    const archived = account({ archived: true, archivedAt: '2026-10-02T00:00:00.000Z' });
+    stubApi({
+      [ACTIVE]: list([CAJA], { creditCardCount: 1 }),
+      [ARCHIVED]: list([archived], { creditCardCount: 1 }),
+    });
+    renderApp(<AccountsContainer />);
+    const user = userEvent.setup();
+
+    await screen.findByRole('checkbox', { name: /Caja$/ });
+    expect(screen.getByRole('region', { name: es.accounts.debt.title })).toBeDefined();
+    await user.click(screen.getByRole('button', { name: es.accounts.list.showArchived }));
+
+    expect(await screen.findByRole('button', { name: /^Desarchivar/ })).toBeDefined();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByText(es.accounts.debt.title)).toBeNull();
+    expect(screen.queryByText(es.accounts.headline.available)).toBeNull();
+  });
+});
+
 async function fillName(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.type(screen.getByLabelText(es.accounts.fields.name), name);
 }
@@ -328,6 +522,7 @@ describe('CreateAccountContainer', () => {
       type: 'bank_account',
       currency: 'USD',
       openingBalance: '0',
+      includeInAvailable: true,
     });
   });
 
@@ -362,7 +557,12 @@ describe('CreateAccountContainer', () => {
     await waitFor(() => {
       expect(calls).toHaveLength(1);
     });
-    expect(calls[0]?.body).toEqual({ name: 'Caja', type: 'cash', currency: 'ARS' });
+    expect(calls[0]?.body).toEqual({
+      name: 'Caja',
+      type: 'cash',
+      currency: 'ARS',
+      includeInAvailable: true,
+    });
     expect(calls[0]?.body).not.toHaveProperty('openingBalance');
   });
 
@@ -638,5 +838,74 @@ describe('CreateAccountContainer', () => {
     await waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith('/es/sign-in');
     });
+  });
+});
+
+describe('CreateAccountContainer include in available setting', () => {
+  const LABEL = es.accounts.fields.includeInAvailable;
+
+  it('sends the type default as an explicit value for a non-card type (AC-03, AC-04, AC-05)', async () => {
+    const { calls } = stubApi({ 'POST /accounts': { status: 201, body: account() } });
+    renderApp(<CreateAccountContainer />);
+    const user = userEvent.setup();
+
+    await fillName(user, 'Ahorro');
+    await choose(user, 'savings');
+    await submit(user);
+
+    await waitFor(() => {
+      expect(calls).toHaveLength(1);
+    });
+    expect(calls[0]?.body).toMatchObject({ type: 'savings', includeInAvailable: false });
+  });
+
+  it('sends the explicit choice of the user (AC-05)', async () => {
+    const { calls } = stubApi({ 'POST /accounts': { status: 201, body: account() } });
+    renderApp(<CreateAccountContainer />);
+    const user = userEvent.setup();
+
+    await fillName(user, 'Ahorro');
+    await choose(user, 'savings');
+    await user.click(screen.getByRole('checkbox', { name: LABEL }));
+    await submit(user);
+
+    await waitFor(() => {
+      expect(calls).toHaveLength(1);
+    });
+    expect(calls[0]?.body).toMatchObject({ type: 'savings', includeInAvailable: true });
+  });
+
+  it('sends no value for a credit card (AC-09)', async () => {
+    const { calls } = stubApi({ 'POST /accounts': { status: 201, body: account() } });
+    renderApp(<CreateAccountContainer />);
+    const user = userEvent.setup();
+
+    await fillName(user, 'Visa');
+    await choose(user, 'credit_card');
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    await submit(user);
+
+    await waitFor(() => {
+      expect(calls).toHaveLength(1);
+    });
+    expect(calls[0]?.body).toMatchObject({ type: 'credit_card' });
+    expect(calls[0]?.body).not.toHaveProperty('includeInAvailable');
+  });
+
+  it('shows the generic validation alert when the API names body.includeInAvailable (error path)', async () => {
+    stubApi({
+      'POST /accounts': {
+        status: 400,
+        body: { code: 'VALIDATION_FAILED', fields: ['body.includeInAvailable'] },
+      },
+    });
+    renderApp(<CreateAccountContainer />);
+    const user = userEvent.setup();
+
+    await fillName(user, 'Caja');
+    await choose(user);
+    await submit(user);
+
+    expect((await screen.findByRole('alert')).textContent).toContain(es.errors.validationFailed);
   });
 });

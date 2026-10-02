@@ -5,7 +5,7 @@
 | Ticket | DISC-001-03b |
 | Tracker | none |
 | Date | 2026-10-02 |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -150,6 +150,17 @@ maps every original ID to its new one.
   carry the obligations that DISC-001-02a and DISC-001-02b deferred to PRD 03 (real adapters,
   foreign keys with ON DELETE RESTRICT, the 100,000-movement performance test) and the owner-scope
   rule of AGENTS.md. Listed in the parent index as added while splitting.
+- 2026-10-02: Human decision (relayed by the orchestrator), no rate stored yet: when no rate has ever
+  been stored, the entry form of an expense or income REQUIRES a manual rate, and that rate is frozen
+  on the movement with source "manual". To be folded into FR-04, FR-05 and their ACs when this ticket
+  starts its DEFINE.
+- 2026-10-02: Human decision (relayed by the orchestrator), user deletion versus restricting keys: the
+  foreign keys from movements to accounts and to categories keep ON DELETE RESTRICT (as DISC-001-02a and
+  DISC-001-02b require); deleting a user erases that user's movements FIRST, through an ordered erasure
+  step plus the policy value of the DISC-001-01f erasure guard, both added by this ticket. The
+  PostgreSQL ordering behavior is proven by a test in this ticket's PLAN.
+- 2026-10-02: Human decision (relayed by the orchestrator), merge order: this ticket waits for
+  DISC-001-02b to be merged into main; no stacked branch.
 - 2026-10-02: DISC-001-02a deferrals discharged by this ticket's tests: AC-10 end to end, the
   history half of AC-07, NFR-01 and NFR-02 against the real table. DISC-001-02b deferrals: AC-05
   (renamed category shown on existing movements), AC-06 (archived category kept on movements) and

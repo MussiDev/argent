@@ -5,7 +5,7 @@
 | Ticket | DISC-001-03a |
 | Tracker | none |
 | Date | 2026-10-02 |
-| PRD loops | 0 |
+| PRD loops | 1 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -82,3 +82,11 @@ renumbered; the parent index maps every original ID to its new one.
 - 2026-10-02: FR-03 (read endpoint), AC-04 and AC-05 are not in the original text: the original
   FR-07 and FR-11 need the stored rates to be readable, and a ticket that only writes rates cannot
   be shipped or tested on its own. Listed in the parent index as added while splitting.
+- 2026-10-02: Human decision (relayed by the orchestrator): FR-03, AC-04 and AC-05 are ACCEPTED as
+  part of this ticket.
+- 2026-10-02: Human decision (relayed by the orchestrator): no jump guard on refreshed rates; the
+  residual risk of a wrong in-range rate from the provider is accepted by the project owner, because
+  rates are visible and editable per movement (DISC-001-03b FR-05). Recorded in the threat model as R-02.
+- 2026-10-02: Human decision (relayed by the orchestrator): after a failed refresh the next attempt
+  is 5 minutes later (a design constant of the spec, not a requirement; NFR-02 keeps the 60-minute
+  cadence after a success).

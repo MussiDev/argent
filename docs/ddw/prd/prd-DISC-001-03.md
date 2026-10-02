@@ -11,7 +11,7 @@
 | Sub-ticket | Title | PRD | Dependencies | Status |
 |---|---|---|---|---|
 | DISC-001-03a | Exchange Rates, Store and Sync | prd-DISC-001-03a.md | PRD 01 (sessions); no code dependency on the open branches | active |
-| DISC-001-03b | Expense and Income | prd-DISC-001-03b.md | depends on a; DISC-001-02b merged (pending decision 2) | pending |
+| DISC-001-03b | Expense and Income | prd-DISC-001-03b.md | depends on a; DISC-001-02b merged into main first (decision 2, resolved) | pending |
 | DISC-001-03c | Transfers and Currency Exchange | prd-DISC-001-03c.md | depends on b | pending |
 | DISC-001-03d | Tags and Filters | prd-DISC-001-03d.md | depends on b; DISC-001-02b merged | pending |
 | DISC-001-03e | Edit and Delete Movements | prd-DISC-001-03e.md | depends on b, c and d | pending |
@@ -20,7 +20,12 @@
 a → b → (c and d, independent of each other) → e
 
 ## Pending decisions (not resolved in the sub-PRDs; original wording kept)
-1. **User deletion versus restricting keys** (human decision pending, for DISC-001-03b's PLAN).
+1. RESOLVED (2026-10-02, human decision relayed by the orchestrator): **user deletion versus
+   restricting keys.** The keys from movements to accounts and categories keep `ON DELETE RESTRICT`;
+   deleting a user erases that user's movements FIRST through an ordered erasure step plus the
+   DISC-001-01f guard's `policy` value, both added by DISC-001-03b, which also proves the PostgreSQL
+   ordering with a test in its PLAN. Original analysis kept below for the record.
+   (Was: human decision pending, for DISC-001-03b's PLAN.)
    DISC-001-02a and DISC-001-02b require movements to reference accounts and categories with
    `ON DELETE RESTRICT`, while DISC-001-01f deletes a user through `ON DELETE CASCADE` and its
    erasure guard fails on any foreign key in the graph that is not `CASCADE`. PostgreSQL checks
@@ -30,10 +35,13 @@ a → b → (c and d, independent of each other) → e
    before the `users` row, with the guard's `policy` value (the path 01f's spec already
    anticipates). Alternative: `NO ACTION` on `account_id` and `category_id`, simpler but a
    departure from the wording of 02a and 02b, and it still trips the guard.
-2. **DISC-001-02b merge order** (human decision pending). Movements need the categories table
+2. RESOLVED (2026-10-02, human decision relayed by the orchestrator): **DISC-001-02b merge
+   order.** DISC-001-03b waits for 02b to be merged into main; no stacking. Original note: movements need the categories table
    (kind check, subcategories) and the real `CategoryUsage` adapter. Recommended: DISC-001-03b
    starts its PLAN after 02b is merged. 03a does not depend on it.
-3. **No stored rate yet** (human decision pending, for DISC-001-03b). The original FR-07 does not
+3. RESOLVED (2026-10-02, human decision relayed by the orchestrator): **no stored rate yet.** The
+   entry form requires a manual rate, which is frozen on the movement with source "manual"; to be
+   folded into DISC-001-03b's FR-04, FR-05 and ACs at its DEFINE. Original note: the original FR-07 does not
    say what an expense or income form prefills when no rate has ever been stored (first run with
    the provider down). Options: block the save, require a manual rate, or use a seeded value.
    Recommended: require a manual rate.
@@ -51,6 +59,7 @@ a → b → (c and d, independent of each other) → e
    that does not end in 4 decimals is rounded.
 
 ## Added while splitting (not in the original text)
+The three DISC-001-03a additions (FR-03, AC-04, AC-05) were ACCEPTED by the human on 2026-10-02.
 Each is derived from an obligation or convention already on record; none changes an original
 requirement.
 

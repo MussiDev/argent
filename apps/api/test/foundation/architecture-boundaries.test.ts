@@ -193,6 +193,87 @@ describe('identity never imports the categories module (dependency direction)', 
   });
 });
 
+describe('identity, accounts and categories never import the movements module (dependency direction)', () => {
+  it.each([
+    [DOMAIN_FILE, "import { x } from '../../movements';"],
+    [DOMAIN_FILE, "import { x } from '../../movements/domain/movement';"],
+    [APPLICATION_FILE, "import { eraseUserMovements } from '../../movements';"],
+    ['apps/api/src/identity/index.ts', "import { eraseUserMovements } from '../movements';"],
+    [
+      'apps/api/src/identity/infrastructure/db/probe.ts',
+      "import { eraseUserMovements } from '../../../movements/infrastructure/db/erase-user-movements';",
+    ],
+    ['apps/api/src/accounts/domain/probe.ts', "import { x } from '../../movements';"],
+    ['apps/api/src/accounts/application/probe.ts', "import { x } from '../../movements';"],
+    ['apps/api/src/accounts/index.ts', "import { x } from '../movements';"],
+    [
+      'apps/api/src/accounts/infrastructure/db/probe.ts',
+      "import { movements } from '../../../movements/infrastructure/db/schema';",
+    ],
+    ['apps/api/src/categories/domain/probe.ts', "import { x } from '../../movements';"],
+    ['apps/api/src/categories/application/probe.ts', "import { x } from '../../movements';"],
+    ['apps/api/src/categories/index.ts', "import { x } from '../movements';"],
+    [
+      'apps/api/src/categories/infrastructure/http/probe.ts',
+      "import { x } from '../../../movements/infrastructure/db/schema';",
+    ],
+  ])('rejects %s: %s', async (file, source) => {
+    expect(await restrictedImports(file, `${source}\n`)).toEqual(['no-restricted-imports']);
+  });
+
+  it('keeps the older restrictions where the movements pattern was added', async () => {
+    for (const [file, source] of [
+      [APPLICATION_FILE, "import { x } from '../infrastructure/db/schema';"],
+      [DOMAIN_FILE, "import { eq } from 'drizzle-orm';"],
+      [
+        'apps/api/src/identity/infrastructure/db/probe.ts',
+        "import { x } from '../../../../test/fakes/mutable-clock';",
+      ],
+      ['apps/api/src/accounts/domain/probe.ts', "import { eq } from 'drizzle-orm';"],
+      [
+        'apps/api/src/accounts/application/probe.ts',
+        "import { x } from '../infrastructure/db/schema';",
+      ],
+      [
+        'apps/api/src/accounts/infrastructure/db/probe.ts',
+        "import { x } from '../../../../test/fakes/mutable-clock';",
+      ],
+      ['apps/api/src/categories/domain/probe.ts', "import pg from 'pg';"],
+      [
+        'apps/api/src/categories/application/probe.ts',
+        "import { x } from '../infrastructure/db/schema';",
+      ],
+      [
+        'apps/api/src/categories/infrastructure/db/probe.ts',
+        "import { x } from '../../../../test/fakes/mutable-clock';",
+      ],
+    ] as const) {
+      expect(await restrictedImports(file, `${source}\n`), file).toEqual(['no-restricted-imports']);
+    }
+  });
+
+  it('allows the composition root and the movements module itself to import movements, and accounts to use its own movements adapter', async () => {
+    expect(
+      await restrictedImports(
+        'apps/api/src/server.ts',
+        "import { eraseUserMovements } from './movements';\n",
+      ),
+    ).toEqual([]);
+    expect(
+      await restrictedImports(
+        'apps/api/src/movements/infrastructure/db/probe.ts',
+        "import { x } from '../../domain/movement';\n",
+      ),
+    ).toEqual([]);
+    expect(
+      await restrictedImports(
+        'apps/api/src/accounts/infrastructure/http/probe.ts',
+        "import { NoMovementsAdapter } from '../movements/no-movements-adapter';\n",
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe('hexagonal import boundaries in the accounts module', () => {
   const ACCOUNTS_DOMAIN_FILE = 'apps/api/src/accounts/domain/probe.ts';
   const ACCOUNTS_APPLICATION_FILE = 'apps/api/src/accounts/application/probe.ts';

@@ -96,3 +96,18 @@ Out-of-block fix: `apps/api/test/investments/investments-migration.test.ts` (07a
 Review: verifier PASS, auditor no blockers. Advisories left: `clock` option added to `createMovementRoutes` (spec wording to update), barrel uses `export *` for the routes file, release-failure logging has no test, `err` logged raw (logger redaction to confirm in SAST).
 
 Known red until Block 6: `apps/api/test/identity/user-erasure.test.ts` (5 tests), because the erasure guard now sees the movements relations without the `erase-step` policy.
+
+## Block 6 — Ordered erasure step, guard policy and import rule
+
+| Test file | Result before implementation |
+|---|---|
+| `apps/api/test/identity/user-erasure.test.ts` | the original file had 5 failing guard tests (movements relations unregistered, composite keys non-cascading); after registering them 11 of 12 passed with no step, because a bare delete of the user happens to work, so the route test now spies on the step and failed with `expected "vi.fn()" to be called 1 times, but got 0 times` |
+| `apps/api/test/identity/deletion-persistence.test.ts` | 2 of 21 failed: `expected [] to deeply equal [ …(2) ]` (steps ignored) and `promise resolved "'erased'" instead of rejecting` (a failing step did not abort); the third new test (abort before steps) passed, as no step existed |
+| `apps/api/test/movements/erasure-step.test.ts` | 3 of 7 failed: `eraseUserMovements is not a function` (2) and the `server.ts` source check `expected ... to match /beforeUserErased/`; the 4 integration tests passed before, because a bare delete works here |
+| `apps/api/test/foundation/architecture-boundaries.test.ts` | 13 of 92 failed: `expected [] to deeply equal ['no-restricted-imports']` (identity, accounts and categories could import movements) |
+
+Fact recorded: a bare `delete from users` with movements present succeeds, by the order PostgreSQL fires referential triggers; the step is the contract and the guard keeps the `erase-step` policy.
+
+Review: verifier PASS, auditor no blockers. Advisories left: the guard cannot itself prove the step is wired (the `server.ts` source check does), the ESLint regex only names the four layer folders, two timing and weak assertions in the race tests, and a rare 40P01 between an erasure and a concurrent account delete (retryable). Comments added about the trigger-order assumption and the lock.
+
+After: 120 files, 2014 tests in `apps/api` pass; typecheck, eslint and prettier clean.

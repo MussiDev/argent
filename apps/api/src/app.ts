@@ -9,6 +9,7 @@ import {
   type Clock,
   type IdentityDb,
   type UserCreatedHook,
+  type UserErasureStep,
 } from './identity';
 import type { Env } from './shared/config/env';
 import { createErrorHandler, HttpError } from './shared/http/error-handler';
@@ -30,6 +31,8 @@ export interface IdentityModuleOptions {
   breachedPasswordChecker?: BreachedPasswordChecker;
   /** Hooks run inside the transaction that creates a user; the composition root registers them. */
   onUserCreated?: readonly UserCreatedHook[];
+  /** Steps run inside the erasure transaction before the user is deleted; the composition root registers them. */
+  beforeUserErased?: readonly UserErasureStep[];
 }
 
 /** What the app hands to other modules' router factories. */
@@ -134,6 +137,7 @@ export function createApp({
       requireSession: identity.requireSession,
       breachedPasswordChecker: identity.breachedPasswordChecker,
       ...(identity.onUserCreated ? { onUserCreated: identity.onUserCreated } : {}),
+      ...(identity.beforeUserErased ? { beforeUserErased: identity.beforeUserErased } : {}),
     });
     for (const router of identityModule.routers) app.use(router);
     for (const router of routers) app.use(router);

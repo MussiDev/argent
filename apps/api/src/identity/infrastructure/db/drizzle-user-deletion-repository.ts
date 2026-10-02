@@ -5,6 +5,7 @@ import type {
   UserDeletionRepository,
 } from '../../application/ports/user-deletion-repository';
 import { deletionGrants, emailOutbox, users, type IdentityDb } from './schema';
+import type { UserErasureStep } from './user-erasure-step';
 
 /** Thrown inside the transaction to roll everything back and carry the reason out of it. */
 class ErasureAborted extends Error {
@@ -15,7 +16,10 @@ class ErasureAborted extends Error {
 }
 
 export class DrizzleUserDeletionRepository implements UserDeletionRepository {
-  constructor(private readonly db: IdentityDb) {}
+  constructor(
+    private readonly db: IdentityDb,
+    private readonly steps: readonly UserErasureStep[] = [],
+  ) {}
 
   /**
    * One transaction that locks in the order the email worker already does (outbox row first, user
@@ -28,7 +32,7 @@ export class DrizzleUserDeletionRepository implements UserDeletionRepository {
         // connection. Raw SQL because the query builder has no `set local`.
         await tx.execute(sql`set local lock_timeout = '5s'`);
 
-        // No lock here: the user's row is locked by the final delete, after the outbox rows.
+        // No lock here: the user row is locked explicitly below, after the outbox rows.
         const [user] = await tx
           .select({ email: users.email })
           .from(users)
@@ -71,6 +75,15 @@ export class DrizzleUserDeletionRepository implements UserDeletionRepository {
             .returning({ tokenHash: deletionGrants.tokenHash });
           if (consumed.length === 0) throw new ErasureAborted('grant_invalid');
         }
+
+        // Locks the user row (outbox first, user second, the order the email worker uses). A
+        // movement insert in flight holds a key-share lock on it, so this waits for that insert and
+        // the steps below see it; one that starts later waits here and fails on the foreign key.
+        // This relies on the 0014 key to users being created before the account and category keys
+        // (referential triggers fire in creation order): an insert then waits here holding nothing.
+        await tx.execute(sql`select id from users where id = ${userId} for update`);
+
+        for (const step of this.steps) await step(tx, userId);
 
         // The foreign keys with `on delete cascade` remove everything else the user owns.
         const erased = await tx

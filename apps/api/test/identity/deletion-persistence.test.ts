@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'drizzle-orm';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { IdentityDb, UserErasureStep } from '../../src/identity';
 import type { DeletionGrant } from '../../src/identity/application/ports/deletion-grant-repository';
 import { Email } from '../../src/identity/domain/email';
 import { Unauthenticated } from '../../src/identity/domain/errors';
@@ -374,6 +376,103 @@ describe('DrizzleUserDeletionRepository.erase', () => {
     const left = await connection.pool.query<{ id: string }>('select id from email_outbox');
     expect(left.rows).toEqual(held.rows);
     expect(await rowsOf(ana)).toBe(0);
+  });
+});
+
+describe('DrizzleUserDeletionRepository.erase with ordered steps', () => {
+  it('runs the steps in order with the transaction, after the outbox delete and the grant check, with the user row locked and still present', async () => {
+    const ana = await createUser('ana@example.com');
+    await seedDependents(ana, 'ana@example.com');
+    await grants.replace(grantFor(ana));
+    const seen: string[] = [];
+    const observe = async (name: string, tx: IdentityDb): Promise<void> => {
+      const outbox = await tx.execute(
+        sql`select count(*) as n from email_outbox where to_email = 'ana@example.com'`,
+      );
+      const grantRows = await tx.execute(
+        sql`select count(*) as n from deletion_grants where user_id = ${ana}`,
+      );
+      const userRows = await tx.execute(sql`select count(*) as n from users where id = ${ana}`);
+      // Another connection cannot take the user row while the transaction holds it.
+      const probe = await connection.pool.connect();
+      let locked = false;
+      try {
+        await probe.query('begin');
+        await probe.query('select id from users where id = $1 for update nowait', [ana]);
+      } catch (error) {
+        locked = (error as { code?: string }).code === '55P03';
+      } finally {
+        await probe.query('rollback');
+        probe.release();
+      }
+      seen.push(
+        `${name}: outbox=${String(outbox.rows[0]?.n)} grant=${String(grantRows.rows[0]?.n)} user=${String(userRows.rows[0]?.n)} locked=${String(locked)}`,
+      );
+    };
+    const steps: UserErasureStep[] = [(tx) => observe('first', tx), (tx) => observe('second', tx)];
+
+    const result = await new DrizzleUserDeletionRepository(connection.db, steps).erase({
+      userId: ana,
+      credentialsVersion: 0,
+      grant: { tokenHash: `grant-${ana}`, sessionFamilyId: FAMILY, now: NOW },
+    });
+
+    expect(result).toBe('erased');
+    expect(seen).toEqual([
+      'first: outbox=0 grant=0 user=1 locked=true',
+      'second: outbox=0 grant=0 user=1 locked=true',
+    ]);
+    expect(await rowsOf(ana)).toBe(0);
+  });
+
+  it('rolls back the whole deletion when a step throws: the user, dependents, outbox rows and grant stay (error path)', async () => {
+    const ana = await createUser('ana@example.com');
+    await seedDependents(ana, 'ana@example.com');
+    await grants.replace(grantFor(ana));
+    const before = await rowsOf(ana);
+    const boom = new Error('step failed');
+    const later = vi.fn(() => Promise.resolve());
+    const steps: UserErasureStep[] = [
+      async (tx) => {
+        await tx.execute(sql`delete from accounts where owner_id = ${ana}`);
+      },
+      () => Promise.reject(boom),
+      later,
+    ];
+
+    await expect(
+      new DrizzleUserDeletionRepository(connection.db, steps).erase({
+        userId: ana,
+        credentialsVersion: 0,
+        grant: { tokenHash: `grant-${ana}`, sessionFamilyId: FAMILY, now: NOW },
+      }),
+    ).rejects.toBe(boom);
+
+    expect(later).not.toHaveBeenCalled();
+    expect(await rowsOf(ana)).toBe(before);
+    expect(await outboxRowsOf(ana, 'ana@example.com')).toBe(2);
+    expect(await count('select count(*) as n from deletion_grants where user_id = $1', [ana])).toBe(
+      1,
+    );
+  });
+
+  it('aborts before any step runs for a stale credentials version or an invalid grant (error path)', async () => {
+    const ana = await createUser('ana@example.com');
+    await seedDependents(ana, 'ana@example.com');
+    await grants.replace(grantFor(ana));
+    const step = vi.fn(() => Promise.resolve());
+    const repository = new DrizzleUserDeletionRepository(connection.db, [step]);
+
+    const stale = await repository.erase({ userId: ana, credentialsVersion: 1 });
+    const invalid = await repository.erase({
+      userId: ana,
+      credentialsVersion: 0,
+      grant: { tokenHash: 'unknown', sessionFamilyId: FAMILY, now: NOW },
+    });
+
+    expect(stale).toBe('stale');
+    expect(invalid).toBe('grant_invalid');
+    expect(step).not.toHaveBeenCalled();
   });
 });
 

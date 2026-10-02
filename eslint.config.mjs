@@ -40,6 +40,16 @@ const CATEGORIES_IMPORTS = {
     'Identity must not import the categories module; the composition root registers a hook instead.',
 };
 
+// Identity, accounts and categories declare ports; only the composition root wires movements in.
+// A regex, not a glob: accounts has its own `infrastructure/movements` adapter folder, and a glob
+// that matches the folder name would also match everything inside it. This matches only the
+// movements module barrel and its layers.
+const MOVEMENTS_IMPORTS = {
+  regex: '^(\\.\\./)+movements(/(domain|application|infrastructure|index)(/.*)?)?$',
+  message:
+    'Identity, accounts and categories must not import the movements module; the composition root wires it in.',
+};
+
 export default defineConfig(
   {
     ignores: [
@@ -98,11 +108,15 @@ export default defineConfig(
       'no-restricted-imports': ['error', { patterns: [INFRASTRUCTURE_IMPORTS, TEST_IMPORTS] }],
     },
   },
-  // Identity: the three blocks above repeated with CATEGORIES_IMPORTS added (later blocks win).
+  // Identity: the three blocks above repeated with CATEGORIES_IMPORTS and MOVEMENTS_IMPORTS added
+  // (later blocks win).
   {
     files: ['apps/api/src/identity/**/*.ts'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [TEST_IMPORTS, CATEGORIES_IMPORTS] }],
+      'no-restricted-imports': [
+        'error',
+        { patterns: [TEST_IMPORTS, CATEGORIES_IMPORTS, MOVEMENTS_IMPORTS] },
+      ],
     },
   },
   {
@@ -110,7 +124,15 @@ export default defineConfig(
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [INFRASTRUCTURE_IMPORTS, IO_IMPORTS, TEST_IMPORTS, CATEGORIES_IMPORTS] },
+        {
+          patterns: [
+            INFRASTRUCTURE_IMPORTS,
+            IO_IMPORTS,
+            TEST_IMPORTS,
+            CATEGORIES_IMPORTS,
+            MOVEMENTS_IMPORTS,
+          ],
+        },
       ],
     },
   },
@@ -119,7 +141,36 @@ export default defineConfig(
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [INFRASTRUCTURE_IMPORTS, TEST_IMPORTS, CATEGORIES_IMPORTS] },
+        { patterns: [INFRASTRUCTURE_IMPORTS, TEST_IMPORTS, CATEGORIES_IMPORTS, MOVEMENTS_IMPORTS] },
+      ],
+    },
+  },
+  // Accounts and categories: the generic blocks repeated with MOVEMENTS_IMPORTS added, because a
+  // files-scoped block replaces the options of the generic ones.
+  {
+    files: ['apps/api/src/accounts/**/*.ts', 'apps/api/src/categories/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [TEST_IMPORTS, MOVEMENTS_IMPORTS] }],
+    },
+  },
+  {
+    files: ['apps/api/src/accounts/domain/**/*.ts', 'apps/api/src/categories/domain/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [INFRASTRUCTURE_IMPORTS, IO_IMPORTS, TEST_IMPORTS, MOVEMENTS_IMPORTS] },
+      ],
+    },
+  },
+  {
+    files: [
+      'apps/api/src/accounts/application/**/*.ts',
+      'apps/api/src/categories/application/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [INFRASTRUCTURE_IMPORTS, TEST_IMPORTS, MOVEMENTS_IMPORTS] },
       ],
     },
   },

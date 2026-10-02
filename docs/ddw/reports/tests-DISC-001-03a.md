@@ -4,30 +4,29 @@
 |---|---|
 | Runner | vitest 5.0.1 (V8 coverage via @vitest/coverage-v8 5.0.1) |
 | Command | `TEST_DATABASE_URL=postgres://argent:argent@localhost:5435/argent03a_test pnpm test:coverage` |
-| Total | 2051 |
-| Passed | 2051 |
+| Total | 2415 |
+| Passed | 2415 |
 | Failed | 0 |
 | Skipped | 0 |
-| Line coverage | 96.82% |
-| Branch coverage | 91.94% |
-| Function coverage | 94.44% |
+| Line coverage | 96.97% |
+| Branch coverage | 92.26% |
+| Function coverage | 94.65% |
 | Coverage floor | 80% lines, branches and functions (AGENTS.md, "Testing") |
 | Lint | `pnpm exec eslint .` — clean, 0 findings; `pnpm exec prettier --check --end-of-line auto` on every file changed by the branch — clean; `pnpm typecheck` — clean |
 
 ## Scope
 
-Closeout run of the ticket on the tree rebased onto `origin/main` after the merge of DISC-001-02b (PR #15,
-migration 0009), measured over `apps/api/src`, `apps/web/src` and `packages/shared/src` together, as AGENTS.md
-requires: 135 test files, 2051 tests. The first closeout run (before the rebase, tree of commit `c3f8a36`)
+Closeout run of the ticket on the tree rebased twice onto `origin/main`: after DISC-001-02b (PR #15, migration 0009) and after DISC-001-01f (PR #16, 0010) and FEAT-003 (PR #17, 0011), measured over `apps/api/src`, `apps/web/src` and `packages/shared/src` together, as AGENTS.md
+requires: 147 test files, 2415 tests. The first closeout run (before the rebase, tree of commit `c3f8a36`)
 had 127 files and 1678 tests, all green, with 96.68% lines, 92.2% branches and 93.82% functions; the rebase
-brought 02b's tests in and required merging `apps/api/test/identity/migration.test.ts` by hand (see the PR
+brought 02b's, 01f's and FEAT-003's tests in and required merging `apps/api/test/identity/migration.test.ts` by hand (see the PR
 description). The per-block runs of Blocks 1 to 7 and the round 2 fixes were green before that, and every
 block's tests were seen failing before its implementation (the TDD evidence is in
 `docs/ddw/reports/tdd-DISC-001-03a.md`).
 
 Other suites run on the same tree:
 
-- `pnpm e2e` (Playwright): 64/64 passed on the rebased tree (59/59 before the rebase) with
+- `pnpm e2e` (Playwright): 70/70 passed on the final rebased tree (59/59 before the rebases) with
   `E2E_DATABASE_URL=postgres://argent:argent@localhost:5435/argent03a_e2e` and the shared Mailpit;
   ports 3000, 4000 and 4100 were checked free before the run. The worker started with
   `RATE_PROVIDER=fake` (set in `playwright.config.ts`).

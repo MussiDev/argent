@@ -14,6 +14,7 @@ import RegisterPage from '../src/app/[locale]/(auth)/register/page';
 import ResetPasswordPage from '../src/app/[locale]/(auth)/reset-password/page';
 import SignInPage from '../src/app/[locale]/(auth)/sign-in/page';
 import SecondFactorPage from '../src/app/[locale]/(auth)/sign-in/second-factor/page';
+import DeleteAccountPage from '../src/app/[locale]/(app)/settings/delete-account/page';
 import ProfilePage from '../src/app/[locale]/(app)/settings/profile/page';
 import SecurityPage from '../src/app/[locale]/(app)/settings/security/page';
 import VerifyEmailPage from '../src/app/[locale]/(auth)/verify-email/page';
@@ -248,6 +249,39 @@ describe('routes', () => {
     expect(calls.map((call) => call.path)).toEqual(['/auth/session', '/auth/2fa']);
   });
 
+  it('the delete-account screen is only shown behind the session guard', async () => {
+    const { calls } = stubApi({
+      'GET /auth/session': SESSION,
+      'GET /profile': {
+        status: 200,
+        body: {
+          displayName: null,
+          email: 'ana@example.com',
+          twoFactorEnabled: false,
+          deletionReauth: 'password',
+          preferences: {
+            defaultRateType: 'blue',
+            displayCurrency: 'ARS',
+            timeZone: 'UTC',
+            language: 'es',
+          },
+        },
+      },
+    });
+    renderApp(
+      <AppLayout>
+        <DeleteAccountPage />
+      </AppLayout>,
+    );
+
+    expect(screen.queryByRole('heading', { name: es.deleteUser.title })).toBeNull();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: es.deleteUser.title }),
+    ).toBeDefined();
+    expect(await screen.findByLabelText(es.deleteUser.password)).toBeDefined();
+    expect(calls.map((call) => call.path)).toEqual(['/auth/session', '/profile']);
+  });
+
   it('the profile screen is only shown behind the session guard', async () => {
     const { calls } = stubApi({
       'GET /auth/session': SESSION,
@@ -257,6 +291,7 @@ describe('routes', () => {
           displayName: null,
           email: 'ana@example.com',
           twoFactorEnabled: false,
+          deletionReauth: 'password',
           preferences: {
             defaultRateType: 'blue',
             displayCurrency: 'ARS',

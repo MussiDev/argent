@@ -380,6 +380,11 @@
       "ARS": "Argentine peso (ARS)",
       "USD": "US dollar (USD)"
     },
+    "deleteAccount": {
+      "title": "Delete account",
+      "description": "Permanently remove your account and all its data.",
+      "link": "Delete my account"
+    },
     "languages": {
       "es": "Español",
       "en": "English"
@@ -388,6 +393,24 @@
       "displayNameRequired": "Enter a display name.",
       "displayNameTooLong": "The display name can be at most 50 characters long.",
       "timeZoneInvalid": "Choose a time zone from the list."
+    }
+  },
+  "deleteUser": {
+    "title": "Delete account",
+    "warningTitle": "This cannot be undone",
+    "description": "Deleting your account removes it and everything in it.",
+    "warning": "We will permanently delete your account, your accounts and every movement. There is no way to recover them.",
+    "password": "Password",
+    "code": "Verification code",
+    "codeHint": "A 6-digit code from your authenticator app, or an unused recovery code.",
+    "submit": "Delete my account permanently",
+    "pending": "Deleting…",
+    "google": {
+      "description": "Your account has no password. Confirm it is you by signing in with Google again.",
+      "continue": "Continue with Google to confirm",
+      "pending": "Going to Google…",
+      "confirmed": "Google confirmed it is you. Finish within 5 minutes.",
+      "failed": "We could not confirm it with Google. Try again."
     }
   }
 }

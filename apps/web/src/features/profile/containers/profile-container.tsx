@@ -7,9 +7,10 @@ import {
 } from '@pesly/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormAlert } from '@/features/auth/components/form-alert';
-import { usePathname, useRouter } from '@/i18n/navigation';
+import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import type { ApiErrorKey, ApiResult } from '@/lib/api-client';
 import { useApiClient } from '@/lib/api-client-provider';
 import { PreferencesForm, type PreferencesValues } from '../components/preferences-form';
@@ -46,6 +47,7 @@ const PROFILE_PATH = '/settings/profile';
  */
 export function ProfileContainer() {
   const t = useTranslations('app');
+  const tDelete = useTranslations('profile.deleteAccount');
   const api = useApiClient();
   const router = useRouter();
   const locale = useLocale();
@@ -208,6 +210,17 @@ export function ProfileContainer() {
         errors={preferences.errors}
         onSubmit={savePreferences}
       />
+      <Card>
+        <CardHeader>
+          <CardTitle as="h2">{tDelete('title')}</CardTitle>
+          <CardDescription>{tDelete('description')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/settings/delete-account" className={buttonVariants({ variant: 'outline' })}>
+            {tDelete('link')}
+          </Link>
+        </CardContent>
+      </Card>
     </div>
   );
 }

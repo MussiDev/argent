@@ -13,6 +13,7 @@ import {
   secondFactorVerifyResponseSchema,
   sessionResponseSchema,
   signInResponseSchema,
+  startDeletionReauthResponseSchema,
   twoFactorEnableResponseSchema,
   twoFactorSetupResponseSchema,
   twoFactorStatusResponseSchema,
@@ -21,6 +22,7 @@ import {
   type CategoryResponse,
   type createAccountRequestSchema,
   type CreateCategoryRequest,
+  type DeleteUserRequest,
   type ErrorCode,
   type ListAccountsQuery,
   type ListAccountsResponse,
@@ -40,6 +42,7 @@ import {
   type SessionResponse,
   type SignInRequest,
   type SignInResponse,
+  type StartDeletionReauthResponse,
   type TwoFactorDisableRequest,
   type TwoFactorEnableRequest,
   type TwoFactorEnableResponse,
@@ -206,6 +209,13 @@ export interface ApiClient {
   deleteCategory(id: string): Promise<ApiResult<undefined>>;
   getProfile(): Promise<ApiResult<ProfileResponse>>;
   updateProfile(body: UpdateProfileRequest): Promise<ApiResult<ProfileResponse>>;
+  /**
+   * Deletes the signed-in user's own account (not a finance account: that is `deleteAccount`).
+   * 204 on success; the cookies are cleared by the API.
+   */
+  deleteMyAccount(body: DeleteUserRequest): Promise<ApiResult<undefined>>;
+  /** The Google URL where a password-less user confirms the deletion. */
+  startDeletionReauth(): Promise<ApiResult<StartDeletionReauthResponse>>;
 }
 
 /**
@@ -539,6 +549,22 @@ export function createApiClient({
         path: '/profile',
         body,
         response: profileResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    deleteMyAccount: (body) =>
+      request({
+        method: 'POST',
+        path: '/profile/delete',
+        body,
+        response: null,
+        refreshOnUnauthenticated: true,
+      }),
+    startDeletionReauth: () =>
+      request({
+        method: 'POST',
+        path: '/profile/delete/google/start',
+        body: {},
+        response: startDeletionReauthResponseSchema,
         refreshOnUnauthenticated: true,
       }),
   };

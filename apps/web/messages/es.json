@@ -380,6 +380,11 @@
       "ARS": "Peso argentino (ARS)",
       "USD": "Dólar estadounidense (USD)"
     },
+    "deleteAccount": {
+      "title": "Eliminar cuenta",
+      "description": "Elimina de forma permanente tu cuenta y todos sus datos.",
+      "link": "Eliminar mi cuenta"
+    },
     "languages": {
       "es": "Español",
       "en": "English"
@@ -388,6 +393,24 @@
       "displayNameRequired": "Ingresa un nombre para mostrar.",
       "displayNameTooLong": "El nombre para mostrar puede tener como máximo 50 caracteres.",
       "timeZoneInvalid": "Elige una zona horaria de la lista."
+    }
+  },
+  "deleteUser": {
+    "title": "Eliminar cuenta",
+    "warningTitle": "Esto no se puede deshacer",
+    "description": "Al eliminar tu cuenta se borra ella y todo lo que contiene.",
+    "warning": "Vamos a borrar de forma permanente tu cuenta, tus cuentas y todos tus movimientos. No hay forma de recuperarlos.",
+    "password": "Contraseña",
+    "code": "Código de verificación",
+    "codeHint": "Un código de 6 dígitos de tu app de autenticación, o un código de recuperación sin usar.",
+    "submit": "Eliminar mi cuenta para siempre",
+    "pending": "Eliminando…",
+    "google": {
+      "description": "Tu cuenta no tiene contraseña. Confirma que eres tú iniciando sesión con Google otra vez.",
+      "continue": "Continuar con Google para confirmar",
+      "pending": "Yendo a Google…",
+      "confirmed": "Google confirmó que eres tú. Termina en los próximos 5 minutos.",
+      "failed": "No pudimos confirmarlo con Google. Inténtalo de nuevo."
     }
   }
 }

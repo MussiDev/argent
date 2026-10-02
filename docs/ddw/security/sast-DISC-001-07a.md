@@ -4,7 +4,7 @@
 |-------|-------|
 | Ticket | DISC-001-07a |
 | Tier | FEATURE |
-| Date | 2026-10-02 |
+| Date | 2026-10-02 (re-scanned after the VERIFY corrective loop, commit `ffe5907`) |
 | Scope | `git diff --ignore-cr-at-eol origin/main...HEAD`: `apps/api/src/investments/**` (domain, use cases, ports, Drizzle repositories, routes, serializers, module wiring), `apps/api/src/shared/http/error-handler.ts`, `apps/api/src/server.ts`, migration `apps/api/drizzle/0008_investments.sql` and its rollback, `packages/shared/src/investments/**`, `apps/web/src/features/investments/**`, `apps/web/src/lib/{api-client,format-amount}.ts`, the investments page, the authenticated shell link, the es/en catalogs; tests, fixtures and e2e read for secrets only |
 | Method | Manual review by `ddw-sec-auditor` against catalog §4, plus `pnpm audit --prod --audit-level high` and `pnpm audit` (both: "No known vulnerabilities found"; this ticket adds no dependency) |
 | Result | PASSED — 0 Critical, 0 High, 0 Medium open; 4 Low and 5 Info documented below |
@@ -48,6 +48,23 @@ Every repository method takes an `AccessScope` (writes `AccessScope<'write'>`) a
 | I-3 | Info | `packages/shared/src/investments/contracts.ts:38` | Length limits count UTF-16 units in Zod and code points in `char_length`; the database limit is never stricter than the Zod one | None |
 | I-4 | Info | `apps/api/src/investments/infrastructure/http/holding-routes.ts:62` | Audit lines carry the user id and the entity id (opaque ids), consistent with the threat model | None |
 | I-5 | Info | `apps/api/drizzle/0008_investments.sql:25` | The price-all-or-none and crypto-in-USD checks back up the application rules; the price-currency pairing of L-2 has no constraint | Tracked with L-2 |
+
+## Re-scan after the VERIFY corrective loop
+
+Delta reviewed: `git diff 7151fda..HEAD` for `apps/web/src/features/investments/**`
+(`edit-holding-form.tsx`, `investments-screen.tsx`, `portfolio-card.tsx`,
+`investments-container.tsx`), the es/en catalogs, the investments e2e selectors and tests. No
+API, shared-package, migration, dependency or lockfile change. Pattern scan of the added lines found no
+`dangerouslySetInnerHTML`, `innerHTML`, `eval`, `new Function`, `document.write`, storage access,
+network call, secret or `console` use; the new DOM lookups (`closest('main')`, `querySelector('h1')`
+in `investments-screen.tsx`, `data-opener` keys built from the constant prefixes `add-holding:` and
+`delete-portfolio:` plus a server UUID in `portfolio-card.tsx`) match elements by comparing the
+attribute value, never by interpolating data into a selector string, so there is no selector
+injection; the heading receives `tabindex="-1"` only to take focus. The edit form no longer re-sends a
+total cost expressed in another currency, which removes a data-integrity defect (not a
+vulnerability). `pnpm audit --prod --audit-level high` and `pnpm audit`: "No known
+vulnerabilities found". Result unchanged: 0 Critical, 0 High, 0 Medium; the Low and Info findings
+above stand.
 
 ## Summary
 

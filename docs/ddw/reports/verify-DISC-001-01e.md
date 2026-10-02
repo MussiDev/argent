@@ -85,3 +85,26 @@ blocks and coverage of the files this ticket changed are those of round 1 above;
 ticket's behavior changed.
 
 Result: PASSED
+
+## Round 3 — after merging DISC-001-02a (PR #13)
+
+Main moved again before the closeout. The branch was rebased without conflicts, and the full
+Playwright run then showed 9 failures, all in `apps/web/e2e/accounts.spec.ts` of DISC-001-02a: its
+`signedInUser` helper registers a user without the display name that this ticket made required, so
+the form stayed on the registration screen. The ticket went back through the loop (CLOSEOUT to
+VERIFY to CODE), changed one line of that test helper (it now fills the display name), and re-earned
+its gates.
+
+Re-run on the rebased branch: `pnpm typecheck`, `pnpm exec eslint .` and
+`pnpm exec prettier --check --end-of-line auto .` clean; `pnpm test:coverage` on `argent_01e_test`
+1460 passed, 0 failed, 0 skipped in 113 files with 96.76% line, 92.30% branch and 94.16% function
+coverage repo-wide; `pnpm exec playwright test` on `argent_01e_e2e` 59 of 59 passed (the 50 earlier
+tests plus the nine accounts specs); `pnpm audit --prod --audit-level high` found no known
+vulnerabilities. The tests and SAST reports were rewritten for this run and re-validated. No
+production code changed in this round, so the acceptance criteria, spec blocks, sad-path tests and
+the coverage of the files this ticket changed are those of round 1; this round was checked by the
+orchestrator, not by a new independent verifier, because the only change is one line of a test
+helper.
+
+Result: PASSED
+

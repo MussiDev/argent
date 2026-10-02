@@ -97,6 +97,13 @@ All notable changes to this project are documented in this file. The format foll
   section with a per-currency total; the list response replaces `totals` with `availableTotals`,
   `netWorthTotals`, `debtTotals` and `creditCardCount`. Migration 0011 backfills existing accounts
   by type default.
+- DISC-001-03a Exchange rates, store and sync: the worker refreshes the buy and sell prices of the
+  seven ARS/USD rate types (oficial, blue, MEP, CCL, mayorista, cripto, tarjeta) from dolarapi.com
+  every 60 minutes and keeps the last stored set when the provider fails (a failed refresh is
+  recorded and retried after 5 minutes); `GET /exchange-rates/latest` returns the stored rates to a
+  verified user. Rates are integers scaled by 10,000 end to end and the API never calls the provider.
+  New settings `RATE_PROVIDER` (`dolarapi` or `fake`) and `DOLARAPI_BASE_URL`, both with defaults
+  and pinned in production. Migration `0012_exchange_rates`.
 
 ### Fixed
 

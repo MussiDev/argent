@@ -437,7 +437,9 @@
       "holdingsLabel": "Holdings",
       "noHoldings": "This portfolio has no holdings yet.",
       "addHolding": "Add holding",
-      "delete": "Delete portfolio"
+      "addHoldingFor": "Add holding to {name}",
+      "delete": "Delete portfolio",
+      "deleteFor": "Delete portfolio {name}"
     },
     "holding": {
       "quantity": "Quantity: {quantity}",
@@ -479,7 +481,6 @@
       "deleted": "Deleted. Your account balances did not change."
     },
     "forms": {
-      "required": "Required",
       "createPortfolio": {
         "title": "New portfolio",
         "name": "Name",
@@ -503,7 +504,7 @@
         "quantity": "Quantity",
         "currency": "Currency",
         "totalCost": "Total cost",
-        "currencyChangeNotice": "Changing the currency clears the price and asks for the total cost again.",
+        "currencyChangeNotice": "Changing the currency clears the price. Enter the total cost again in the new currency, or leave it empty.",
         "submit": "Save changes",
         "pending": "Saving…"
       },
@@ -516,7 +517,6 @@
       "cancel": "Cancel",
       "confirmDelete": {
         "portfolio": "Deleting this portfolio also deletes all its holdings. Your account balances do not change.",
-        "holding": "Delete this holding? Your account balances do not change.",
         "confirm": "Yes, delete"
       }
     },

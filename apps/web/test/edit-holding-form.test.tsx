@@ -80,17 +80,76 @@ describe('EditHoldingForm', () => {
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith({ valuationCurrency: 'USD', totalCost: null });
   });
 
-  it('sends the unchanged cost along with a changed currency (AC-22)', async () => {
+  it('empties the cost input when the currency changes, so the old amount is not resent (AC-22)', async () => {
+    const { user } = renderForm('es');
+    const t = labels('es');
+
+    expect(screen.getByLabelText<HTMLInputElement>(t.totalCost).value).toBe('150000');
+    await user.selectOptions(screen.getByLabelText(t.currency), 'USD');
+
+    expect(screen.getByLabelText<HTMLInputElement>(t.totalCost).value).toBe('');
+  });
+
+  it('sends totalCost null with the new currency when the cost is not typed again (AC-22)', async () => {
     const { onSubmit, user } = renderForm('es');
     const t = labels('es');
 
     await user.selectOptions(screen.getByLabelText(t.currency), 'USD');
     await user.click(screen.getByRole('button', { name: t.submit }));
 
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({ valuationCurrency: 'USD', totalCost: null });
+  });
+
+  it('sends a newly typed cost with the new currency (AC-22)', async () => {
+    const { onSubmit, user } = renderForm('es');
+    const t = labels('es');
+
+    await user.selectOptions(screen.getByLabelText(t.currency), 'USD');
+    await user.type(screen.getByLabelText(t.totalCost), '1200,5');
+    await user.click(screen.getByRole('button', { name: t.submit }));
+
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith({
       valuationCurrency: 'USD',
-      totalCost: '15000000',
+      totalCost: '120050',
     });
+  });
+
+  it('restores the original cost when the currency goes back, and sends nothing for it (AC-22)', async () => {
+    const { onSubmit, onCancel, user } = renderForm('es');
+    const t = labels('es');
+
+    await user.selectOptions(screen.getByLabelText(t.currency), 'USD');
+    await user.selectOptions(screen.getByLabelText(t.currency), 'ARS');
+
+    expect(screen.getByLabelText<HTMLInputElement>(t.totalCost).value).toBe('150000');
+    await user.click(screen.getByRole('button', { name: t.submit }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('restores the original cost and sends only the quantity after a currency round trip', async () => {
+    const { onSubmit, user } = renderForm('en');
+    const t = labels('en');
+
+    await user.selectOptions(screen.getByLabelText(t.currency), 'USD');
+    await user.selectOptions(screen.getByLabelText(t.currency), 'ARS');
+    await user.clear(screen.getByLabelText(t.quantity));
+    await user.type(screen.getByLabelText(t.quantity), '15');
+    await user.click(screen.getByRole('button', { name: t.submit }));
+
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith({ quantity: '1500000000' });
+  });
+
+  it.each([
+    ['en', /enter the total cost again/i],
+    ['es', /de nuevo el costo/i],
+  ] as const)('tells the user to enter the cost again in %s (AC-22)', async (locale, pattern) => {
+    const { user } = renderForm(locale);
+    const t = labels(locale);
+
+    await user.selectOptions(screen.getByLabelText(t.currency), 'USD');
+
+    expect(screen.getByText(t.currencyChangeNotice).textContent).toMatch(pattern);
   });
 
   it('sends a null cost when a saved cost is cleared without a currency change', async () => {

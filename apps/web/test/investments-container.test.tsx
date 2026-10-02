@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { HoldingResponse, PortfolioResponse } from '@pesly/shared';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { InvestmentsContainer } from '../src/features/investments/containers/investments-container';
@@ -78,6 +78,9 @@ function totals() {
 
 const OTHER_ID = '44444444-4444-4444-8444-444444444444';
 
+const addFor = (name: string) => inv.portfolio.addHoldingFor.replace('{name}', name);
+const deleteFor = (name: string) => inv.portfolio.deleteFor.replace('{name}', name);
+
 /**
  * Holds the requests that `match` selects until the test releases them, in the order they were
  * made; every other request goes straight to the stubbed API.
@@ -114,7 +117,7 @@ function submitAddButton(): HTMLButtonElement {
 
 /** The first button that opens an add form (empty portfolios may show two). */
 async function firstOpener(): Promise<HTMLElement> {
-  const [first] = await screen.findAllByRole('button', { name: inv.portfolio.addHolding });
+  const [first] = await screen.findAllByRole('button', { name: addFor('Balanz') });
   if (!first) throw new Error('No add button');
   return first;
 }
@@ -213,7 +216,7 @@ describe('InvestmentsContainer', () => {
     renderApp(<InvestmentsContainer />);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: inv.portfolio.delete }));
+    await user.click(await screen.findByRole('button', { name: deleteFor('Balanz') }));
     expect(screen.getByText(inv.forms.confirmDelete.portfolio)).toBeDefined();
     expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
 
@@ -230,7 +233,7 @@ describe('InvestmentsContainer', () => {
     renderApp(<InvestmentsContainer />);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: inv.portfolio.delete }));
+    await user.click(await screen.findByRole('button', { name: deleteFor('Balanz') }));
     await user.click(screen.getByRole('button', { name: inv.forms.cancel }));
 
     expect(screen.queryByText(inv.forms.confirmDelete.portfolio)).toBeNull();
@@ -269,7 +272,7 @@ describe('InvestmentsContainer', () => {
     renderApp(<InvestmentsContainer />);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: inv.portfolio.addHolding }));
+    await user.click(await screen.findByRole('button', { name: addFor('Balanz') }));
     await user.type(screen.getByLabelText(inv.forms.addHolding.ticker), 'AAPL');
     await user.type(screen.getByLabelText(inv.forms.addHolding.instrumentName), 'Apple Inc.');
     await user.type(screen.getByLabelText(inv.forms.addHolding.quantity), '5');
@@ -304,7 +307,7 @@ describe('InvestmentsContainer', () => {
     renderApp(<InvestmentsContainer />);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: inv.portfolio.addHolding }));
+    await user.click(await screen.findByRole('button', { name: addFor('Balanz') }));
     await user.type(screen.getByLabelText(inv.forms.addHolding.ticker), 'MSFT');
     await user.type(screen.getByLabelText(inv.forms.addHolding.instrumentName), 'Microsoft');
     await user.type(screen.getByLabelText(inv.forms.addHolding.quantity), '5');
@@ -327,7 +330,7 @@ describe('InvestmentsContainer', () => {
     renderApp(<InvestmentsContainer />);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: inv.portfolio.addHolding }));
+    await user.click(await screen.findByRole('button', { name: addFor('Balanz') }));
     await user.type(screen.getByLabelText(inv.forms.addHolding.ticker), 'AAPL');
     await user.type(screen.getByLabelText(inv.forms.addHolding.instrumentName), 'Apple Inc.');
     await user.type(screen.getByLabelText(inv.forms.addHolding.quantity), '5');
@@ -474,7 +477,7 @@ describe('InvestmentsContainer', () => {
     const { router } = renderApp(<InvestmentsContainer />);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: inv.portfolio.delete }));
+    await user.click(await screen.findByRole('button', { name: deleteFor('Balanz') }));
     await user.click(screen.getByRole('button', { name: inv.forms.confirmDelete.confirm }));
 
     await waitFor(() => {
@@ -549,7 +552,7 @@ describe('InvestmentsContainer', () => {
       await waitFor(() => {
         expect(gate.held()).toBe(1);
       });
-      await user.click(await firstOpener());
+      await user.click(await screen.findByRole('button', { name: addFor('IOL') }));
       gate.release(0);
 
       await waitFor(() => {
@@ -604,7 +607,7 @@ describe('InvestmentsContainer', () => {
       await user.click(
         screen.getByRole('button', { name: inv.holding.deleteFor.replace('{ticker}', 'AAPL') }),
       );
-      await user.click(screen.getByRole('button', { name: inv.portfolio.delete }));
+      await user.click(screen.getByRole('button', { name: deleteFor('Balanz') }));
       const confirm = screen.getByRole<HTMLButtonElement>('button', {
         name: inv.forms.confirmDelete.confirm,
       });
@@ -676,12 +679,10 @@ describe('InvestmentsContainer', () => {
       renderApp(<InvestmentsContainer />);
       const user = userEvent.setup();
 
-      await user.click(await screen.findByRole('button', { name: inv.portfolio.addHolding }));
+      await user.click(await screen.findByRole('button', { name: addFor('Balanz') }));
       await user.click(screen.getByRole('button', { name: inv.forms.cancel }));
 
-      expect(document.activeElement).toBe(
-        screen.getByRole('button', { name: inv.portfolio.addHolding }),
-      );
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: addFor('Balanz') }));
     });
 
     it('closing a confirmation puts focus back on its opener', async () => {
@@ -689,11 +690,11 @@ describe('InvestmentsContainer', () => {
       renderApp(<InvestmentsContainer />);
       const user = userEvent.setup();
 
-      await user.click(await screen.findByRole('button', { name: inv.portfolio.delete }));
+      await user.click(await screen.findByRole('button', { name: deleteFor('Balanz') }));
       await user.click(screen.getByRole('button', { name: inv.forms.cancel }));
 
       expect(document.activeElement).toBe(
-        screen.getByRole('button', { name: inv.portfolio.delete }),
+        screen.getByRole('button', { name: deleteFor('Balanz') }),
       );
     });
 
@@ -719,6 +720,214 @@ describe('InvestmentsContainer', () => {
         );
       });
     });
+  });
+
+  describe('focus with several portfolios', () => {
+    const IOL = portfolio({ id: OTHER_ID, name: 'IOL' }, []);
+    const ADD_IOL = `POST /investments/portfolios/${OTHER_ID}/holdings`;
+
+    function renderInPage() {
+      return renderApp(
+        <main>
+          <h1>Inversiones</h1>
+          <InvestmentsContainer />
+        </main>,
+      );
+    }
+
+    /** The control of one portfolio's card whose name starts with the given text. */
+    function inCard(name: string, prefix: string): HTMLElement {
+      const card = screen.getByRole('heading', { name }).closest('section');
+      if (!card) throw new Error(`No card for ${name}`);
+      return within(card).getByRole('button', { name: new RegExp(`^${prefix}`) });
+    }
+
+    it('names each opener after its portfolio', async () => {
+      stubApi({ 'GET /auth/session': session(), [LIST]: list(portfolio(), IOL) });
+      renderInPage();
+
+      expect(await screen.findByRole('button', { name: addFor('Balanz') })).toBeDefined();
+      expect(screen.getByRole('button', { name: addFor('IOL') })).toBeDefined();
+      expect(screen.getByRole('button', { name: deleteFor('Balanz') })).toBeDefined();
+      expect(screen.getByRole('button', { name: deleteFor('IOL') })).toBeDefined();
+    });
+
+    it('a successful add on portfolio 2 puts focus on the opener of portfolio 2', async () => {
+      stubApi({
+        'GET /auth/session': session(),
+        [LIST]: [list(portfolio(), IOL), list(portfolio(), IOL)],
+        [ADD_IOL]: { status: 201, body: { holding: SECOND_HOLDING, merged: false } },
+      });
+      renderInPage();
+      const user = userEvent.setup();
+
+      await screen.findByRole('heading', { name: 'IOL' });
+      await user.click(inCard('IOL', 'Agregar posición'));
+      await fillAddForm(user);
+      await user.click(submitAddButton());
+
+      await waitFor(() => {
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: addFor('IOL') }));
+      });
+      expect(document.activeElement).not.toBe(
+        screen.getByRole('button', { name: addFor('Balanz') }),
+      );
+    });
+
+    it('cancelling the add form of portfolio 2 puts focus on the opener of portfolio 2', async () => {
+      stubApi({ 'GET /auth/session': session(), [LIST]: list(portfolio(), IOL) });
+      renderInPage();
+      const user = userEvent.setup();
+
+      await screen.findByRole('heading', { name: 'IOL' });
+      await user.click(inCard('IOL', 'Agregar posición'));
+      await user.click(screen.getByRole('button', { name: inv.forms.cancel }));
+
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: addFor('IOL') }));
+    });
+
+    it('cancelling the delete confirmation of portfolio 2 focuses its own delete button', async () => {
+      stubApi({ 'GET /auth/session': session(), [LIST]: list(portfolio(), IOL) });
+      renderInPage();
+      const user = userEvent.setup();
+
+      await screen.findByRole('heading', { name: 'IOL' });
+      await user.click(inCard('IOL', 'Eliminar cartera'));
+      await user.click(screen.getByRole('button', { name: inv.forms.cancel }));
+
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: deleteFor('IOL') }));
+    });
+
+    // The deleted portfolio's controls are gone and its neighbours' controls are destructive or
+    // unrelated, so focus goes to the page heading: a safe, non-destructive place to restart from.
+    it('deleting portfolio 1 of 2 focuses the page heading, not a delete button', async () => {
+      stubApi({
+        'GET /auth/session': session(),
+        [LIST]: [list(portfolio(), IOL), list(IOL)],
+        [`DELETE /investments/portfolios/${PORTFOLIO_ID}`]: { status: 204 },
+      });
+      renderInPage();
+      const user = userEvent.setup();
+
+      await screen.findByRole('heading', { name: 'Balanz' });
+      await user.click(inCard('Balanz', 'Eliminar cartera'));
+      await user.click(screen.getByRole('button', { name: inv.forms.confirmDelete.confirm }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole('heading', { name: 'Balanz' })).toBeNull();
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
+      });
+      expect(document.activeElement).not.toBe(
+        screen.getByRole('button', { name: deleteFor('IOL') }),
+      );
+    });
+
+    it('a slow reload after deleting portfolio 1 still ends with focus on the page heading', async () => {
+      const { fetch } = stubApi({
+        'GET /auth/session': session(),
+        [LIST]: [list(portfolio(), IOL), list(IOL)],
+        [`DELETE /investments/portfolios/${PORTFOLIO_ID}`]: { status: 204 },
+      });
+      let lists = 0;
+      const gate = gateRequests(
+        fetch,
+        (method, path) => method === 'GET' && path === '/investments/portfolios' && ++lists === 2,
+      );
+      renderInPage();
+      const user = userEvent.setup();
+
+      await screen.findByRole('heading', { name: 'Balanz' });
+      await user.click(inCard('Balanz', 'Eliminar cartera'));
+      await user.click(screen.getByRole('button', { name: inv.forms.confirmDelete.confirm }));
+      await waitFor(() => {
+        expect(gate.held()).toBe(1);
+      });
+      gate.release(0);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('heading', { name: 'Balanz' })).toBeNull();
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
+      });
+    });
+
+    it('a later reload does not steal focus to the heading after the user clicked away', async () => {
+      stubApi({
+        'GET /auth/session': session(),
+        [LIST]: [
+          list(portfolio({}, [HOLDING, SECOND_HOLDING]), IOL),
+          list(portfolio({}, [HOLDING]), IOL),
+        ],
+        [`DELETE /investments/holdings/${SECOND_HOLDING.id}`]: { status: 204 },
+      });
+      renderInPage();
+      const user = userEvent.setup();
+
+      await screen.findByRole('heading', { name: 'IOL' });
+      // Opened without focusing the opener (as Safari does), so the form remembers no opener and
+      // closing it sends focus to the heading.
+      fireEvent.click(inCard('IOL', 'Agregar posición'));
+      await user.click(screen.getByRole('button', { name: inv.forms.cancel }));
+      const heading = screen.getByRole('heading', { level: 1 });
+      expect(document.activeElement).toBe(heading);
+
+      // The user clicks a non-focusable area, then a change reloads the list.
+      await user.click(document.body);
+      expect(document.activeElement).toBe(document.body);
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: inv.holding.showDetailsFor.replace('{ticker}', 'MSFT'),
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole('button', { name: inv.holding.deleteFor.replace('{ticker}', 'MSFT') }),
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('MSFT')).toBeNull();
+      });
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it.each([
+      ['edit', (ticker: string) => inv.holding.editFor.replace('{ticker}', ticker)],
+      ['price', (ticker: string) => inv.holding.setPriceFor.replace('{ticker}', ticker)],
+    ] as const)(
+      'deleting a holding whose %s form is open closes the form and focuses the heading',
+      async (kind, openerName) => {
+        stubApi({
+          'GET /auth/session': session(),
+          [LIST]: [list(portfolio({}, [HOLDING, SECOND_HOLDING])), list(portfolio({}, [HOLDING]))],
+          [`DELETE /investments/holdings/${SECOND_HOLDING.id}`]: { status: 204 },
+        });
+        renderInPage();
+        const user = userEvent.setup();
+
+        await user.click(
+          await screen.findByRole('button', {
+            name: inv.holding.showDetailsFor.replace('{ticker}', 'MSFT'),
+          }),
+        );
+        await user.click(screen.getByRole('button', { name: openerName('MSFT') }));
+        const formTitle = kind === 'edit' ? inv.forms.editHolding.title : inv.forms.price.title;
+        expect(screen.getByRole('heading', { name: formTitle })).toBeDefined();
+
+        await user.click(
+          screen.getByRole('button', { name: inv.holding.deleteFor.replace('{ticker}', 'MSFT') }),
+        );
+
+        await waitFor(() => {
+          expect(screen.queryByText('MSFT')).toBeNull();
+        });
+        expect(screen.queryByRole('heading', { name: formTitle })).toBeNull();
+        await waitFor(() => {
+          expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
+        });
+      },
+    );
   });
 
   describe('time zone', () => {

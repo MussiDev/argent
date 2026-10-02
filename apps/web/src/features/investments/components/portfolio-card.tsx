@@ -74,6 +74,8 @@ export function PortfolioCard({
               <Button
                 type="button"
                 size="sm"
+                aria-label={t('portfolio.addHoldingFor', { name: portfolio.name })}
+                data-opener={`add-holding:${portfolio.id}`}
                 onClick={() => {
                   onAddHolding(portfolio.id);
                 }}
@@ -86,6 +88,8 @@ export function PortfolioCard({
                 type="button"
                 variant="outline"
                 size="sm"
+                aria-label={t('portfolio.deleteFor', { name: portfolio.name })}
+                data-opener={`delete-portfolio:${portfolio.id}`}
                 onClick={() => {
                   onDeletePortfolio(portfolio.id);
                 }}

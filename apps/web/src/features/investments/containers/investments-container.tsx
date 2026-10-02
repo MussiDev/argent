@@ -221,13 +221,15 @@ export function InvestmentsContainer() {
   async function deleteHolding(holdingId: string) {
     setNotice(null);
     const owner = portfolioOfHolding(holdingId);
-    // Deleting a holding has no form of its own, so it never closes or fills the one on screen.
+    // Deleting a holding has no form of its own and never fills the one on screen, but an edit or
+    // price form of this same holding would be left pointing at nothing, so it closes with it.
     const done = await mutate(
       async () => {
         const result = await api.deleteHolding(holdingId);
         return result.ok ? { ok: true as const, data: true } : result;
       },
-      () => false,
+      (current) =>
+        (current?.kind === 'edit' || current?.kind === 'price') && current.holdingId === holdingId,
       portfolioFailure(owner),
     );
     if (done?.reloaded) setNotice({ kind: 'deleted' });

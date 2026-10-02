@@ -43,7 +43,12 @@ interface NewHolding {
 
 async function addHolding(page: Page, portfolio: string, holding: NewHolding): Promise<void> {
   const form = t.forms.addHolding;
-  await card(page, portfolio).getByRole('button', { name: t.portfolio.addHolding }).click();
+  await card(page, portfolio)
+    .getByRole('button', {
+      name: t.portfolio.addHoldingFor.replace('{name}', portfolio),
+      exact: true,
+    })
+    .click();
   await page.getByLabel(form.ticker, { exact: true }).fill(holding.ticker);
   await page.getByLabel(form.instrumentName, { exact: true }).fill(holding.instrumentName);
   await page
@@ -205,7 +210,12 @@ test('a portfolio goes from an unpriced holding to a valued, merged and deleted 
 
   await test.step('delete asks for confirmation', async () => {
     // Deleting a portfolio asks for a second confirmation.
-    await card(page, PORTFOLIO).getByRole('button', { name: t.portfolio.delete }).click();
+    await card(page, PORTFOLIO)
+      .getByRole('button', {
+        name: t.portfolio.deleteFor.replace('{name}', PORTFOLIO),
+        exact: true,
+      })
+      .click();
     await expect(page.getByText(t.forms.confirmDelete.portfolio)).toBeVisible();
     await expect(card(page, PORTFOLIO)).toBeVisible();
     await page.getByRole('button', { name: t.forms.confirmDelete.confirm }).click();

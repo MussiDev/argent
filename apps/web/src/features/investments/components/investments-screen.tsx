@@ -127,21 +127,42 @@ export function InvestmentsScreen(props: InvestmentsScreenProps) {
   const tApp = useTranslations('app');
   const tErrors = useTranslations('investments.errors');
   const rootRef = useRef<HTMLDivElement>(null);
-  const opener = useRef<{ element: HTMLElement; label: string | null } | null>(null);
+  const opener = useRef<{ element: HTMLElement; key: string | null; label: string | null } | null>(
+    null,
+  );
   const previousForm = useRef(openForm);
+  // The last control inside the screen that held focus, to notice when it is removed from the page.
+  const lastFocused = useRef<HTMLElement | null>(null);
+
+  /** The screen's heading: the page's h1 when there is one, else the screen itself. */
+  function focusHeading() {
+    const root = rootRef.current;
+    if (!root) return;
+    const heading = (root.closest('main') ?? document).querySelector('h1') ?? root;
+    if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
+    heading.focus();
+  }
 
   /** Opens a form and remembers the control that opened it, to give focus back on close. */
   function openPanel(form: OpenForm) {
     const active = document.activeElement;
     opener.current =
       active instanceof HTMLElement && active !== document.body
-        ? { element: active, label: active.getAttribute('aria-label') ?? active.textContent }
+        ? {
+            element: active,
+            key: active.dataset.opener ?? null,
+            label: active.getAttribute('aria-label') ?? active.textContent,
+          }
         : null;
     props.onOpenForm(form);
   }
 
-  // When a panel closes, focus goes back to its opener (the button is re-created when it was
-  // hidden while the panel was open, so it is found again by its label), else to the page heading.
+  // When a panel closes, focus goes back to its opener. A button hidden while its panel was open
+  // is a new element when it comes back, so it is found again by its `data-opener` key, which names
+  // the portfolio (a label alone would match the first portfolio's button). A control with no key
+  // (the create button) is found by its label. If the opener no longer exists, for instance a
+  // deleted portfolio's button, focus goes to the heading, a safe non-destructive place; never to
+  // another portfolio's delete button.
   useEffect(() => {
     const wasOpen = previousForm.current !== null;
     previousForm.current = openForm;
@@ -149,19 +170,39 @@ export function InvestmentsScreen(props: InvestmentsScreenProps) {
     if (!wasOpen || openForm !== null || !root) return;
     const remembered = opener.current;
     opener.current = null;
-    const target =
-      remembered && remembered.element.isConnected
-        ? remembered.element
-        : (Array.from(root.querySelectorAll('button')).find(
-            (button) =>
-              remembered?.label != null &&
-              (button.getAttribute('aria-label') ?? button.textContent) === remembered.label,
-          ) ??
-          root.closest('main')?.querySelector('h1') ??
-          root);
+    let target: HTMLElement | undefined;
+    if (remembered?.element.isConnected) target = remembered.element;
+    else if (remembered?.key != null) {
+      target = Array.from(root.querySelectorAll<HTMLElement>('[data-opener]')).find(
+        (candidate) => candidate.dataset.opener === remembered.key,
+      );
+    } else if (remembered?.label != null) {
+      target = Array.from(root.querySelectorAll('button')).find(
+        (button) => (button.getAttribute('aria-label') ?? button.textContent) === remembered.label,
+      );
+    }
+    if (!target) {
+      // The h1 is outside the root, so focusing it never updates `lastFocused`; drop the removed
+      // control or a later list change would pull focus back to the heading.
+      lastFocused.current = null;
+      focusHeading();
+      return;
+    }
     if (target.tabIndex < 0 && !target.hasAttribute('tabindex')) target.tabIndex = -1;
     target.focus();
+    lastFocused.current = target;
   }, [openForm]);
+
+  // A control that had focus and is gone after the list changed (a deleted portfolio or holding,
+  // or the opener of a form closed by its own deletion) leaves focus on the body: move it to the
+  // heading. Focus the user moved elsewhere on purpose is left alone.
+  useEffect(() => {
+    const gone = lastFocused.current;
+    if (!gone || gone.isConnected) return;
+    lastFocused.current = null;
+    const active = document.activeElement;
+    if (active === null || active === document.body || !active.isConnected) focusHeading();
+  }, [portfolios]);
 
   if (state === 'loading') {
     return (
@@ -200,7 +241,13 @@ export function InvestmentsScreen(props: InvestmentsScreenProps) {
   );
 
   return (
-    <div ref={rootRef} className="flex flex-col gap-4">
+    <div
+      ref={rootRef}
+      className="flex flex-col gap-4"
+      onFocusCapture={(event) => {
+        if (event.target instanceof HTMLElement) lastFocused.current = event.target;
+      }}
+    >
       {loadError && (
         <div className="grid gap-4">
           <Alert variant="destructive">

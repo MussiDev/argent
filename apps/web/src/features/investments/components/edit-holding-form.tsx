@@ -83,7 +83,25 @@ export function EditHoldingForm({
   const { fields, form: formError, focus, setLocal } = useFieldErrors(errors);
   const formRef = useFocusInvalid(focus);
   const [currency, setCurrency] = useState<ValuationCurrency>(holding.valuationCurrency);
+  const originalCost =
+    holding.totalCost === null
+      ? ''
+      : typedDecimal(BigInt(holding.totalCost), MINOR_UNIT_SCALE, language);
+  const [cost, setCost] = useState(originalCost);
   const currencyChanged = currency !== holding.valuationCurrency;
+
+  /**
+   * The saved total cost is in the old currency, so it must never travel with a new one. Leaving
+   * the saved currency empties the cost input (the notice asks to enter it again; an empty cost is
+   * sent as an explicit `null`, which the API requires on a currency change). Going back to the
+   * saved currency restores the saved cost, so nothing is sent for it.
+   */
+  function changeCurrency(next: ValuationCurrency) {
+    const willChange = next !== holding.valuationCurrency;
+    if (!currencyChanged && willChange) setCost('');
+    else if (currencyChanged && !willChange) setCost(originalCost);
+    setCurrency(next);
+  }
   const isCrypto = holding.instrumentType === 'crypto';
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
@@ -154,7 +172,7 @@ export function EditHoldingForm({
           name="valuationCurrency"
           value={currency}
           onChange={(event) => {
-            setCurrency(pick(event.target.value, VALUATION_CURRENCIES, currency));
+            changeCurrency(pick(event.target.value, VALUATION_CURRENCIES, currency));
           }}
         >
           {VALUATION_CURRENCIES.map((code) => (
@@ -180,11 +198,10 @@ export function EditHoldingForm({
           name="totalCost"
           inputMode="decimal"
           autoComplete="off"
-          defaultValue={
-            holding.totalCost === null
-              ? ''
-              : typedDecimal(BigInt(holding.totalCost), MINOR_UNIT_SCALE, language)
-          }
+          value={cost}
+          onChange={(event) => {
+            setCost(event.target.value);
+          }}
         />
         <FormMessage>{message('totalCost')}</FormMessage>
       </FormItem>

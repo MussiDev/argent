@@ -437,7 +437,9 @@
       "holdingsLabel": "Posiciones",
       "noHoldings": "Esta cartera todavía no tiene posiciones.",
       "addHolding": "Agregar posición",
-      "delete": "Eliminar cartera"
+      "addHoldingFor": "Agregar posición a {name}",
+      "delete": "Eliminar cartera",
+      "deleteFor": "Eliminar cartera {name}"
     },
     "holding": {
       "quantity": "Cantidad: {quantity}",
@@ -479,7 +481,6 @@
       "deleted": "Eliminado. El saldo de tus cuentas no cambió."
     },
     "forms": {
-      "required": "Obligatorio",
       "createPortfolio": {
         "title": "Nueva cartera",
         "name": "Nombre",
@@ -503,7 +504,7 @@
         "quantity": "Cantidad",
         "currency": "Moneda",
         "totalCost": "Costo total",
-        "currencyChangeNotice": "Cambiar la moneda borra el precio y vuelve a pedir el costo total.",
+        "currencyChangeNotice": "Cambiar la moneda borra el precio. Ingresa de nuevo el costo total en la nueva moneda o déjalo vacío.",
         "submit": "Guardar cambios",
         "pending": "Guardando…"
       },
@@ -516,7 +517,6 @@
       "cancel": "Cancelar",
       "confirmDelete": {
         "portfolio": "Eliminar esta cartera también elimina todas sus posiciones. El saldo de tus cuentas no cambia.",
-        "holding": "¿Eliminar esta posición? El saldo de tus cuentas no cambia.",
         "confirm": "Sí, eliminar"
       }
     },

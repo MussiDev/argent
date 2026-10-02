@@ -109,8 +109,8 @@ describe('PortfolioCard', () => {
     const user = userEvent.setup();
     const handlers = renderCard();
 
-    await user.click(screen.getByRole('button', { name: en.investments.portfolio.addHolding }));
-    await user.click(screen.getByRole('button', { name: en.investments.portfolio.delete }));
+    await user.click(screen.getByRole('button', { name: 'Add holding to Balanz' }));
+    await user.click(screen.getByRole('button', { name: 'Delete portfolio Balanz' }));
     await user.click(screen.getByRole('button', { name: 'Show details for AAPL' }));
     await user.click(screen.getByRole('button', { name: 'Edit AAPL' }));
 
@@ -143,7 +143,7 @@ describe('PortfolioCard', () => {
       locale: 'en',
     });
 
-    expect(screen.queryByRole('button', { name: en.investments.portfolio.addHolding })).toBeNull();
-    expect(screen.queryByRole('button', { name: en.investments.portfolio.delete })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add holding to Balanz' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete portfolio Balanz' })).toBeNull();
   });
 });

@@ -69,3 +69,17 @@ Migration generation: the journal `when` is 1790966184307 (generated, greater th
 
 After: 432/432 in 14 files (movements, migration, build-output, accounts, categories); typecheck clean.
 
+
+## Block 4 — Lookups, real adapters and the creation limiter (23 new tests)
+
+| Test file | Tests | Red result |
+|---|---|---|
+| `apps/api/test/movements/lookups.test.ts` | 9 | headline only: the suite failed to load, `Cannot find module` for the lookup adapters, so no assertion ran |
+| `apps/api/test/movements/real-adapters.test.ts` | 7 | headline only: `Cannot find module` for `createAccountMovements` / `createCategoryUsage` |
+| `apps/api/test/movements/write-limiter.test.ts` | 7 | headline only: `Cannot find module` for the limiter |
+
+The implementer reported 22 tests; the verifier counted 23 (9 + 7 + 7), which is the number on disk and the number that passes.
+
+Review: verifier PASS, auditor no blockers. Advisories left as they are: the default time zone constant is duplicated from shared (candidate to export from shared later), chunk size of 500 is not pinned by a spy, and `new Date()` seeds one limiter test clock (frozen, so not flaky).
+
+After: 401/401 in 15 files (movements, accounts, categories); typecheck, eslint and prettier clean.

@@ -104,6 +104,20 @@ All notable changes to this project are documented in this file. The format foll
   verified user. Rates are integers scaled by 10,000 end to end and the API never calls the provider.
   New settings `RATE_PROVIDER` (`dolarapi` or `fake`) and `DOLARAPI_BASE_URL`, both with defaults
   and pinned in production. Migration `0012_exchange_rates`.
+- DISC-001-07a Investments: each user has portfolios (one per broker or wallet) holding positions with
+  a ticker, name, type (stock, CEDEAR, bond, mutual fund, fixed-term deposit, crypto, other),
+  quantity, valuation currency (ARS or USD) and an optional total cost. Quantities are integers scaled
+  by 10^8 and amounts integers in minor units; nothing uses floating point. Crypto must be valued in
+  USD, and a ticker is unique per portfolio ignoring case: adding an existing ticker merges into it
+  (quantities and costs are summed, the price is kept; a different currency is rejected).
+- DISC-001-07a Manual valuation: a unit price is set by hand and stored with its source and time.
+  Value, gain or loss (amount and percentage), totals per currency, holdings without a price (shown
+  as "price needed" and left out of totals) and prices older than 7 days are computed on read.
+  Changing a holding's currency clears its price and its total cost must be entered again.
+- DISC-001-07a Investments screen in Spanish and English and the `investments` REST routes (every row
+  is scoped to its owner and answers 404 otherwise). Migration 0008 adds the `portfolios` and
+  `holdings` tables; its rollback script is destructive. Deferred to DISC-001-07b and 07c:
+  automatic crypto prices, daily value snapshots and the Balanz CSV import.
 
 ### Fixed
 

@@ -3,9 +3,9 @@
 | Field | Value |
 |---|---|
 | Module | `apps/api/src/investments`, `packages/shared/src/investments`, `apps/web/src/features/investments`, migration `0008_investments` |
-| Line coverage | 97.12% |
-| Branch coverage | 92.98% |
-| Function coverage | 94.75% |
+| Line coverage | 97.18% |
+| Branch coverage | 92.67% |
+| Function coverage | 95.15% |
 | Coverage floor | 80% (AGENTS.md, "Testing") |
 | Lint | `npx eslint .` clean, `npx prettier --check --end-of-line auto .` clean, `pnpm typecheck` clean |
 
@@ -48,7 +48,7 @@ benchmark; coverage is from the CODE-phase run.
 - ✅ Block 1 — shared contracts, decimal helpers, valuation: every task done, every Required test present and passing
 - ✅ Block 2 — domain rules and ports, architecture boundary probes: every task done
 - ✅ Block 3 — use cases and portfolio view: every task done
-- ✅ Block 4 — migration `0008_investments` (journal idx 8, `when` 1790943101410, greater than 1790895423195), repositories, unit of work, concurrency: every task done
+- ✅ Block 4 — migration `0008_investments` (journal idx 8, `when` 1790957246095, greater than 1790895423195), repositories, unit of work, concurrency: every task done
 - ✅ Block 5 — portfolio routes, module wiring, error middleware `fields`: every task done
 - ✅ Block 6 — holding routes: every task done
 - ✅ Block 7 — web API client and formatting helpers: every task done
@@ -122,5 +122,9 @@ Suites on the final tree: full run 143 files, 1899 passed, 0 failed, 0 skipped; 
 - W6 (W-VER-02): `portfolio-view.ts` branch coverage 87.5%.
 - W7: the call-log tests of Block 3 prove call order only.
 - I1: the spec text still says `@argent/*` and `Intl.NumberFormat`.
+
+## Closeout rebase
+
+Before the PR the branch was rebased onto `origin/main` (02b categories, migration 0009). Migration `0008_investments` was regenerated on top of main's latest snapshot: journal `idx` 8, `when` 1790957246095 (greater than every `when` on main, including 0009's 1790902441319), snapshot file `0010_snapshot.json` so that `drizzle-kit generate` reports no changes. The full suite on the rebased tree: 151 files, 2273 passed, 0 failed; e2e 65/65; eslint, prettier and typecheck clean.
 
 Result: PASSED

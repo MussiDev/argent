@@ -65,7 +65,7 @@ function register(harness: IdentityHarness, email: string, ip = '203.0.113.9') {
     .post('/auth/register')
     .set(trustedHeaders)
     .set('X-Forwarded-For', ip)
-    .send({ email, password: PASSWORD });
+    .send({ email, password: PASSWORD, displayName: 'Test User' });
 }
 
 async function googleSignIn(harness: IdentityHarness, email: string, sub: string) {

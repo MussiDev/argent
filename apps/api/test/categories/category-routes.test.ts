@@ -160,7 +160,7 @@ describe('GET /categories', () => {
       .post('/auth/register')
       .set(trustedHeaders)
       .set('X-Forwarded-For', '203.0.113.9')
-      .send({ email: 'carla@example.com', password: PASSWORD });
+      .send({ email: 'carla@example.com', password: PASSWORD, displayName: 'Carla' });
     expect(registered.status).toBe(202);
     const row = await connection.pool.query<{ id: string }>(
       'select id from users where email = $1',

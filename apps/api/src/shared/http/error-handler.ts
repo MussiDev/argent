@@ -27,6 +27,7 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   CATEGORY_NESTING_TOO_DEEP: 400,
   CATEGORY_PARENT_KIND_MISMATCH: 400,
   REAUTHENTICATION_REQUIRED: 401,
+  ACCOUNT_ARCHIVED: 409,
   INTERNAL: 500,
 };
 
@@ -36,12 +37,10 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
  */
 export class HttpError extends AppError {
   readonly status: number;
-  readonly fields: string[] | undefined;
 
   constructor(status: number, code: ErrorCode, fields?: string[]) {
-    super(code);
+    super(code, code, fields);
     this.status = status;
-    this.fields = fields;
   }
 }
 
@@ -69,14 +68,12 @@ interface MappedError {
 }
 
 function mapError(error: unknown): MappedError {
-  if (error instanceof HttpError) {
-    const body: ErrorResponse = error.fields
-      ? { code: error.code, fields: error.fields }
-      : { code: error.code };
-    return { status: error.status, body };
-  }
   if (error instanceof AppError) {
-    return { status: STATUS_BY_CODE[error.code], body: { code: error.code } };
+    const status = error instanceof HttpError ? error.status : STATUS_BY_CODE[error.code];
+    const body: ErrorResponse = error.fields
+      ? { code: error.code, fields: [...error.fields] }
+      : { code: error.code };
+    return { status, body };
   }
   if (isBodyParserError(error)) {
     // Oversized (413), malformed (400) and unsupported-encoding (415) bodies.

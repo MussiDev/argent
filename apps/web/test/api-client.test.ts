@@ -76,6 +76,7 @@ describe('api client', () => {
     [409, 'CATEGORY_IN_USE', 'categoryInUse'],
     [400, 'CATEGORY_NESTING_TOO_DEEP', 'categoryNestingTooDeep'],
     [400, 'CATEGORY_PARENT_KIND_MISMATCH', 'categoryParentKindMismatch'],
+    [409, 'ACCOUNT_ARCHIVED', 'accountArchived'],
   ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
     const { client } = clientWith(jsonResponse(status, { code }));
 
@@ -897,6 +898,7 @@ describe('api client: accounts', () => {
     currency: 'ARS',
     openingBalance: '1000',
     balance: '1000',
+    includeInAvailable: true,
     archived: false,
     archivedAt: null,
     createdAt: '2026-10-01T12:00:00.000Z',
@@ -980,6 +982,65 @@ describe('api client: accounts', () => {
     expect(requestAt(fetch, 1).init.method).toBe('POST');
   });
 
+  it('sets the include-in-available flag with PUT and a JSON boolean body (AC-07)', async () => {
+    const excluded = { ...ACCOUNT, includeInAvailable: false };
+    const { client, fetch } = clientWith(jsonResponse(200, excluded));
+
+    const result = await client.setIncludeInAvailable('a/b', false);
+
+    expect(result).toEqual({ ok: true, data: excluded });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/accounts/a%2Fb/include-in-available`);
+    expect(init.method).toBe('PUT');
+    expect(init.credentials).toBe('include');
+    const headers = new Headers(init.headers);
+    expect(headers.get('X-Requested-With')).toBe('argent');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual({ includeInAvailable: false });
+  });
+
+  it('maps a 409 ACCOUNT_ARCHIVED answer of setIncludeInAvailable to accountArchived (AC-12)', async () => {
+    const { client } = clientWith(jsonResponse(409, { code: 'ACCOUNT_ARCHIVED' }));
+
+    expect(await client.setIncludeInAvailable(ID, true)).toEqual({
+      ok: false,
+      code: 'ACCOUNT_ARCHIVED',
+      messageKey: 'accountArchived',
+    });
+  });
+
+  it.each(['', '.', '..'])(
+    'setIncludeInAvailable does not send a request for the unsafe id %j (error path)',
+    async (id) => {
+      const { client, fetch } = clientWith();
+
+      expect(await client.setIncludeInAvailable(id, true)).toEqual({
+        ok: false,
+        code: 'VALIDATION_FAILED',
+        messageKey: 'validationFailed',
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it('maps a 400 and a network failure of setIncludeInAvailable to their keys (error path)', async () => {
+    const { client } = clientWith(
+      jsonResponse(400, { code: 'VALIDATION_FAILED' }),
+      new TypeError('Failed to fetch'),
+    );
+
+    expect(await client.setIncludeInAvailable(ID, true)).toEqual({
+      ok: false,
+      code: 'VALIDATION_FAILED',
+      messageKey: 'validationFailed',
+    });
+    expect(await client.setIncludeInAvailable(ID, true)).toEqual({
+      ok: false,
+      code: 'NETWORK',
+      messageKey: 'network',
+    });
+  });
+
   it('deletes with DELETE and accepts an empty 204 (AC-09)', async () => {
     const { client, fetch } = clientWith(new Response(null, { status: 204 }));
 
@@ -993,10 +1054,13 @@ describe('api client: accounts', () => {
     expect(new Headers(init.headers).get('X-Requested-With')).toBe('argent');
   });
 
-  it('serializes archived, limit and offset and parses totals as strings (AC-12)', async () => {
+  it('serializes archived, limit and offset and parses the three totals maps as strings (AC-14, AC-16, AC-19)', async () => {
     const list = {
       items: [ACCOUNT],
-      totals: { ARS: '1000', USD: '9223372036854775807' },
+      availableTotals: { ARS: '1000', USD: '9223372036854775807' },
+      netWorthTotals: { ARS: '-250', USD: '9223372036854775807' },
+      debtTotals: { ARS: '1250', USD: '0' },
+      creditCardCount: 2,
       total: 1,
       limit: 20,
       offset: 40,
@@ -1018,7 +1082,16 @@ describe('api client: accounts', () => {
   });
 
   it('serializes archived=false and omits the keys that are undefined', async () => {
-    const list = { items: [], totals: { ARS: '0', USD: '0' }, total: 0, limit: 50, offset: 0 };
+    const list = {
+      items: [],
+      availableTotals: { ARS: '0', USD: '0' },
+      netWorthTotals: { ARS: '0', USD: '0' },
+      debtTotals: { ARS: '0', USD: '0' },
+      creditCardCount: 0,
+      total: 0,
+      limit: 50,
+      offset: 0,
+    };
     const { client, fetch } = clientWith(jsonResponse(200, list), jsonResponse(200, list));
 
     const first = await client.listAccounts({ archived: false });
@@ -1081,6 +1154,7 @@ describe('api client: accounts', () => {
   it.each([
     [409, 'ACCOUNT_NAME_TAKEN', 'accountNameTaken'],
     [409, 'ACCOUNT_HAS_MOVEMENTS', 'accountHasMovements'],
+    [409, 'ACCOUNT_ARCHIVED', 'accountArchived'],
   ] as const)(
     'maps a %i %s answer of the account calls to %s (AC-13, AC-10)',
     async (status, code, messageKey) => {
@@ -1138,6 +1212,7 @@ describe('api client: accounts', () => {
     ['archiveAccount', (client) => client.archiveAccount(ID)],
     ['unarchiveAccount', (client) => client.unarchiveAccount(ID)],
     ['deleteAccount', (client) => client.deleteAccount(ID)],
+    ['setIncludeInAvailable', (client) => client.setIncludeInAvailable(ID, true)],
   ];
 
   it.each(SESSION_CALLS)('%s refreshes the session once when refused', async (_name, call) => {

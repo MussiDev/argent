@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { AccountCurrency } from '@pesly/shared';
+import type { AccountCurrency, AccountType } from '@pesly/shared';
 import type { Account } from '../../src/accounts/domain/account';
 import { AccountNameTaken } from '../../src/accounts/domain/errors';
 import type {
   AccountRepository,
   ActiveAccount,
   CreateAccountData,
+  SetIncludeInAvailableResult,
 } from '../../src/accounts/application/ports/account-repository';
 import type { AccountMovements } from '../../src/accounts/application/ports/account-movements';
 import { OwnerOrGroupMemberAccessPolicy, type AccessScope } from '../../src/shared/access';
@@ -42,6 +43,7 @@ export class InMemoryAccountRepository implements AccountRepository {
       type: data.type,
       currency: data.currency,
       openingBalance: data.openingBalance,
+      includeInAvailable: data.includeInAvailable ?? false,
       archivedAt: null,
       createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, this.clock++)),
     };
@@ -72,7 +74,13 @@ export class InMemoryAccountRepository implements AccountRepository {
     await Promise.resolve();
     return this.ownedBy(scope)
       .filter((account) => account.archivedAt === null)
-      .map(({ id, currency, openingBalance }) => ({ id, currency, openingBalance }));
+      .map(({ id, type, currency, openingBalance, includeInAvailable }) => ({
+        id,
+        type,
+        currency,
+        openingBalance,
+        includeInAvailable,
+      }));
   }
 
   async rename(scope: AccessScope<'write'>, id: string, name: string): Promise<Account | null> {
@@ -101,6 +109,23 @@ export class InMemoryAccountRepository implements AccountRepository {
     return row.account;
   }
 
+  /** Mirrors the real repository: card first, then archived; an equal value writes nothing. */
+  async setIncludeInAvailable(
+    scope: AccessScope<'write'>,
+    id: string,
+    value: boolean,
+  ): Promise<SetIncludeInAvailableResult> {
+    await Promise.resolve();
+    const row = this.visible(scope, id);
+    if (!row) return { status: 'not_found' };
+    if (row.account.type === 'credit_card') return { status: 'credit_card' };
+    if (row.account.archivedAt !== null) return { status: 'archived' };
+    if (row.account.includeInAvailable !== value) {
+      row.account = { ...row.account, includeInAvailable: value };
+    }
+    return { status: 'updated', account: row.account };
+  }
+
   async delete(scope: AccessScope<'write'>, id: string): Promise<boolean> {
     await Promise.resolve();
     if (this.deleteError) throw this.deleteError;
@@ -112,14 +137,22 @@ export class InMemoryAccountRepository implements AccountRepository {
   /** Test helper: inserts an account straight into the store for any owner. */
   seed(
     ownerId: string,
-    data: { name: string; currency?: AccountCurrency; openingBalance?: bigint; archived?: boolean },
+    data: {
+      name: string;
+      type?: AccountType;
+      currency?: AccountCurrency;
+      openingBalance?: bigint;
+      includeInAvailable?: boolean;
+      archived?: boolean;
+    },
   ): Account {
     const account: Account = {
       id: randomUUID(),
       name: data.name,
-      type: 'bank_account',
+      type: data.type ?? 'bank_account',
       currency: data.currency ?? 'ARS',
       openingBalance: data.openingBalance ?? 0n,
+      includeInAvailable: data.type === 'credit_card' ? false : (data.includeInAvailable ?? true),
       archivedAt: data.archived ? new Date(Date.UTC(2026, 5, 1)) : null,
       createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, this.clock++)),
     };

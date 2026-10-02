@@ -88,6 +88,15 @@ All notable changes to this project are documented in this file. The format foll
   a guard test fails when a new table that references a user is not registered for erasure. New
   migration `0010_account_deletion` (OAuth state purpose and `deletion_grants`); `GET /profile` gains
   a required `deletionReauth`, so the API deploys first.
+- FEAT-003 Available balance vs net worth: every account has an "include in available" setting
+  (cash, bank account and digital wallet start included; savings and credit cards do not, and a
+  credit card can never be included), changeable on active non-card accounts through
+  `PUT /accounts/:id/include-in-available` (credit card: 400 naming the field; archived: 409
+  `ACCOUNT_ARCHIVED`). The account list headline shows Available per currency prominently and Net
+  worth (all active accounts, card debt included) smaller, and credit cards move to their own Debt
+  section with a per-currency total; the list response replaces `totals` with `availableTotals`,
+  `netWorthTotals`, `debtTotals` and `creditCardCount`. Migration 0011 backfills existing accounts
+  by type default.
 
 ### Fixed
 

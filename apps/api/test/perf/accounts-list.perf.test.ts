@@ -125,8 +125,12 @@ describe('accounts list latency (NFR-02)', () => {
 
     // Seeding failures (including an unreachable database) fail the run: nothing here is caught.
     await moviesPool.query(
-      `insert into accounts (owner_id, name, type, currency, opening_balance)
-       select $1, 'Account ' || n, 'cash', case when n % 2 = 0 then 'ARS' else 'USD' end, n * 100
+      `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available)
+       select $1, 'Account ' || n,
+              case when n % 10 = 0 then 'credit_card' else 'cash' end,
+              case when n % 2 = 0 then 'ARS' else 'USD' end,
+              n * 100,
+              (n % 4 <> 0 and n % 10 <> 0)
          from generate_series(1, $2::int) as n`,
       [userId, ACCOUNTS],
     );
@@ -204,7 +208,10 @@ describe('accounts list latency (NFR-02)', () => {
     const body = (await sample.json()) as {
       items: ListedAccount[];
       total: number;
-      totals: Record<string, string>;
+      availableTotals: Record<string, string>;
+      netWorthTotals: Record<string, string>;
+      debtTotals: Record<string, string>;
+      creditCardCount: number;
     };
     expect(body.items).toHaveLength(ACCOUNTS);
     expect(body.total).toBe(ACCOUNTS);
@@ -216,13 +223,24 @@ describe('accounts list latency (NFR-02)', () => {
       expect(item?.currency).toBe(n % 2 === 0 ? 'ARS' : 'USD');
       expect(item?.balance).toBe(expectedBalance(n).toString());
     }
-    let ars = 0n;
-    let usd = 0n;
+    const available = { ARS: 0n, USD: 0n };
+    const netWorth = { ARS: 0n, USD: 0n };
+    const debt = { ARS: 0n, USD: 0n };
     for (let n = 1; n <= ACCOUNTS; n += 1) {
-      if (n % 2 === 0) ars += expectedBalance(n);
-      else usd += expectedBalance(n);
+      const currency = n % 2 === 0 ? 'ARS' : 'USD';
+      const balance = expectedBalance(n);
+      netWorth[currency] += balance;
+      if (n % 10 === 0) debt[currency] += balance;
+      else if (n % 4 !== 0) available[currency] += balance;
     }
-    expect(body.totals).toEqual({ ARS: ars.toString(), USD: usd.toString() });
+    const asStrings = (totals: { ARS: bigint; USD: bigint }) => ({
+      ARS: totals.ARS.toString(),
+      USD: totals.USD.toString(),
+    });
+    expect(body.availableTotals).toEqual(asStrings(available));
+    expect(body.netWorthTotals).toEqual(asStrings(netWorth));
+    expect(body.debtTotals).toEqual(asStrings(debt));
+    expect(body.creditCardCount).toBe(ACCOUNTS / 10);
 
     // The balances of the whole page come from one adapter call per list request.
     expect(movements.sumsCalls).toBe(WARM_UP_REQUESTS + REQUESTS + 1);

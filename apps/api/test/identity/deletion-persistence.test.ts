@@ -91,7 +91,7 @@ async function seedDependents(userId: string, email: string): Promise<void> {
     [userId, `sub-${userId}`],
   );
   await q(
-    "insert into accounts (owner_id, name, type, currency, opening_balance) values ($1, 'Caja', 'cash', 'ARS', 0)",
+    "insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ($1, 'Caja', 'cash', 'ARS', 0, true)",
     [userId],
   );
   await oauthStates.create({

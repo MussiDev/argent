@@ -2,6 +2,8 @@
 -- user is lost (opening balances, names, archived state); there is no way back except a backup.
 -- Rollback plan: take a backup, run this script, then revert the commit that added the migration.
 -- Apply it BEFORE 0005_two_factor.down.sql when rolling back further (newest first).
+-- Run 0011_account_include_in_available.down.sql (and 0007) before this script: 0011 alters this table
+-- and its rollback fails once the table is gone, leaving the 0011 journal row behind.
 -- Run it as a whole (psql -1 -f) so it applies atomically, with the API stopped: a running API can
 -- insert accounts mid-script. If a later migration added a table that references accounts (the
 -- movements table of PRD 03), roll that one back first, or the DROP TABLE fails.

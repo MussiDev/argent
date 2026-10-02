@@ -80,7 +80,8 @@ export type ApiErrorKey =
   | 'categoryInUse'
   | 'categoryNestingTooDeep'
   | 'categoryParentKindMismatch'
-  | 'reauthenticationRequired';
+  | 'reauthenticationRequired'
+  | 'accountArchived';
 
 /** `NETWORK`: the request never got an HTTP answer (offline, DNS, CORS, aborted). */
 export type ApiFailureCode = ErrorCode | 'NETWORK';
@@ -120,6 +121,7 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
   CATEGORY_NESTING_TOO_DEEP: 'categoryNestingTooDeep',
   CATEGORY_PARENT_KIND_MISMATCH: 'categoryParentKindMismatch',
   REAUTHENTICATION_REQUIRED: 'reauthenticationRequired',
+  ACCOUNT_ARCHIVED: 'accountArchived',
 };
 
 /** `null` when the id is not a plain path segment: '.' and '..' survive encoding and would be normalized. */
@@ -139,7 +141,7 @@ const REQUESTED_WITH = 'argent';
 const REFRESH_LOCK = 'argent-refresh';
 
 interface RequestOptions<T> {
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   body?: unknown;
   /** `null` for answers without a body (204). */
@@ -199,6 +201,10 @@ export interface ApiClient {
   renameAccount(id: string, body: RenameAccountInput): Promise<ApiResult<AccountResponse>>;
   archiveAccount(id: string): Promise<ApiResult<AccountResponse>>;
   unarchiveAccount(id: string): Promise<ApiResult<AccountResponse>>;
+  setIncludeInAvailable(
+    id: string,
+    includeInAvailable: boolean,
+  ): Promise<ApiResult<AccountResponse>>;
   deleteAccount(id: string): Promise<ApiResult<undefined>>;
   listCategories(query: ListCategoriesParams): Promise<ApiResult<ListCategoriesResponse>>;
   createCategory(body: CreateCategoryInput): Promise<ApiResult<CategoryResponse>>;
@@ -453,6 +459,16 @@ export function createApiClient({
           method: 'POST',
           path: `${path}/unarchive`,
           body: {},
+          response: accountResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    setIncludeInAvailable: (id, includeInAvailable) =>
+      onAccount(id, (path) =>
+        request({
+          method: 'PUT',
+          path: `${path}/include-in-available`,
+          body: { includeInAvailable },
           response: accountResponseSchema,
           refreshOnUnauthenticated: true,
         }),

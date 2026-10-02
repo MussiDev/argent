@@ -1,8 +1,9 @@
 -- Reverse of 0007_profile_display_name.sql. DESTRUCTIVE: drops users.display_name, so every
 -- display name users have set is lost (accounts keep working and show no name until they set
 -- one again).
--- Rollback plan: run this script, then revert the commit that added the migration. It is the
--- newest migration, so run it before 0005_two_factor.down.sql when rolling back further.
+-- Rollback plan: run this script, then revert the commit that added the migration. Run
+-- 0011_account_include_in_available.down.sql and 0006_accounts.down.sql first (their journal `when`
+-- values are higher), and run this one before 0005_two_factor.down.sql when rolling back further.
 -- Run it as a whole (psql -1 -f) so it applies atomically, with the API stopped: a running API can
 -- write a display name mid-script.
 

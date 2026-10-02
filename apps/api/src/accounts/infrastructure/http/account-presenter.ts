@@ -1,5 +1,6 @@
 import {
   formatMinorUnitsString,
+  type AccountCurrency,
   type AccountResponse,
   type ListAccountsResponse,
 } from '@pesly/shared';
@@ -16,9 +17,17 @@ export function presentAccount(account: AccountWithBalance): AccountResponse {
     // Plain bigint toString, no int64 check: derived balance and totals are exact.
     openingBalance: formatMinorUnitsString(account.openingBalance),
     balance: formatMinorUnitsString(account.balance),
+    includeInAvailable: account.includeInAvailable,
     archived: account.archivedAt !== null,
     archivedAt: account.archivedAt?.toISOString() ?? null,
     createdAt: account.createdAt.toISOString(),
+  };
+}
+
+function presentTotals(totals: Record<AccountCurrency, bigint>): Record<AccountCurrency, string> {
+  return {
+    ARS: formatMinorUnitsString(totals.ARS),
+    USD: formatMinorUnitsString(totals.USD),
   };
 }
 
@@ -28,10 +37,10 @@ export function presentAccountList(
 ): ListAccountsResponse {
   return {
     items: list.items.map(presentAccount),
-    totals: {
-      ARS: formatMinorUnitsString(list.totals.ARS),
-      USD: formatMinorUnitsString(list.totals.USD),
-    },
+    availableTotals: presentTotals(list.availableTotals),
+    netWorthTotals: presentTotals(list.netWorthTotals),
+    debtTotals: presentTotals(list.debtTotals),
+    creditCardCount: list.creditCardCount,
     total: list.total,
     limit: page.limit,
     offset: page.offset,

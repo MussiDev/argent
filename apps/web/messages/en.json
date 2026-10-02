@@ -129,6 +129,7 @@
     "categoryInUse": "This category is in use, so it cannot be deleted. Archive it instead.",
     "categoryNestingTooDeep": "Subcategories cannot have subcategories.",
     "categoryParentKindMismatch": "A subcategory must have the same kind as its parent.",
+    "accountArchived": "This account is archived, so this setting cannot be changed. Unarchive it first.",
     "totpCodeFormat": "Enter the 6 digits of the code.",
     "secondFactorCodeFormat": "Enter a 6-digit code or a recovery code."
   },
@@ -139,7 +140,15 @@
       "title": "New account",
       "description": "Add a place where you keep your money."
     },
+    "headline": {
+      "available": "Available",
+      "netWorth": "Net worth"
+    },
+    "debt": {
+      "title": "Debt"
+    },
     "fields": {
+      "includeInAvailable": "Include in available",
       "name": "Name",
       "type": "Type",
       "currency": "Currency",
@@ -171,12 +180,7 @@
       "empty": "You have no accounts yet. Create one to get started.",
       "emptyArchived": "You have no archived accounts.",
       "showArchived": "Show archived accounts",
-      "showActive": "Show active accounts",
-      "totals": "Totals"
-    },
-    "totals": {
-      "ARS": "Total in pesos",
-      "USD": "Total in dollars"
+      "showActive": "Show active accounts"
     },
     "actions": {
       "rename": "Rename",

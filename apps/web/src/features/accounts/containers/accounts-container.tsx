@@ -1,25 +1,29 @@
 'use client';
 
-import {
-  renameAccountRequestSchema,
-  type AccountCurrency,
-  type AccountResponse,
-} from '@pesly/shared';
+import { renameAccountRequestSchema, type AccountResponse } from '@pesly/shared';
 import { useEffect, useState } from 'react';
 import type { ErrorMessageKey } from '@/features/auth/form-errors';
 import { useRouter } from '@/i18n/navigation';
 import type { ApiFailure } from '@/lib/api-client';
 import { useApiClient } from '@/lib/api-client-provider';
 import { nameErrorMessage, type AccountFieldMessage } from '../account-form-errors';
+import type { CurrencyTotals } from '../totals';
 import { AccountList } from '../components/account-list';
 import { AccountsLoadStateView, type AccountsLoadState } from '../components/accounts-load-state';
 
 /** The API's largest page; there is no pagination control yet (personal scale). */
 const PAGE_SIZE = 100;
 
-type Totals = Partial<Record<AccountCurrency, string>>;
-
-type ListState = AccountsLoadState | { kind: 'ready'; accounts: AccountResponse[]; totals: Totals };
+type ListState =
+  | AccountsLoadState
+  | {
+      kind: 'ready';
+      accounts: AccountResponse[];
+      availableTotals: CurrencyTotals;
+      netWorthTotals: CurrencyTotals;
+      debtTotals: CurrencyTotals;
+      creditCardCount: number;
+    };
 
 /**
  * Lists the active or the archived accounts and runs the row actions. After an action the row
@@ -44,7 +48,14 @@ export function AccountsContainer() {
     void api.listAccounts({ archived: showArchived, limit: PAGE_SIZE }).then((result) => {
       if (!active) return;
       if (result.ok) {
-        setState({ kind: 'ready', accounts: result.data.items, totals: result.data.totals });
+        setState({
+          kind: 'ready',
+          accounts: result.data.items,
+          availableTotals: result.data.availableTotals,
+          netWorthTotals: result.data.netWorthTotals,
+          debtTotals: result.data.debtTotals,
+          creditCardCount: result.data.creditCardCount,
+        });
       } else if (result.code === 'UNAUTHENTICATED') {
         router.replace('/sign-in');
       } else if (request.silent) {
@@ -138,6 +149,28 @@ export function AccountsContainer() {
     }
   }
 
+  async function toggleAvailable(id: string, includeInAvailable: boolean) {
+    setPending(true);
+    setActionError(undefined);
+    const result = await api.setIncludeInAvailable(id, includeInAvailable);
+    setPending(false);
+    if (result.ok) {
+      const updated = result.data;
+      setState((current) =>
+        current.kind === 'ready'
+          ? {
+              ...current,
+              accounts: current.accounts.map((account) => (account.id === id ? updated : account)),
+            }
+          : current,
+      );
+      // The totals are the API's: read them again instead of adding up on the client.
+      setRequest((current) => ({ id: current.id + 1, silent: true }));
+    } else if (!handleSharedFailure(result)) {
+      setActionError(result.messageKey);
+    }
+  }
+
   async function remove(id: string) {
     setPending(true);
     setActionError(undefined);
@@ -163,7 +196,13 @@ export function AccountsContainer() {
   return (
     <AccountList
       accounts={state.accounts}
-      totals={state.totals}
+      availableTotals={state.availableTotals}
+      netWorthTotals={state.netWorthTotals}
+      debtTotals={state.debtTotals}
+      creditCardCount={state.creditCardCount}
+      onToggleAvailable={(id, value) => {
+        void toggleAvailable(id, value);
+      }}
       showArchived={showArchived}
       pending={pending}
       editingId={editingId}

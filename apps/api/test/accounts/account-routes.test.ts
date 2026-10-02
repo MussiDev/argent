@@ -90,7 +90,7 @@ function get(app: Express, path: string, cookies?: Partial<SessionCookies>) {
 
 function send(
   app: Express,
-  method: 'post' | 'patch' | 'delete',
+  method: 'post' | 'patch' | 'delete' | 'put',
   path: string,
   cookies?: Partial<SessionCookies>,
   body?: Record<string, unknown>,
@@ -113,8 +113,17 @@ async function create(
 }
 
 interface ListBody {
-  items: { id: string; name: string; balance: string; openingBalance: string }[];
-  totals: { ARS: string; USD: string };
+  items: {
+    id: string;
+    name: string;
+    balance: string;
+    openingBalance: string;
+    includeInAvailable: boolean;
+  }[];
+  availableTotals: { ARS: string; USD: string };
+  netWorthTotals: { ARS: string; USD: string };
+  debtTotals: { ARS: string; USD: string };
+  creditCardCount: number;
   total: number;
   limit: number;
   offset: number;
@@ -187,7 +196,7 @@ describe('POST /accounts', () => {
     await create(s, { openingBalance: '-150000' });
     const body = await list(s);
     expect(body.items[0]).toMatchObject({ openingBalance: '-150000', balance: '-150000' });
-    expect(body.totals.ARS).toBe('-150000');
+    expect(body.netWorthTotals.ARS).toBe('-150000');
   });
 
   it.each(['1000000000000001', '-1000000000000001'])(
@@ -299,6 +308,20 @@ describe('PATCH /accounts/:id', () => {
     },
   );
 
+  it('rejects includeInAvailable in the rename body naming the field and leaves the account unchanged (FR-04)', async () => {
+    const s = await setup();
+    const id = await create(s);
+    const response = await send(s.app, 'patch', `/accounts/${id}`, s.ana, {
+      name: 'Otra',
+      includeInAvailable: false,
+    });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect((response.body as { fields: string[] }).fields).toContain('body.includeInAvailable');
+    expect((await rawRow(id))?.name).toBe('Caja');
+    expect((await rawRow(id))?.include_in_available).toBe(true);
+  });
+
   it('renames, visible in GET and in the list (AC-06)', async () => {
     const s = await setup();
     const id = await create(s);
@@ -383,6 +406,8 @@ describe('DELETE /accounts/:id', () => {
   });
 });
 
+const INT64_MAX = 9_223_372_036_854_775_807n;
+
 describe('GET /accounts balances, totals and paging', () => {
   it('balance equals the opening balance with the default adapter (AC-11)', async () => {
     const plain = await setup();
@@ -419,25 +444,70 @@ describe('GET /accounts balances, totals and paging', () => {
     expect(second.items).toHaveLength(2);
     expect(first.total).toBe(6);
     expect(first).toMatchObject({ limit: 2, offset: 0 });
-    expect(second.totals).toEqual({ ARS: '15005', USD: '77' });
-    expect(first.totals).toEqual(second.totals);
+    expect(second.netWorthTotals).toEqual({ ARS: '15005', USD: '77' });
+    expect(first.netWorthTotals).toEqual(second.netWorthTotals);
     expect((await list(s, '?archived=true')).total).toBe(1);
   });
 
-  it('answers 200 with the exact ARS total for 9,300 accounts at 10^15 (AC-22, NFR-06)', async () => {
+  it('answers 200 with exact available, net worth and debt totals for 9,300 accounts at 10^15 (AC-17, NFR-01)', async () => {
     const s = await setup();
+    // 9,300 ARS accounts at the opening balance bound: 4,000 included cash, 3,000 savings left
+    // out of Available, 2,300 credit cards. Only net worth passes the signed 64-bit maximum here;
+    // the two cases below push Available and Debt past it.
     await connection.pool.query(
-      `insert into accounts (owner_id, name, type, currency, opening_balance)
-       select $1, 'Big ' || n, 'cash', 'ARS', 1000000000000000
+      `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available)
+       select $1, 'Big ' || n,
+              case when n <= 4000 then 'cash' when n <= 7000 then 'savings' else 'credit_card' end,
+              'ARS', 1000000000000000, n <= 4000
          from generate_series(1, $2::int) as n`,
       [s.anaId, 9300],
     );
     const response = await get(s.app, '/accounts?limit=2', s.ana);
     expect(response.status).toBe(200);
     const body = response.body as ListBody;
-    expect(body.totals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.availableTotals).toEqual({ ARS: '4000000000000000000', USD: '0' });
+    expect(body.netWorthTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.debtTotals).toEqual({ ARS: '2300000000000000000', USD: '0' });
+    expect(BigInt(body.netWorthTotals.ARS)).toBeGreaterThan(INT64_MAX);
+    expect(body.creditCardCount).toBe(2300);
     expect(body.total).toBe(9300);
-    expect(BigInt(body.totals.ARS)).toBe(9_300_000_000_000_000_000n);
+  }, 60_000);
+
+  it('lists an Available and Net worth above the int64 maximum for 9,300 included cash accounts at 10^15 (AC-17, NFR-01)', async () => {
+    const s = await setup();
+    await connection.pool.query(
+      `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available)
+       select $1, 'Cash ' || n, 'cash', 'ARS', 1000000000000000, true
+         from generate_series(1, $2::int) as n`,
+      [s.anaId, 9300],
+    );
+    const response = await get(s.app, '/accounts?limit=2', s.ana);
+    expect(response.status).toBe(200);
+    const body = response.body as ListBody;
+    expect(body.availableTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.netWorthTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.debtTotals).toEqual({ ARS: '0', USD: '0' });
+    expect(BigInt(body.availableTotals.ARS)).toBeGreaterThan(INT64_MAX);
+    expect(BigInt(body.netWorthTotals.ARS)).toBeGreaterThan(INT64_MAX);
+  }, 60_000);
+
+  it('lists a Debt and Net worth above the int64 maximum for 9,300 credit cards at 10^15 (AC-17, NFR-01)', async () => {
+    const s = await setup();
+    await connection.pool.query(
+      `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available)
+       select $1, 'Card ' || n, 'credit_card', 'ARS', 1000000000000000, false
+         from generate_series(1, $2::int) as n`,
+      [s.anaId, 9300],
+    );
+    const response = await get(s.app, '/accounts?limit=2', s.ana);
+    expect(response.status).toBe(200);
+    const body = response.body as ListBody;
+    expect(body.availableTotals).toEqual({ ARS: '0', USD: '0' });
+    expect(body.netWorthTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.debtTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.creditCardCount).toBe(9300);
+    expect(BigInt(body.debtTotals.ARS)).toBeGreaterThan(INT64_MAX);
+    expect(BigInt(body.netWorthTotals.ARS)).toBeGreaterThan(INT64_MAX);
   }, 60_000);
 
   it('accepts limit 100 and rejects 101 (NFR-03)', async () => {
@@ -446,6 +516,230 @@ describe('GET /accounts balances, totals and paging', () => {
     const response = await get(s.app, '/accounts?limit=101', s.ana);
     expect(response.status).toBe(400);
     expect((response.body as { fields: string[] }).fields).toContain('query.limit');
+  });
+});
+
+const PUT_PATH = (id: string) => `/accounts/${id}/include-in-available`;
+
+async function rawRow(id: string) {
+  const rows = await connection.pool.query<{
+    include_in_available: boolean;
+    name: string;
+    updated_at: Date;
+  }>('select include_in_available, name, updated_at from accounts where id = $1', [id]);
+  return rows.rows[0];
+}
+
+describe('includeInAvailable on create and list', () => {
+  it('POST returns includeInAvailable and the list returns it for each account (AC-01, AC-02)', async () => {
+    const s = await setup();
+    const response = await send(s.app, 'post', '/accounts', s.ana, valid);
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ includeInAvailable: true });
+    await create(s, { name: 'Ahorro', type: 'savings' });
+    const body = await list(s);
+    expect(body.items.map((a) => [a.name, a.includeInAvailable]).sort()).toEqual([
+      ['Ahorro', false],
+      ['Caja', true],
+    ]);
+  });
+
+  it.each(['true', 1, null, 'yes'])(
+    'rejects the non-boolean includeInAvailable %o naming body.includeInAvailable and creates nothing (AC-06)',
+    async (value) => {
+      const s = await setup();
+      const response = await send(s.app, 'post', '/accounts', s.ana, {
+        ...valid,
+        includeInAvailable: value,
+      });
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      expect((response.body as { fields: string[] }).fields).toContain('body.includeInAvailable');
+      expect(JSON.stringify(response.body)).not.toContain('yes');
+      expect((await list(s)).items).toEqual([]);
+    },
+  );
+
+  it.each([
+    ['cash', true],
+    ['bank_account', true],
+    ['digital_wallet', true],
+    ['savings', false],
+    ['credit_card', false],
+  ])('defaults %s to includeInAvailable %s (AC-03, AC-04, AC-09)', async (type, expected) => {
+    const s = await setup();
+    const response = await send(s.app, 'post', '/accounts', s.ana, { ...valid, type });
+    expect(response.status).toBe(201);
+    expect((response.body as { includeInAvailable: boolean }).includeInAvailable).toBe(expected);
+    expect((await rawRow((response.body as { id: string }).id))?.include_in_available).toBe(
+      expected,
+    );
+  });
+
+  it.each([
+    ['cash', false],
+    ['savings', true],
+    ['bank_account', false],
+  ])('keeps an explicit %s value %s (AC-05)', async (type, value) => {
+    const s = await setup();
+    const response = await send(s.app, 'post', '/accounts', s.ana, {
+      ...valid,
+      type,
+      includeInAvailable: value,
+    });
+    expect(response.status).toBe(201);
+    expect((response.body as { includeInAvailable: boolean }).includeInAvailable).toBe(value);
+    expect((await rawRow((response.body as { id: string }).id))?.include_in_available).toBe(value);
+  });
+
+  it('refuses a credit card created as included, naming the field, and creates nothing (AC-10)', async () => {
+    const s = await setup();
+    const response = await send(s.app, 'post', '/accounts', s.ana, {
+      ...valid,
+      type: 'credit_card',
+      includeInAvailable: true,
+    });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect((response.body as { fields: string[] }).fields).toContain('body.includeInAvailable');
+    expect((await list(s)).items).toEqual([]);
+  });
+});
+
+describe('PUT /accounts/:id/include-in-available', () => {
+  it('persists the value, leaves other fields unchanged and is idempotent (AC-07)', async () => {
+    const s = await setup();
+    const id = await create(s, { openingBalance: '500' });
+    const before = (await get(s.app, `/accounts/${id}`, s.ana)).body as Record<string, unknown>;
+    const first = await send(s.app, 'put', PUT_PATH(id), s.ana, { includeInAvailable: false });
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({ ...before, includeInAvailable: false });
+    expect((await rawRow(id))?.include_in_available).toBe(false);
+    const stamp = (await rawRow(id))?.updated_at;
+    const again = await send(s.app, 'put', PUT_PATH(id), s.ana, { includeInAvailable: false });
+    expect(again.status).toBe(200);
+    expect(again.body).toEqual(first.body);
+    expect((await rawRow(id))?.updated_at).toEqual(stamp);
+    const back = await send(s.app, 'put', PUT_PATH(id), s.ana, { includeInAvailable: true });
+    expect(back.body).toEqual(before);
+    expect((await get(s.app, `/accounts/${id}`, s.ana)).body).toEqual(before);
+  });
+
+  it.each([
+    { includeInAvailable: 'true' },
+    { includeInAvailable: 1 },
+    { includeInAvailable: null },
+    {},
+  ])(
+    'rejects the body %o naming body.includeInAvailable and leaves the account unchanged (AC-08)',
+    async (body) => {
+      const s = await setup();
+      const id = await create(s);
+      const response = await send(s.app, 'put', PUT_PATH(id), s.ana, body);
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
+      expect((response.body as { fields: string[] }).fields).toContain('body.includeInAvailable');
+      expect((await rawRow(id))?.include_in_available).toBe(true);
+    },
+  );
+
+  it.each([true, false])(
+    'answers 400 naming the field for a credit card with %s and leaves it unchanged (AC-11)',
+    async (value) => {
+      const s = await setup();
+      const id = await create(s, { type: 'credit_card' });
+      const response = await send(s.app, 'put', PUT_PATH(id), s.ana, { includeInAvailable: value });
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        code: 'VALIDATION_FAILED',
+        fields: ['body.includeInAvailable'],
+      });
+      expect((await rawRow(id))?.include_in_available).toBe(false);
+    },
+  );
+
+  it('answers 409 ACCOUNT_ARCHIVED for an archived account and works after unarchive (AC-12, AC-13)', async () => {
+    const s = await setup();
+    const id = await create(s);
+    await send(s.app, 'post', `/accounts/${id}/archive`, s.ana);
+    const refused = await send(s.app, 'put', PUT_PATH(id), s.ana, { includeInAvailable: false });
+    expect(refused.status).toBe(409);
+    expect(refused.body).toEqual({ code: 'ACCOUNT_ARCHIVED' });
+    expect((await rawRow(id))?.include_in_available).toBe(true);
+    await send(s.app, 'post', `/accounts/${id}/unarchive`, s.ana);
+    const ok = await send(s.app, 'put', PUT_PATH(id), s.ana, { includeInAvailable: false });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ includeInAvailable: false });
+  });
+
+  it('answers another user account with the same 404 body as a missing id (AC-22)', async () => {
+    const s = await setup();
+    const id = await create(s);
+    // The route exists for the owner, so the 404 below is about ownership and not an unmounted path.
+    const own = await send(s.app, 'put', PUT_PATH(id), s.ana, { includeInAvailable: true });
+    expect(own.status).toBe(200);
+    const foreign = await send(s.app, 'put', PUT_PATH(id), s.bob, { includeInAvailable: false });
+    const absent = await send(s.app, 'put', PUT_PATH(randomUUID()), s.bob, {
+      includeInAvailable: false,
+    });
+    expect(foreign.status).toBe(404);
+    expect(foreign.body).toEqual({ code: 'NOT_FOUND' });
+    expect(foreign.body).toEqual(absent.body);
+    expect((await rawRow(id))?.include_in_available).toBe(true);
+  });
+});
+
+describe('GET /accounts available, net worth and debt totals', () => {
+  it('answers zero debt, no cards and no card item for a user without credit cards (AC-20)', async () => {
+    const s = await setup();
+    await create(s, { name: 'cash', openingBalance: '1000' });
+    await create(s, { name: 'usd', currency: 'USD', openingBalance: '5' });
+    const body = await list(s);
+    expect(body.debtTotals).toEqual({ ARS: '0', USD: '0' });
+    expect(body.creditCardCount).toBe(0);
+    expect(body.items).toHaveLength(2);
+    const empty = await list(s, '', s.bob);
+    expect(empty.debtTotals).toEqual({ ARS: '0', USD: '0' });
+    expect(empty.creditCardCount).toBe(0);
+    expect(empty.items).toEqual([]);
+  });
+
+  it('keeps a card balance out of availableTotals and shows the card in items (AC-14)', async () => {
+    const s = await setup();
+    await create(s, { name: 'cash', openingBalance: '1000' });
+    const card = await create(s, { name: 'card', type: 'credit_card', openingBalance: '-400' });
+    const body = await list(s);
+    expect(body.availableTotals).toEqual({ ARS: '1000', USD: '0' });
+    expect(body.netWorthTotals).toEqual({ ARS: '600', USD: '0' });
+    expect(body.debtTotals).toEqual({ ARS: '-400', USD: '0' });
+    expect(body.creditCardCount).toBe(1);
+    expect(body.items.map((a) => a.id)).toContain(card);
+  });
+
+  it('returns the three totals per currency over more than one page (AC-14, AC-15, AC-16, AC-19)', async () => {
+    const movements = new TestMovements();
+    const s = await setup(movements);
+    const cash = await create(s, { name: 'cash', openingBalance: '1000' });
+    await create(s, { name: 'bank', type: 'bank_account', openingBalance: '2000' });
+    await create(s, { name: 'sav', type: 'savings', openingBalance: '4000' });
+    await create(s, { name: 'usd', currency: 'USD', openingBalance: '70' });
+    const card = await create(s, { name: 'card', type: 'credit_card', openingBalance: '-300' });
+    await create(s, { name: 'card2', type: 'credit_card', openingBalance: '0' });
+    const old = await create(s, { name: 'old', openingBalance: '999999' });
+    await send(s.app, 'post', `/accounts/${old}/archive`, s.ana);
+    movements.sums.set(cash, 50n);
+    movements.sums.set(card, -20n);
+    await send(s.app, 'put', PUT_PATH(cash), s.ana, { includeInAvailable: false });
+
+    const first = await list(s, '?limit=2&offset=0');
+    const last = await list(s, '?limit=2&offset=4');
+    expect(first.items).toHaveLength(2);
+    for (const body of [first, last]) {
+      expect(body.availableTotals).toEqual({ ARS: '2000', USD: '70' });
+      expect(body.netWorthTotals).toEqual({ ARS: '6730', USD: '70' });
+      expect(body.debtTotals).toEqual({ ARS: '-320', USD: '0' });
+      expect(body.creditCardCount).toBe(2);
+    }
   });
 });
 
@@ -468,9 +762,13 @@ describe('ownership (AC-14, AC-15)', () => {
       patch: () => send(s.app, 'patch', `/accounts/${target}`, s.bob, { name: 'hacked' }),
       archive: () => send(s.app, 'post', `/accounts/${target}/archive`, s.bob),
       unarchive: () => send(s.app, 'post', `/accounts/${target}/unarchive`, s.bob),
+      include: () =>
+        send(s.app, 'put', `/accounts/${target}/include-in-available`, s.bob, {
+          includeInAvailable: false,
+        }),
       remove: () => send(s.app, 'delete', `/accounts/${target}`, s.bob),
     });
-    for (const name of ['get', 'patch', 'archive', 'unarchive', 'remove'] as const) {
+    for (const name of ['get', 'patch', 'archive', 'unarchive', 'include', 'remove'] as const) {
       const foreign = await as(id)[name]();
       const absent = await as(missing)[name]();
       expect(foreign.status).toBe(404);
@@ -490,6 +788,7 @@ describe('input validation on ids and query', () => {
     ['patch', 'patch', (id: string) => `/accounts/${id}`],
     ['archive', 'post', (id: string) => `/accounts/${id}/archive`],
     ['unarchive', 'post', (id: string) => `/accounts/${id}/unarchive`],
+    ['include', 'put', (id: string) => `/accounts/${id}/include-in-available`],
     ['delete', 'delete', (id: string) => `/accounts/${id}`],
   ] as const)('%s rejects a non-UUID id with 400 VALIDATION_FAILED', async (_n, method, path) => {
     const s = await setup();
@@ -497,7 +796,17 @@ describe('input validation on ids and query', () => {
     const response =
       method === 'get'
         ? await get(s.app, url, s.ana)
-        : await send(s.app, method, url, s.ana, method === 'patch' ? { name: 'x' } : undefined);
+        : await send(
+            s.app,
+            method,
+            url,
+            s.ana,
+            method === 'patch'
+              ? { name: 'x' }
+              : method === 'put'
+                ? { includeInAvailable: true }
+                : undefined,
+          );
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ code: 'VALIDATION_FAILED' });
   });
@@ -514,24 +823,26 @@ describe('input validation on ids and query', () => {
 });
 
 describe('authentication and request guards', () => {
-  const routes: [string, 'get' | 'post' | 'patch' | 'delete', (id: string) => string][] = [
+  const routes: [string, 'get' | 'post' | 'patch' | 'delete' | 'put', (id: string) => string][] = [
     ['list', 'get', () => '/accounts'],
     ['create', 'post', () => '/accounts'],
     ['get', 'get', (id) => `/accounts/${id}`],
     ['patch', 'patch', (id) => `/accounts/${id}`],
     ['archive', 'post', (id) => `/accounts/${id}/archive`],
     ['unarchive', 'post', (id) => `/accounts/${id}/unarchive`],
+    ['include', 'put', (id) => `/accounts/${id}/include-in-available`],
     ['delete', 'delete', (id) => `/accounts/${id}`],
   ];
 
   function call(
     app: Express,
-    method: 'get' | 'post' | 'patch' | 'delete',
+    method: 'get' | 'post' | 'patch' | 'delete' | 'put',
     path: string,
     cookies?: SessionCookies,
   ) {
     const req = request(app)[method](path).set(trustedHeaders);
     if (cookies) req.set('Cookie', cookieHeader(cookies));
+    if (method === 'put') return req.send({ includeInAvailable: true });
     return req.send(method === 'get' || method === 'delete' ? undefined : { ...valid });
   }
 
@@ -569,15 +880,39 @@ describe('authentication and request guards', () => {
     expect(noHeader.status).toBe(403);
     expect((await list(s)).items).toEqual([]);
   });
+
+  it('refuses PUT include-in-available without the web origin headers and changes nothing (error path)', async () => {
+    const s = await setup();
+    const id = await create(s);
+    const body = { includeInAvailable: false };
+    const noOrigin = await request(s.app)
+      .put(PUT_PATH(id))
+      .set('Cookie', cookieHeader(s.ana))
+      .send(body);
+    expect(noOrigin.status).toBe(403);
+    const noHeader = await request(s.app)
+      .put(PUT_PATH(id))
+      .set('Origin', trustedHeaders.Origin)
+      .set('Cookie', cookieHeader(s.ana))
+      .send(body);
+    expect(noHeader.status).toBe(403);
+    expect((await rawRow(id))?.include_in_available).toBe(true);
+    // Control: the same request with the headers goes through, so the 403 above is the guard.
+    const ok = await send(s.app, 'put', PUT_PATH(id), s.ana, body);
+    expect(ok.status).toBe(200);
+  });
 });
 
 describe('audit log (NFR-04)', () => {
-  it('records user id and account id for create, archive, unarchive and delete, never name or amount', async () => {
+  it('records user id and account id for create, archive, unarchive, setting change and delete, never name or amount', async () => {
     const s = await setup();
     const name = 'Secret Savings Name';
     const id = await create(s, { name, openingBalance: '123456789' });
     await send(s.app, 'post', `/accounts/${id}/archive`, s.ana);
     await send(s.app, 'post', `/accounts/${id}/unarchive`, s.ana);
+    await send(s.app, 'put', `/accounts/${id}/include-in-available`, s.ana, {
+      includeInAvailable: false,
+    });
     await send(s.app, 'delete', `/accounts/${id}`, s.ana);
 
     const audit = s.lines
@@ -587,22 +922,22 @@ describe('audit log (NFR-04)', () => {
       'account created',
       'account archived',
       'account unarchived',
+      'account include-in-available changed',
       'account deleted',
     ]);
-    // Allowlist: pino base keys plus the three audit fields; a new field must be added here on purpose.
-    const allowed = new Set([
-      'level',
-      'time',
-      'pid',
-      'hostname',
-      'msg',
-      'requestId',
-      'userId',
-      'accountId',
-    ]);
+    // Per-message allowlist: pino base keys plus the audit fields; only the setting-change line may
+    // carry the boolean, and a new field must be added here on purpose.
+    const base = ['level', 'time', 'pid', 'hostname', 'msg', 'requestId', 'userId', 'accountId'];
+    const allowedFor = (msg: unknown) =>
+      new Set(
+        msg === 'account include-in-available changed' ? [...base, 'includeInAvailable'] : base,
+      );
     for (const entry of audit) {
       expect(entry).toMatchObject({ userId: s.anaId, accountId: id });
-      expect(Object.keys(entry).filter((key) => !allowed.has(key))).toEqual([]);
+      if (entry.msg === 'account include-in-available changed') {
+        expect(entry.includeInAvailable).toBe(false);
+      }
+      expect(Object.keys(entry).filter((key) => !allowedFor(entry.msg).has(key))).toEqual([]);
       expect(entry.requestId).toEqual(expect.any(String));
       const text = JSON.stringify(entry);
       expect(text).not.toContain(name);

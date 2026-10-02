@@ -51,16 +51,20 @@ export function CreateAccountContainer() {
       type: values.type,
       currency: values.currency,
       ...(openingBalance === undefined ? {} : { openingBalance }),
+      ...(values.includeInAvailable === undefined
+        ? {}
+        : { includeInAvailable: values.includeInAvailable }),
     });
     if (parsed.success) {
       if (Object.keys(fields).length > 0) return { fields };
-      const { name, type, currency } = parsed.data;
+      const { name, type, currency, includeInAvailable } = parsed.data;
       return {
         request: {
           name,
           type,
           currency,
           ...(openingBalance === undefined ? {} : { openingBalance }),
+          ...(includeInAvailable === undefined ? {} : { includeInAvailable }),
         },
       };
     }

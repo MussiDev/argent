@@ -2,6 +2,7 @@ import { ACCOUNT_CURRENCIES, ACCOUNT_TYPES } from '@pesly/shared';
 import { sql, type SQL } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   check,
   index,
   pgTable,
@@ -38,6 +39,8 @@ export const accounts = pgTable(
     currency: text('currency', { enum: ACCOUNT_CURRENCIES }).notNull(),
     /** Signed minor units. */
     openingBalance: bigint('opening_balance', { mode: 'bigint' }).notNull(),
+    /** Whether the balance counts toward the available total; no default, the use case chooses (FEAT-003). */
+    includeInAvailable: boolean('include_in_available').notNull(),
     archivedAt: timestamptz('archived_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
@@ -52,6 +55,11 @@ export const accounts = pgTable(
     ),
     check('accounts_type_check', oneOf(table.type, ACCOUNT_TYPES)),
     check('accounts_currency_check', oneOf(table.currency, ACCOUNT_CURRENCIES)),
+    // A credit card is debt, never available money (FEAT-003 FR-05).
+    check(
+      'accounts_credit_card_not_available_check',
+      sql`${table.type} <> 'credit_card' or ${table.includeInAvailable} = false`,
+    ),
     uniqueIndex('accounts_owner_name_unique').on(table.ownerId, sql`lower(${table.name})`),
     index('accounts_owner_created_idx').on(table.ownerId, table.createdAt, table.id),
   ],

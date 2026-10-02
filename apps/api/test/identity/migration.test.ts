@@ -1,11 +1,12 @@
 import { readFile } from 'node:fs/promises';
+import { ACCOUNT_TYPES, defaultIncludeInAvailable, type AccountType } from '@pesly/shared';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_SET_0009 } from '../categories/fixtures/default-set-0009';
 import { migrationsFolder, runMigrations } from '../../src/shared/db/migrate';
 import { ensureTestDatabase, testDatabaseUrl } from '../helpers/test-database';
 
-const ALL_MIGRATIONS = 10;
+const ALL_MIGRATIONS = 11;
 const TABLES_BEFORE_0004 = [
   'auth_attempts',
   'email_outbox',
@@ -214,6 +215,7 @@ describe('0000_identity migration', () => {
   });
 
   it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
@@ -253,6 +255,7 @@ describe('0001_outbox_hardening migration', () => {
   it('is reverted by its rollback script (after the newer ones), leaving 0000 in place, and re-applies', async () => {
     await client.query('delete from email_outbox');
     // Newest first: drizzle only applies migrations newer than the last one recorded.
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
@@ -339,6 +342,7 @@ describe('0002_credentials_version migration', () => {
   });
 
   it('is reverted by its rollback script (after the newer ones), keeping the data of the older columns, and re-applies', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
@@ -401,6 +405,7 @@ describe('0003_outbox_retry migration', () => {
   });
 
   it('is reverted by its rollback script (after the newer ones), restoring the previous index and keeping the rows, and re-applies', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
@@ -412,7 +417,7 @@ describe('0003_outbox_retry migration', () => {
     expect(await nextAttemptColumn()).toEqual([]);
     expect(await outboxIndexes()).toEqual([PENDING_BY_SENT_AT]);
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 7);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 8);
     const kept = await client.query("select 1 from email_outbox where kind = 'discard'");
     expect(kept.rowCount).toBe(1);
 
@@ -437,6 +442,7 @@ async function countOf(statement: string): Promise<number> {
 
 describe('0004_google_identity migration', () => {
   it('applies on a database at 0003: password_hash nullable, user_identities, oauth_states and the google_start_ip kind', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
@@ -444,7 +450,7 @@ describe('0004_google_identity migration', () => {
     await client.query(await rollback('0005_two_factor'));
     await client.query(await rollback('0004_google_identity'));
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 7);
 
     await runMigrations(emptyDatabaseUrl);
 
@@ -492,6 +498,8 @@ describe('0004_google_identity migration', () => {
   it('has a rollback that fails while a password-less user exists, changing nothing', async () => {
     expect(await countOf('select count(*) as n from users where password_hash is null')).toBe(1);
 
+    await client.query(await rollback('0011_account_include_in_available'));
+
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
@@ -501,7 +509,7 @@ describe('0004_google_identity migration', () => {
     expect(await sqlState(await rollback('0004_google_identity'))).toBe('23502');
 
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
     expect(
       await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
     ).toBe(1);
@@ -516,7 +524,7 @@ describe('0004_google_identity migration', () => {
     await client.query(await rollback('0004_google_identity'));
 
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 7);
     expect(await passwordHashNullable()).toBe('NO');
     expect(
       await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
@@ -566,13 +574,14 @@ function insertOutbox(kind: string): Promise<string | undefined> {
 
 describe('0005_two_factor migration', () => {
   it('applies on a database at 0004: user_two_factor, recovery_codes, sign_in_challenges and the new kinds', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
     for (const kind of TWO_FACTOR_ATTEMPT_KINDS) expect(await insertAttempt(kind)).toBe('23514');
     for (const kind of TWO_FACTOR_OUTBOX_KINDS) expect(await insertOutbox(kind)).toBe('23514');
 
@@ -653,6 +662,8 @@ describe('0005_two_factor migration', () => {
     );
     const before = { attempts: await countOf(otherAttempts), outbox: await countOf(otherOutbox) };
 
+    await client.query(await rollback('0011_account_include_in_available'));
+
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
@@ -661,7 +672,7 @@ describe('0005_two_factor migration', () => {
     await client.query(await rollback('0005_two_factor'));
 
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
     const attemptKinds = TWO_FACTOR_ATTEMPT_KINDS.map((kind) => `'${kind}'`).join(', ');
     const outboxKinds = TWO_FACTOR_OUTBOX_KINDS.map((kind) => `'${kind}'`).join(', ');
     expect(
@@ -685,17 +696,18 @@ describe('0005_two_factor migration', () => {
 
 function insertAccount(owner: string, name: string): Promise<string | undefined> {
   return sqlState(
-    `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${owner}', '${name}', 'cash', 'ARS', 0)`,
+    `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ('${owner}', '${name}', 'cash', 'ARS', 0, true)`,
   );
 }
 
 describe('0006_accounts migration', () => {
   it('applies on a database at 0005: the accounts table with its checks, defaults, indexes and immutability trigger', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
     expect(await publicTables()).not.toContain('accounts');
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
 
     await runMigrations(emptyDatabaseUrl);
 
@@ -704,7 +716,7 @@ describe('0006_accounts migration', () => {
     const ana = await insertUser('ana@accounts.test');
     const bob = await insertUser('bob@accounts.test');
     const inserted = await client.query<{ id: string; archived_at: Date | null; balance: string }>(
-      `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'Caja', 'cash', 'ARS', -1000000000000000) returning id, archived_at, opening_balance as balance`,
+      `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ('${ana}', 'Caja', 'cash', 'ARS', -1000000000000000, true) returning id, archived_at, opening_balance as balance`,
     );
     expect(inserted.rows[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(inserted.rows[0]?.archived_at).toBeNull();
@@ -718,18 +730,18 @@ describe('0006_accounts migration', () => {
     expect(await insertAccount(ana, 'x'.repeat(51))).toBe('23514');
     expect(
       await sqlState(
-        `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'T', 'crypto', 'ARS', 0)`,
+        `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ('${ana}', 'T', 'crypto', 'ARS', 0, false)`,
       ),
     ).toBe('23514');
     expect(
       await sqlState(
-        `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', 'C', 'cash', 'EUR', 0)`,
+        `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ('${ana}', 'C', 'cash', 'EUR', 0, true)`,
       ),
     ).toBe('23514');
     // opening balance bound: exactly plus or minus 10^15 is accepted, one more is not (FR-13)
     const withBalance = (name: string, balance: string) =>
       sqlState(
-        `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${ana}', '${name}', 'cash', 'ARS', ${balance})`,
+        `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ('${ana}', '${name}', 'cash', 'ARS', ${balance}, true)`,
       );
     expect(await withBalance('Max', '1000000000000000')).toBeUndefined();
     await client.query("delete from accounts where name = 'Max'");
@@ -776,12 +788,13 @@ describe('0006_accounts migration', () => {
   });
 
   it('is reverted by its rollback (dropping table, function and trigger), and re-applies', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
 
     expect(await publicTables()).not.toContain('accounts');
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
     expect(
       await countOf(
         "select count(*) as n from pg_proc where proname = 'accounts_immutable_fields'",
@@ -811,13 +824,14 @@ async function displayNameColumn(): Promise<ColumnInfo[]> {
 
 describe('0007_profile_display_name migration', () => {
   it('applies on a database at 0005 with existing users, who keep a null display name', async () => {
-    // 0010, 0009 and then 0006 have the latest journal `when`s, so they are the newest for the migrator: roll them back first.
+    // 0011, 0010, 0009 and then 0006 have the latest journal `when`s, so they are the newest for the migrator: roll them back first.
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0007_profile_display_name'));
     expect(await displayNameColumn()).toEqual([]);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
     await insertUser('before@profile.test');
 
     await runMigrations(emptyDatabaseUrl);
@@ -846,6 +860,7 @@ describe('0007_profile_display_name migration', () => {
   });
 
   it('is reverted by its rollback (dropping the column, keeping the users), and re-applies', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
@@ -853,7 +868,7 @@ describe('0007_profile_display_name migration', () => {
 
     expect(await displayNameColumn()).toEqual([]);
     expect(await publicTables()).toEqual(TABLES_WITHOUT_ACCOUNTS_AND_CATEGORIES);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
     expect(
       await countOf("select count(*) as n from users where email = 'before@profile.test'"),
     ).toBe(1);
@@ -974,10 +989,11 @@ function isNewest(entries: readonly JournalEntry[], tag: string): boolean {
 
 describe('0009_categories migration', () => {
   it('backfills the default set for existing users on a database at 0007 and changes no other row', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     expect(await publicTables()).toEqual(TABLES_BEFORE_0009);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
     await insertUser('ana@categories.test');
     await insertUser('bob@categories.test');
     await insertUser('carla@categories.test');
@@ -1105,11 +1121,13 @@ describe('0009_categories migration', () => {
   it('is reverted by its rollback (dropping both tables, the function and the trigger, keeping the users), and re-applies', async () => {
     const users = await countOf('select count(*) as n from users');
 
+    await client.query(await rollback('0011_account_include_in_available'));
+
     await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
 
     expect(await publicTables()).toEqual(TABLES_BEFORE_0009);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
     expect(
       await countOf("select count(*) as n from pg_proc where proname = 'categories_guard'"),
     ).toBe(0);
@@ -1126,7 +1144,10 @@ describe('0009_categories migration', () => {
   });
 
   it('has a later journal when than 0000 to 0007, and the check fails when the order is reversed', async () => {
-    const entries = (await readJournal()).filter((entry) => entry.tag !== '0010_account_deletion');
+    const entries = (await readJournal()).filter(
+      (entry) =>
+        entry.tag !== '0010_account_deletion' && entry.tag !== '0011_account_include_in_available',
+    );
 
     expect(entries.map((entry) => entry.tag)).toContain('0009_categories');
     expect(isNewest(entries, '0009_categories')).toBe(true);
@@ -1149,10 +1170,11 @@ const BOUND_COLUMNS = ', purpose, user_id, session_family_id';
 
 describe('0010_account_deletion migration', () => {
   it('applies on top of the earlier ones with existing OAuth states, which keep the purpose sign_in', async () => {
+    await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
     expect(await publicTables()).not.toContain('deletion_grants');
     expect(await oauthStateColumns()).toEqual([]);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
     await insertState('legacy');
 
     await runMigrations(emptyDatabaseUrl);
@@ -1243,11 +1265,13 @@ describe('0010_account_deletion migration', () => {
     await insertState('d8', BOUND_COLUMNS, `, 'delete_account', '${bob}', gen_random_uuid()`);
     await insertGrant('g3', bob);
 
+    await client.query(await rollback('0011_account_include_in_available'));
+
     await client.query(await rollback('0010_account_deletion'));
 
     expect(await publicTables()).not.toContain('deletion_grants');
     expect(await oauthStateColumns()).toEqual([]);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
     expect(await countOf("select count(*) as n from oauth_states where state_hash = 'd8'")).toBe(0);
     expect(
       await countOf("select count(*) as n from oauth_states where state_hash = 'legacy'"),
@@ -1269,8 +1293,10 @@ describe('0010_account_deletion migration', () => {
     expect(await oauthStateColumns()).toHaveLength(3);
   });
 
-  it('is the newest journal entry, with a `when` greater than every other entry (the migrator applies by `when`)', async () => {
-    const entries = await readJournal();
+  it('has a `when` greater than every earlier entry (the migrator applies by `when`); only 0011 is newer', async () => {
+    const entries = (await readJournal()).filter(
+      (entry) => entry.tag !== '0011_account_include_in_available',
+    );
     const others = entries.filter((entry) => entry.tag !== '0010_account_deletion');
 
     expect(entries.find((entry) => entry.tag === '0010_account_deletion')).toMatchObject({
@@ -1281,5 +1307,173 @@ describe('0010_account_deletion migration', () => {
     expect(others).toHaveLength(entries.length - 1);
     for (const entry of others) expect(newest?.when).toBeGreaterThan(entry.when);
     expect(newest?.when).toBeGreaterThan(1790902441319);
+  });
+});
+
+const ROLLBACK_0011 = '0011_account_include_in_available';
+
+/** Inserts one account of the given type without the new column (a row created before 0011). */
+async function insertLegacyAccount(owner: string, name: string, type: string): Promise<void> {
+  await client.query(
+    `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${owner}', '${name}', '${type}', 'ARS', 0)`,
+  );
+}
+
+async function includeByName(owner: string): Promise<Record<string, boolean>> {
+  const result = await client.query<{ name: string; include_in_available: boolean }>(
+    `select name, include_in_available from accounts where owner_id = '${owner}' order by name`,
+  );
+  return Object.fromEntries(result.rows.map((row) => [row.name, row.include_in_available]));
+}
+
+async function includeColumn(): Promise<ColumnInfo[]> {
+  const result = await client.query<ColumnInfo>(
+    `select table_name, column_name, data_type, is_nullable, column_default
+       from information_schema.columns
+      where table_schema = 'public' and table_name = 'accounts' and column_name = 'include_in_available'`,
+  );
+  return result.rows;
+}
+
+describe('0011_account_include_in_available migration', () => {
+  let owner = '';
+
+  it('has one journal entry per migration and a `when` above the maximum of the earlier ones (validates NFR-03)', async () => {
+    const entries = await readJournal();
+    expect(entries).toHaveLength(ALL_MIGRATIONS);
+    const last = entries[entries.length - 1];
+    expect(last).toMatchObject({ idx: 11, tag: ROLLBACK_0011 });
+    const earlierMax = Math.max(...entries.slice(0, -1).map((entry) => entry.when));
+    expect(last?.when).toBeGreaterThan(earlierMax);
+  });
+
+  it('backfills accounts of every type created before it with the type default (validates AC-21, FR-11)', async () => {
+    owner = await insertUser('ana@available.test');
+    await client.query(await rollback(ROLLBACK_0011));
+    expect(await includeColumn()).toEqual([]);
+    for (const type of ACCOUNT_TYPES) await insertLegacyAccount(owner, `legacy-${type}`, type);
+
+    await runMigrations(emptyDatabaseUrl);
+
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(await includeByName(owner)).toEqual({
+      'legacy-bank_account': true,
+      'legacy-cash': true,
+      'legacy-credit_card': false,
+      'legacy-digital_wallet': true,
+      'legacy-savings': false,
+    });
+  });
+
+  it('gives the SQL backfill the same result as defaultIncludeInAvailable for each of the five types (validates AC-21)', async () => {
+    expect(ACCOUNT_TYPES).toHaveLength(5);
+    const stored = await includeByName(owner);
+    for (const type of ACCOUNT_TYPES as readonly AccountType[]) {
+      expect(stored[`legacy-${type}`]).toBe(defaultIncludeInAvailable(type));
+    }
+  });
+
+  it('adds a NOT NULL boolean column without default and refuses an insert that omits it (error path)', async () => {
+    expect(await includeColumn()).toEqual([
+      {
+        table_name: 'accounts',
+        column_name: 'include_in_available',
+        data_type: 'boolean',
+        is_nullable: 'NO',
+        column_default: null,
+      },
+    ]);
+    expect(
+      await sqlState(
+        `insert into accounts (owner_id, name, type, currency, opening_balance) values ('${owner}', 'no-value', 'cash', 'ARS', 0)`,
+      ),
+    ).toBe('23502');
+  });
+
+  it('refuses a credit card marked as included on insert and on update at the database level (error path, validates AC-10, AC-11)', async () => {
+    expect(
+      await sqlState(
+        `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ('${owner}', 'card-in', 'credit_card', 'ARS', 0, true)`,
+      ),
+    ).toBe('23514');
+    expect(
+      await sqlState(
+        `update accounts set include_in_available = true where owner_id = '${owner}' and type = 'credit_card'`,
+      ),
+    ).toBe('23514');
+    expect(
+      await sqlState(
+        `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available) values ('${owner}', 'card-out', 'credit_card', 'ARS', 0, false)`,
+      ),
+    ).toBeUndefined();
+    expect(
+      await countOf(
+        "select count(*) as n from pg_constraint where conname = 'accounts_credit_card_not_available_check'",
+      ),
+    ).toBe(1);
+  });
+
+  it('keeps the value across an archive and an unarchive (validates AC-01)', async () => {
+    await client.query(
+      `update accounts set include_in_available = false where owner_id = '${owner}' and name = 'legacy-cash'`,
+    );
+    await client.query(
+      `update accounts set archived_at = now() where owner_id = '${owner}' and name = 'legacy-cash'`,
+    );
+    expect((await includeByName(owner))['legacy-cash']).toBe(false);
+    await client.query(
+      `update accounts set archived_at = null where owner_id = '${owner}' and name = 'legacy-cash'`,
+    );
+    expect((await includeByName(owner))['legacy-cash']).toBe(false);
+  });
+
+  it('leaves no column and no changed row when the statements run in one transaction and the last one fails (error path, validates NFR-03)', async () => {
+    await client.query(await rollback(ROLLBACK_0011));
+    expect(await includeColumn()).toEqual([]);
+    const rowsBefore = await countOf('select count(*) as n from accounts');
+    const statements = (await readFile(`${migrationsFolder}/${ROLLBACK_0011}.sql`, 'utf8'))
+      .split('--> statement-breakpoint')
+      .map((statement) => statement.trim())
+      .filter((statement) => statement.length > 0);
+    expect(statements.length).toBeGreaterThan(1);
+
+    await client.query('begin');
+    let failed = false;
+    try {
+      for (const statement of statements.slice(0, -1)) await client.query(statement);
+      expect(await includeColumn()).toHaveLength(1);
+      await client.query('select 1 / 0');
+    } catch {
+      failed = true;
+    }
+    await client.query('rollback');
+
+    expect(failed).toBe(true);
+    expect(await includeColumn()).toEqual([]);
+    expect(await countOf('select count(*) as n from accounts')).toBe(rowsBefore);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+  });
+
+  it('is reverted by its rollback (column and journal row gone) and re-applies, restoring the type default of a non-default value (validates NFR-03)', async () => {
+    await runMigrations(emptyDatabaseUrl);
+    await client.query(
+      `update accounts set include_in_available = false where owner_id = '${owner}' and name = 'legacy-cash'`,
+    );
+    await client.query(
+      `update accounts set include_in_available = true where owner_id = '${owner}' and name = 'legacy-savings'`,
+    );
+
+    await client.query(await rollback(ROLLBACK_0011));
+
+    expect(await includeColumn()).toEqual([]);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await countOf('select count(*) as n from accounts')).toBeGreaterThan(0);
+
+    await runMigrations(emptyDatabaseUrl);
+
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    const stored = await includeByName(owner);
+    expect(stored['legacy-cash']).toBe(true);
+    expect(stored['legacy-savings']).toBe(false);
   });
 });

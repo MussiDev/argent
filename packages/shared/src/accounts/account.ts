@@ -63,15 +63,44 @@ export const accountNameSchema = z.string().transform((raw, ctx) => {
   return name;
 });
 
-/** `POST /accounts`. The opening balance is optional (absent is "0") and may be negative. */
-export const createAccountRequestSchema = z.object({
-  name: accountNameSchema,
-  type: accountTypeSchema,
-  currency: accountCurrencySchema,
-  openingBalance: openingBalanceSchema.default('0'),
-});
+/**
+ * Whether an account of this type counts toward the available balance by default. Shared by the
+ * API (create default, migration backfill rule) and the web create form.
+ */
+export function defaultIncludeInAvailable(type: AccountType): boolean {
+  return type === 'cash' || type === 'bank_account' || type === 'digital_wallet';
+}
+
+/**
+ * `POST /accounts`. The opening balance is optional (absent is "0") and may be negative. A credit
+ * card can never be included in the available balance.
+ */
+export const createAccountRequestSchema = z
+  .object({
+    name: accountNameSchema,
+    type: accountTypeSchema,
+    currency: accountCurrencySchema,
+    openingBalance: openingBalanceSchema.default('0'),
+    includeInAvailable: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type === 'credit_card' && value.includeInAvailable === true) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['includeInAvailable'],
+        message: 'A credit card cannot be included in the available balance',
+      });
+    }
+  });
 
 export type CreateAccountRequest = z.infer<typeof createAccountRequestSchema>;
+
+/** `PUT /accounts/:id/include-in-available`. */
+export const setIncludeInAvailableRequestSchema = z.object({
+  includeInAvailable: z.boolean(),
+});
+
+export type SetIncludeInAvailableRequest = z.infer<typeof setIncludeInAvailableRequestSchema>;
 
 /**
  * `PATCH /accounts/:id`. `type` and `currency` are immutable: declaring them as `never` makes
@@ -81,6 +110,7 @@ export const renameAccountRequestSchema = z.object({
   name: accountNameSchema,
   type: z.never().optional(),
   currency: z.never().optional(),
+  includeInAvailable: z.never().optional(),
 });
 
 export type RenameAccountRequest = z.infer<typeof renameAccountRequestSchema>;
@@ -122,6 +152,7 @@ export const accountResponseSchema = z.object({
   currency: accountCurrencySchema,
   openingBalance: minorUnitsStringSchema,
   balance: exactIntegerStringSchema,
+  includeInAvailable: z.boolean(),
   archived: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -131,7 +162,10 @@ export type AccountResponse = z.infer<typeof accountResponseSchema>;
 
 export const listAccountsResponseSchema = z.object({
   items: z.array(accountResponseSchema),
-  totals: z.record(accountCurrencySchema, exactIntegerStringSchema),
+  availableTotals: z.record(accountCurrencySchema, exactIntegerStringSchema),
+  netWorthTotals: z.record(accountCurrencySchema, exactIntegerStringSchema),
+  debtTotals: z.record(accountCurrencySchema, exactIntegerStringSchema),
+  creditCardCount: z.number().int().min(0),
   total: z.number().int().min(0),
   limit: z.number().int().min(1).max(LIST_ACCOUNTS_MAX_LIMIT),
   offset: z.number().int().min(0),

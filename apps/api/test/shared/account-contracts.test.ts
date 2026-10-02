@@ -9,9 +9,11 @@ import {
   accountNameSchema,
   accountResponseSchema,
   createAccountRequestSchema,
+  defaultIncludeInAvailable,
   listAccountsQuerySchema,
   listAccountsResponseSchema,
   renameAccountRequestSchema,
+  setIncludeInAvailableRequestSchema,
 } from '@pesly/shared';
 
 const valid = { name: 'Cash', type: 'cash', currency: 'ARS' } as const;
@@ -22,6 +24,10 @@ function failedPaths(result: {
   error?: { issues: { path: PropertyKey[] }[] };
 }): string[] {
   return (result.error?.issues ?? []).map((i) => i.path.map(String).join('.'));
+}
+
+function omit(source: Record<string, unknown>, key: string): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(source).filter(([name]) => name !== key));
 }
 
 describe('createAccountRequestSchema', () => {
@@ -132,6 +138,77 @@ describe('createAccountRequestSchema', () => {
   });
 });
 
+describe('defaultIncludeInAvailable', () => {
+  it.each(['cash', 'bank_account', 'digital_wallet'] as const)('is true for %s (AC-03)', (type) => {
+    expect(defaultIncludeInAvailable(type)).toBe(true);
+  });
+
+  it.each(['savings', 'credit_card'] as const)('is false for %s (AC-04, AC-09)', (type) => {
+    expect(defaultIncludeInAvailable(type)).toBe(false);
+  });
+});
+
+describe('createAccountRequestSchema includeInAvailable', () => {
+  it.each([true, false])('keeps an explicit %s for a non-card type (AC-05)', (value) => {
+    expect(
+      createAccountRequestSchema.parse({ ...valid, includeInAvailable: value }).includeInAvailable,
+    ).toBe(value);
+  });
+
+  it('leaves includeInAvailable undefined when omitted', () => {
+    expect(createAccountRequestSchema.parse(valid).includeInAvailable).toBeUndefined();
+  });
+
+  it.each(['true', 1, null])(
+    'rejects non-boolean %j with an invalid-type issue at includeInAvailable (AC-06)',
+    (value) => {
+      const result = createAccountRequestSchema.safeParse({ ...valid, includeInAvailable: value });
+      expect(result.success).toBe(false);
+      const issue = result.error?.issues.find((i) => i.path.join('.') === 'includeInAvailable');
+      expect(issue?.code).toBe('invalid_type');
+    },
+  );
+
+  it('fails a credit card with includeInAvailable true at includeInAvailable (AC-10)', () => {
+    const result = createAccountRequestSchema.safeParse({
+      ...valid,
+      type: 'credit_card',
+      includeInAvailable: true,
+    });
+    expect(result.success).toBe(false);
+    expect(failedPaths(result)).toContain('includeInAvailable');
+  });
+
+  it.each([false, undefined])('accepts a credit card with includeInAvailable %s (AC-10)', (v) => {
+    expect(
+      createAccountRequestSchema.safeParse({
+        ...valid,
+        type: 'credit_card',
+        includeInAvailable: v,
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('setIncludeInAvailableRequestSchema', () => {
+  it.each([true, false])('accepts %s', (value) => {
+    expect(setIncludeInAvailableRequestSchema.parse({ includeInAvailable: value })).toEqual({
+      includeInAvailable: value,
+    });
+  });
+
+  it.each([
+    {},
+    { includeInAvailable: 'true' },
+    { includeInAvailable: 1 },
+    { includeInAvailable: null },
+  ])('rejects %j and names includeInAvailable (AC-08)', (body) => {
+    const result = setIncludeInAvailableRequestSchema.safeParse(body);
+    expect(result.success).toBe(false);
+    expect(failedPaths(result)).toContain('includeInAvailable');
+  });
+});
+
 describe('accountNameSchema', () => {
   it('accepts 50 code points and fails on 51', () => {
     expect(accountNameSchema.safeParse('a'.repeat(50)).success).toBe(true);
@@ -205,6 +282,12 @@ describe('renameAccountRequestSchema', () => {
     expect(failedPaths(withType)).toContain('type');
   });
 
+  it('rejects includeInAvailable as an invalid field (FR-04)', () => {
+    const result = renameAccountRequestSchema.safeParse({ name: 'X', includeInAvailable: true });
+    expect(result.success).toBe(false);
+    expect(failedPaths(result)).toContain('includeInAvailable');
+  });
+
   it('rejects a missing name', () => {
     expect(renameAccountRequestSchema.safeParse({}).success).toBe(false);
   });
@@ -256,10 +339,24 @@ describe('response schemas', () => {
     currency: 'ARS',
     openingBalance: '0',
     balance: '-150000',
+    includeInAvailable: true,
     archived: false,
     archivedAt: null,
     createdAt: '2026-10-01T12:00:00.000Z',
   };
+
+  const totals = (ars: string, usd: string) => ({ ARS: ars, USD: usd });
+  const listBody = {
+    items: [account],
+    availableTotals: totals('-150000', '0'),
+    netWorthTotals: totals('-150000', '0'),
+    debtTotals: totals('0', '0'),
+    creditCardCount: 0,
+    total: 1,
+    limit: 50,
+    offset: 0,
+  };
+  const totalsKeys = ['availableTotals', 'netWorthTotals', 'debtTotals'] as const;
 
   it('accepts an account with decimal-string amounts', () => {
     expect(accountResponseSchema.safeParse(account).success).toBe(true);
@@ -276,17 +373,42 @@ describe('response schemas', () => {
     expect(accountResponseSchema.safeParse({ ...account, balance: 5 }).success).toBe(false);
   });
 
-  it('accepts a list response and requires both currency totals', () => {
-    const body = {
-      items: [account],
-      totals: { ARS: '-150000', USD: '0' },
-      total: 1,
-      limit: 50,
-      offset: 0,
-    };
-    expect(listAccountsResponseSchema.safeParse(body).success).toBe(true);
-    expect(listAccountsResponseSchema.safeParse({ ...body, totals: { ARS: '1' } }).success).toBe(
+  it('requires includeInAvailable on the account response (AC-02)', () => {
+    const without = omit(account, 'includeInAvailable');
+    const result = accountResponseSchema.safeParse(without);
+    expect(result.success).toBe(false);
+    expect(failedPaths(result)).toContain('includeInAvailable');
+  });
+
+  it('accepts a list response and requires both currencies in each totals map', () => {
+    expect(listAccountsResponseSchema.safeParse(listBody).success).toBe(true);
+    for (const key of totalsKeys) {
+      expect(
+        listAccountsResponseSchema.safeParse({ ...listBody, [key]: { ARS: '1' } }).success,
+      ).toBe(false);
+      const without = omit(listBody, key);
+      expect(listAccountsResponseSchema.safeParse(without).success).toBe(false);
+    }
+  });
+
+  it('no longer carries the old totals map', () => {
+    const parsed = listAccountsResponseSchema.parse({ ...listBody, totals: totals('1', '1') });
+    expect('totals' in parsed).toBe(false);
+  });
+
+  it.each([-1, 1.5, '2'])('rejects creditCardCount %j (AC-19, AC-20)', (creditCardCount) => {
+    expect(listAccountsResponseSchema.safeParse({ ...listBody, creditCardCount }).success).toBe(
       false,
+    );
+  });
+
+  it('requires creditCardCount and accepts 0 and positive integers (AC-19, AC-20)', () => {
+    const without = omit(listBody, 'creditCardCount');
+    const missing = listAccountsResponseSchema.safeParse(without);
+    expect(missing.success).toBe(false);
+    expect(failedPaths(missing)).toContain('creditCardCount');
+    expect(listAccountsResponseSchema.safeParse({ ...listBody, creditCardCount: 3 }).success).toBe(
+      true,
     );
   });
 
@@ -294,29 +416,24 @@ describe('response schemas', () => {
     const huge = (9_300n * 10n ** 15n).toString();
     const beyond = (MINOR_UNITS_MAX + 1n).toString();
     const body = {
+      ...listBody,
       items: [{ ...account, balance: beyond }],
-      totals: { ARS: huge, USD: `-${huge}` },
-      total: 1,
-      limit: 50,
-      offset: 0,
+      availableTotals: totals(huge, `-${huge}`),
+      netWorthTotals: totals(huge, `-${huge}`),
+      debtTotals: totals(`-${huge}`, huge),
     };
     expect(listAccountsResponseSchema.safeParse(body).success).toBe(true);
     expect(accountResponseSchema.safeParse({ ...account, balance: beyond }).success).toBe(true);
   });
 
-  it('rejects a non-integer or 41-digit balance or total (AC-22)', () => {
-    const body = {
-      items: [account],
-      totals: { ARS: '1', USD: '0' },
-      total: 1,
-      limit: 50,
-      offset: 0,
-    };
+  it('rejects a non-integer or 41-digit balance or total in every map (AC-22)', () => {
     for (const bad of ['1.5', 'abc', '', '9'.repeat(41)]) {
       expect(accountResponseSchema.safeParse({ ...account, balance: bad }).success).toBe(false);
-      expect(
-        listAccountsResponseSchema.safeParse({ ...body, totals: { ARS: bad, USD: '0' } }).success,
-      ).toBe(false);
+      for (const key of totalsKeys) {
+        expect(
+          listAccountsResponseSchema.safeParse({ ...listBody, [key]: totals(bad, '0') }).success,
+        ).toBe(false);
+      }
     }
   });
 

@@ -25,6 +25,7 @@ export const ERROR_CODES = [
   'CATEGORY_NESTING_TOO_DEEP',
   'CATEGORY_PARENT_KIND_MISMATCH',
   'REAUTHENTICATION_REQUIRED',
+  'ACCOUNT_ARCHIVED',
   'INTERNAL',
 ] as const;
 
@@ -46,10 +47,13 @@ export type ErrorResponse = z.infer<typeof errorResponseSchema>;
  */
 export class AppError extends Error {
   readonly code: ErrorCode;
+  /** Failing input paths (`<part>.<path>`), never values; the error handler echoes them. */
+  readonly fields: readonly string[] | undefined;
 
-  constructor(code: ErrorCode, message: string = code) {
+  constructor(code: ErrorCode, message: string = code, fields?: string[]) {
     super(message);
     this.name = new.target.name;
     this.code = code;
+    this.fields = fields;
   }
 }

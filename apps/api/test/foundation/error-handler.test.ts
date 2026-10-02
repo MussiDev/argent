@@ -43,6 +43,9 @@ function buildApp(env: Env, lines: string[] = []) {
   router.get('/reauth', () => {
     throw new ReauthenticationRequired();
   });
+  router.get('/archived', () => {
+    throw new AppError('ACCOUNT_ARCHIVED');
+  });
   const logger = createLogger({
     level: 'info',
     destination: { write: (line: string) => lines.push(line) },
@@ -117,6 +120,13 @@ describe('error handler', () => {
 
     expect(response.status).toBe(401);
     expect(response.body).toEqual({ code: 'REAUTHENTICATION_REQUIRED' });
+  });
+
+  it('maps ACCOUNT_ARCHIVED to 409 with only its code (FR-06)', async () => {
+    const response = await request(buildApp(testEnv())).get('/archived');
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ code: 'ACCOUNT_ARCHIVED' });
   });
 
   it('answers unknown routes with 404 NOT_FOUND', async () => {

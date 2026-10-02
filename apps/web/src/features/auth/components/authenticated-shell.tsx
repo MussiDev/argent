@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { House, ShieldCheck, Tags, UserRound } from 'lucide-react';
+import { House, ShieldCheck, Tags, UserRound, Wallet } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Link } from '@/i18n/navigation';
@@ -73,6 +73,14 @@ export function AuthenticatedShell({
           >
             <Tags aria-hidden />
             {t('nav.categories')}
+          </Link>
+          <Link
+            href="/investments"
+            aria-current={currentPath === '/investments' ? 'page' : undefined}
+            className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+          >
+            <Wallet aria-hidden />
+            {t('nav.investments')}
           </Link>
           <Link
             href="/settings/security"

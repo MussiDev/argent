@@ -504,6 +504,7 @@ describe('api client: two-factor authentication', () => {
       ok: false,
       code: 'VALIDATION_FAILED',
       messageKey: 'validationFailed',
+      fields: ['displayName'],
     });
   });
 

@@ -15,6 +15,7 @@ import ResetPasswordPage from '../src/app/[locale]/(auth)/reset-password/page';
 import SignInPage from '../src/app/[locale]/(auth)/sign-in/page';
 import SecondFactorPage from '../src/app/[locale]/(auth)/sign-in/second-factor/page';
 import DeleteAccountPage from '../src/app/[locale]/(app)/settings/delete-account/page';
+import InvestmentsPage from '../src/app/[locale]/(app)/investments/page';
 import ProfilePage from '../src/app/[locale]/(app)/settings/profile/page';
 import SecurityPage from '../src/app/[locale]/(app)/settings/security/page';
 import VerifyEmailPage from '../src/app/[locale]/(auth)/verify-email/page';
@@ -293,6 +294,26 @@ describe('routes', () => {
     ).toBeDefined();
     expect(await screen.findByLabelText(es.deleteUser.password)).toBeDefined();
     expect(calls.map((call) => call.path)).toEqual(['/auth/session', '/profile']);
+  });
+
+  it('the investments screen is only shown behind the session guard', async () => {
+    const { calls } = stubApi({
+      'GET /auth/session': SESSION,
+      'GET /investments/portfolios': { status: 200, body: { portfolios: [] } },
+    });
+    renderApp(
+      <AppLayout>
+        <InvestmentsPage />
+      </AppLayout>,
+    );
+
+    expect(screen.queryByRole('heading', { name: es.investments.title })).toBeNull();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: es.investments.title }),
+    ).toBeDefined();
+    expect(await screen.findByRole('heading', { name: es.investments.empty.title })).toBeDefined();
+    expect(calls.map((call) => call.path)).toContain('/investments/portfolios');
+    expect(calls[0]?.path).toBe('/auth/session');
   });
 
   it('the profile screen is only shown behind the session guard', async () => {

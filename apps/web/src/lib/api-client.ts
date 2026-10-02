@@ -4,6 +4,10 @@ import {
   errorResponseSchema,
   listAccountsResponseSchema,
   listCategoriesResponseSchema,
+  addHoldingResponseSchema,
+  holdingResponseSchema,
+  portfolioListResponseSchema,
+  portfolioResponseSchema,
   passwordResetConfirmResponseSchema,
   passwordResetResponseSchema,
   profileResponseSchema,
@@ -28,6 +32,14 @@ import {
   type ListAccountsResponse,
   type ListCategoriesQuery,
   type ListCategoriesResponse,
+  type AddHoldingRequest,
+  type AddHoldingResponse,
+  type CreatePortfolioRequest,
+  type HoldingResponse,
+  type PortfolioListResponse,
+  type PortfolioResponse,
+  type SetPriceRequest,
+  type UpdateHoldingRequest,
   type PasswordResetConfirmRequest,
   type PasswordResetConfirmResponse,
   type PasswordResetRequest,
@@ -90,6 +102,8 @@ export interface ApiFailure {
   ok: false;
   code: ApiFailureCode;
   messageKey: ApiErrorKey;
+  /** Names of the invalid request fields, present only when the API sent them. */
+  fields?: string[];
 }
 
 export type ApiResult<T> = { ok: true; data: T } | ApiFailure;
@@ -222,6 +236,14 @@ export interface ApiClient {
   deleteMyAccount(body: DeleteUserRequest): Promise<ApiResult<undefined>>;
   /** The Google URL where a password-less user confirms the deletion. */
   startDeletionReauth(): Promise<ApiResult<StartDeletionReauthResponse>>;
+  listPortfolios(): Promise<ApiResult<PortfolioListResponse>>;
+  createPortfolio(body: CreatePortfolioRequest): Promise<ApiResult<PortfolioResponse>>;
+  deletePortfolio(portfolioId: string): Promise<ApiResult<undefined>>;
+  /** 201 when created, 200 when merged into an existing holding: see `merged`. */
+  addHolding(portfolioId: string, body: AddHoldingRequest): Promise<ApiResult<AddHoldingResponse>>;
+  updateHolding(holdingId: string, body: UpdateHoldingRequest): Promise<ApiResult<HoldingResponse>>;
+  setHoldingPrice(holdingId: string, body: SetPriceRequest): Promise<ApiResult<HoldingResponse>>;
+  deleteHolding(holdingId: string): Promise<ApiResult<undefined>>;
 }
 
 /**
@@ -262,7 +284,9 @@ export function createApiClient({
 
     if (!response.ok) {
       const parsed = errorResponseSchema.safeParse(payload);
-      return failure(parsed.success ? parsed.data.code : 'INTERNAL');
+      if (!parsed.success) return failure('INTERNAL');
+      const failed = failure(parsed.data.code);
+      return parsed.data.fields ? { ...failed, fields: parsed.data.fields } : failed;
     }
     if (options.response === null) return { ok: true, data: undefined as T };
     const parsed = options.response.safeParse(payload);
@@ -581,6 +605,59 @@ export function createApiClient({
         path: '/profile/delete/google/start',
         body: {},
         response: startDeletionReauthResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    listPortfolios: () =>
+      request({
+        method: 'GET',
+        path: '/investments/portfolios',
+        response: portfolioListResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    createPortfolio: (body) =>
+      request({
+        method: 'POST',
+        path: '/investments/portfolios',
+        body,
+        response: portfolioResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    deletePortfolio: (portfolioId) =>
+      request({
+        method: 'DELETE',
+        path: `/investments/portfolios/${encodeURIComponent(portfolioId)}`,
+        response: null,
+        refreshOnUnauthenticated: true,
+      }),
+    addHolding: (portfolioId, body) =>
+      request({
+        method: 'POST',
+        path: `/investments/portfolios/${encodeURIComponent(portfolioId)}/holdings`,
+        body,
+        response: addHoldingResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    updateHolding: (holdingId, body) =>
+      request({
+        method: 'PATCH',
+        path: `/investments/holdings/${encodeURIComponent(holdingId)}`,
+        body,
+        response: holdingResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    setHoldingPrice: (holdingId, body) =>
+      request({
+        method: 'PUT',
+        path: `/investments/holdings/${encodeURIComponent(holdingId)}/price`,
+        body,
+        response: holdingResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    deleteHolding: (holdingId) =>
+      request({
+        method: 'DELETE',
+        path: `/investments/holdings/${encodeURIComponent(holdingId)}`,
+        response: null,
         refreshOnUnauthenticated: true,
       }),
   };

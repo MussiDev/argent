@@ -110,11 +110,15 @@ describe('AuthenticatedShell', () => {
       '/en/settings/profile',
     );
     expect(screen.getByRole('link', { name: en.app.nav.home }).getAttribute('href')).toBe('/en');
+    expect(screen.getByRole('link', { name: en.app.nav.investments }).getAttribute('href')).toBe(
+      '/en/investments',
+    );
   });
 
   it.each([
     ['/settings/security', 'security'],
     ['/settings/profile', 'profile'],
+    ['/investments', 'investments'],
     ['/', 'home'],
   ] as const)(
     'marks the link of the current page (%s) with aria-current',
@@ -137,6 +141,10 @@ describe('AuthenticatedShell', () => {
       expect(security.getAttribute('aria-current')).toBe(current === 'security' ? 'page' : null);
       expect(profile.getAttribute('aria-current')).toBe(current === 'profile' ? 'page' : null);
       expect(home.getAttribute('aria-current')).toBe(current === 'home' ? 'page' : null);
+      const investments = screen.getByRole('link', { name: es.app.nav.investments });
+      expect(investments.getAttribute('aria-current')).toBe(
+        current === 'investments' ? 'page' : null,
+      );
     },
   );
 });

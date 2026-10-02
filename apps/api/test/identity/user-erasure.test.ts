@@ -216,6 +216,31 @@ const REGISTRY: readonly RegisteredTable[] = [
       ]);
     },
   },
+  {
+    table: 'portfolios',
+    userColumn: 'owner_id',
+    policy: 'cascade',
+    seed: async (context) => {
+      await query(context, "insert into portfolios (owner_id, name) values ($1, 'Balanz')", [
+        context.userId,
+      ]);
+    },
+  },
+  {
+    table: 'holdings',
+    userColumn: 'owner_id',
+    policy: 'cascade',
+    // Registered after portfolios: the holding hangs from the user's portfolio.
+    seed: async (context) => {
+      await query(
+        context,
+        `insert into holdings (portfolio_id, owner_id, ticker, instrument_name, instrument_type, quantity, valuation_currency)
+         select id, owner_id, 'AAPL', 'Apple', 'cedear', 1000000000, 'ARS'
+         from portfolios where owner_id = $1 order by created_at, id limit 1`,
+        [context.userId],
+      );
+    },
+  },
 ];
 
 /** Created by the access-control tests and never dropped; they are not user data of the product. */

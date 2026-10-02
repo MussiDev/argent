@@ -91,6 +91,66 @@ describe('hexagonal import boundaries', () => {
   });
 });
 
+describe('identity never imports the categories module (dependency direction)', () => {
+  it.each([
+    [DOMAIN_FILE, "import { x } from '../../categories';"],
+    [DOMAIN_FILE, "import { x } from '../../categories/domain/category';"],
+    [APPLICATION_FILE, "import { seedDefaultCategories } from '../../categories';"],
+    [APPLICATION_FILE, "import { x } from '../../categories/application/ensure-defaults';"],
+    ['apps/api/src/identity/index.ts', "import { seedDefaultCategories } from '../categories';"],
+    [
+      'apps/api/src/identity/index.ts',
+      "import { x } from './../categories/application/ensure-defaults';",
+    ],
+    [
+      'apps/api/src/identity/infrastructure/db/probe.ts',
+      "import { seedDefaultCategories } from '../../../categories';",
+    ],
+    [
+      'apps/api/src/identity/infrastructure/http/probe.ts',
+      "import { x } from '../../../categories/infrastructure/db/schema';",
+    ],
+  ])('rejects %s: %s', async (file, source) => {
+    expect(await restrictedImports(file, `${source}\n`)).toEqual(['no-restricted-imports']);
+  });
+
+  it('keeps rejecting infrastructure and test imports where the categories pattern was added', async () => {
+    expect(
+      await restrictedImports(
+        APPLICATION_FILE,
+        "import { x } from '../infrastructure/db/schema';\n",
+      ),
+    ).toEqual(['no-restricted-imports']);
+    expect(await restrictedImports(DOMAIN_FILE, "import { eq } from 'drizzle-orm';\n")).toEqual([
+      'no-restricted-imports',
+    ]);
+    expect(
+      await restrictedImports(
+        'apps/api/src/identity/infrastructure/db/probe.ts',
+        "import { x } from '../../../../test/fakes/mutable-clock';\n",
+      ),
+    ).toEqual(['no-restricted-imports']);
+  });
+
+  it('allows the composition root and other modules to import categories', async () => {
+    const source = "import { seedDefaultCategories } from './categories';\n";
+    expect(await restrictedImports('apps/api/src/server.ts', source)).toEqual([]);
+    expect(
+      await restrictedImports(
+        'apps/api/src/accounts/application/probe.ts',
+        "import { x } from '../../categories';\n",
+      ),
+    ).toEqual([]);
+  });
+
+  it('allows identity infrastructure to import its own files', async () => {
+    const source = "import { x } from './schema';\nimport { y } from '../email/email-transport';\n";
+    expect(
+      await restrictedImports('apps/api/src/identity/infrastructure/db/probe.ts', source),
+    ).toEqual([]);
+  });
+});
+
 describe('hexagonal import boundaries in the accounts module', () => {
   const ACCOUNTS_DOMAIN_FILE = 'apps/api/src/accounts/domain/probe.ts';
   const ACCOUNTS_APPLICATION_FILE = 'apps/api/src/accounts/application/probe.ts';

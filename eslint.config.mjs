@@ -33,6 +33,13 @@ const IO_IMPORTS = {
   message: 'Domain code must stay free of frameworks, drivers, SDKs and Node built-ins.',
 };
 
+// Identity declares a port and the composition root wires categories in; identity never knows it.
+const CATEGORIES_IMPORTS = {
+  group: ['**/categories', '**/categories/**'],
+  message:
+    'Identity must not import the categories module; the composition root registers a hook instead.',
+};
+
 export default defineConfig(
   {
     ignores: [
@@ -89,6 +96,31 @@ export default defineConfig(
     files: ['apps/api/src/*/application/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', { patterns: [INFRASTRUCTURE_IMPORTS, TEST_IMPORTS] }],
+    },
+  },
+  // Identity: the three blocks above repeated with CATEGORIES_IMPORTS added (later blocks win).
+  {
+    files: ['apps/api/src/identity/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [TEST_IMPORTS, CATEGORIES_IMPORTS] }],
+    },
+  },
+  {
+    files: ['apps/api/src/identity/domain/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [INFRASTRUCTURE_IMPORTS, IO_IMPORTS, TEST_IMPORTS, CATEGORIES_IMPORTS] },
+      ],
+    },
+  },
+  {
+    files: ['apps/api/src/identity/application/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [INFRASTRUCTURE_IMPORTS, TEST_IMPORTS, CATEGORIES_IMPORTS] },
+      ],
     },
   },
 );

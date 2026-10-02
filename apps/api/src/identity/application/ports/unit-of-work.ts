@@ -1,4 +1,5 @@
 import type { EmailSender } from './email-sender';
+import type { NewUserProvisioning } from './new-user-provisioning';
 import type { OneTimeTokenRepository } from './one-time-token-repository';
 import type { RecoveryCodeRepository } from './recovery-code-repository';
 import type { SessionRepository } from './session-repository';
@@ -7,7 +8,7 @@ import type { TwoFactorRepository } from './two-factor-repository';
 import type { UserIdentityRepository } from './user-identity-repository';
 import type { UserRepository } from './user-repository';
 
-/** Repositories bound to one transaction. */
+/** Repositories and writers (the email outbox, new-user provisioning) bound to one transaction. */
 export interface TransactionalRepositories {
   users: UserRepository;
   oneTimeTokens: OneTimeTokenRepository;
@@ -17,6 +18,7 @@ export interface TransactionalRepositories {
   twoFactor: TwoFactorRepository;
   recoveryCodes: RecoveryCodeRepository;
   signInChallenges: SignInChallengeRepository;
+  provisioning: NewUserProvisioning;
 }
 
 /**

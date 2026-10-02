@@ -23,7 +23,9 @@ import { InMemoryEmailSender } from '../fakes/in-memory-email-sender';
 const DUMMY_HASH = '$argon2id$dummy';
 
 /** Records the order in which ports are used, to check what happens before what. */
-function buildRegisterUser(options: { existing?: string[]; limit?: number; raceOn?: string } = {}) {
+function buildRegisterUser(
+  options: { existing?: string[]; limit?: number; raceOn?: string; provisionFails?: Error } = {},
+) {
   const calls: string[] = [];
   const created: NewUser[] = [];
   const emailSender = new InMemoryEmailSender();
@@ -93,6 +95,14 @@ function buildRegisterUser(options: { existing?: string[]; limit?: number; raceO
         twoFactor: {} as TransactionalRepositories['twoFactor'],
         recoveryCodes: {} as TransactionalRepositories['recoveryCodes'],
         signInChallenges: {} as TransactionalRepositories['signInChallenges'],
+        provisioning: {
+          provision: (userId) => {
+            calls.push(`provision:${userId}`);
+            return options.provisionFails
+              ? Promise.reject(options.provisionFails)
+              : Promise.resolve();
+          },
+        },
       }),
   };
   const registerUser = new RegisterUser({
@@ -136,6 +146,7 @@ describe('RegisterUser', () => {
       'findByEmail',
       'hash',
       'create',
+      'provision:user-1',
     ]);
     expect(created[0]?.email.value).toBe('ana@example.com');
     expect(emailSender.enqueued).toEqual([
@@ -195,6 +206,34 @@ describe('RegisterUser', () => {
 
     await expect(registerUser.execute(INPUT)).resolves.toEqual({ outcome: 'existing' });
     expect(emailSender.enqueued.map((email) => email.kind)).toEqual(['discard']);
+  });
+
+  it('provisions the new user right after create (AC-01)', async () => {
+    const { registerUser, calls } = buildRegisterUser();
+
+    await registerUser.execute(INPUT);
+
+    expect(calls.slice(-2)).toEqual(['create', 'provision:user-1']);
+  });
+
+  it('rejects with the provisioning error and enqueues no verification email (AC-19)', async () => {
+    const fault = new Error('seeding failed');
+    const { registerUser, calls, emailSender } = buildRegisterUser({ provisionFails: fault });
+
+    await expect(registerUser.execute(INPUT)).rejects.toBe(fault);
+
+    expect(calls.at(-1)).toBe('provision:user-1');
+    expect(emailSender.enqueued).toEqual([]);
+  });
+
+  it('provisions nothing for an existing email or a lost registration race (FR-01)', async () => {
+    const existing = buildRegisterUser({ existing: ['ana@example.com'] });
+    await existing.registerUser.execute(INPUT);
+    expect(existing.calls.some((call) => call.startsWith('provision'))).toBe(false);
+
+    const raced = buildRegisterUser({ raceOn: 'ana@example.com' });
+    await raced.registerUser.execute(INPUT);
+    expect(raced.calls.some((call) => call.startsWith('provision'))).toBe(false);
   });
 
   it('applies the password policy (length, then breach) to new and existing emails alike', async () => {

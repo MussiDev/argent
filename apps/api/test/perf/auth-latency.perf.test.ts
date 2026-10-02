@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import autocannon from 'autocannon';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { seedDefaultCategories } from '../../src/categories';
 import { createDatabase, type DatabaseConnection } from '../../src/shared/db/client';
 import { createIdentityHarness } from '../helpers/identity-harness';
 import { seedUser } from '../helpers/session-client';
@@ -54,6 +55,8 @@ async function listen(): Promise<string> {
   const harness = createIdentityHarness(connection, {
     realSessions: true,
     env: { TRUST_PROXY: '1' },
+    // As in production, so the registration budget includes seeding the defaults.
+    onUserCreated: [seedDefaultCategories],
   });
   server = createServer(harness.app);
   const target = server;

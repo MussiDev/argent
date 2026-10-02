@@ -67,21 +67,24 @@ export class RegisterUser {
 
     const passwordHash = await this.deps.passwordHasher.hash(input.password);
     try {
-      const userId = await this.deps.unitOfWork.run(async ({ users, emailSender }) => {
-        const user = await users.create({
-          email,
-          passwordHash,
-          displayName: input.displayName,
-          ...defaults,
-        });
-        await emailSender.enqueue({
-          kind: 'verification',
-          userId: user.id,
-          toEmail: user.email,
-          language: user.language,
-        });
-        return user.id;
-      });
+      const userId = await this.deps.unitOfWork.run(
+        async ({ users, emailSender, provisioning }) => {
+          const user = await users.create({
+            email,
+            passwordHash,
+            displayName: input.displayName,
+            ...defaults,
+          });
+          await provisioning.provision(user.id);
+          await emailSender.enqueue({
+            kind: 'verification',
+            userId: user.id,
+            toEmail: user.email,
+            language: user.language,
+          });
+          return user.id;
+        },
+      );
       return { outcome: 'created', userId };
     } catch (error) {
       // Another request registered the same email in between: answer as for an existing email.

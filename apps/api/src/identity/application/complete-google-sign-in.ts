@@ -175,7 +175,7 @@ export class CompleteGoogleSignIn {
   }
 
   private async resolveAccount(
-    { users, identities, sessions }: TransactionalRepositories,
+    { users, identities, sessions, provisioning }: TransactionalRepositories,
     claims: GoogleClaims,
     pending: OAuthState,
   ): Promise<ResolvedAccount> {
@@ -245,6 +245,7 @@ export class CompleteGoogleSignIn {
       language: pending.language,
       displayName: displayNameFromGoogleClaim(claims.name),
     });
+    await provisioning.provision(created.id);
     await link(created.id);
     return { outcome: 'resolved', via: 'created', user: created };
   }

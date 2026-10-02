@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import { createApp, type RouterFactory } from '../../src/app';
-import { createEmailWorker } from '../../src/identity';
+import { createEmailWorker, type UserCreatedHook } from '../../src/identity';
 import type { BreachedPasswordChecker } from '../../src/identity/application/ports/breached-password-checker';
 import type { EmailWorker } from '../../src/identity/infrastructure/email/email-worker';
 import type { DatabaseConnection } from '../../src/shared/db/client';
@@ -41,6 +41,8 @@ export interface IdentityHarnessOptions {
   routerFactories?: RouterFactory[];
   /** Test-only routers (fixtures); `createApp` mounts them only when NODE_ENV is `test`. */
   testRouterFactories?: RouterFactory[];
+  /** Hooks run when a user is created (default none, so identity tests do not seed anything). */
+  onUserCreated?: readonly UserCreatedHook[];
 }
 
 /** The API with the identity routes and an email worker, sharing one clock and one transport. */
@@ -66,6 +68,7 @@ export function createIdentityHarness(
       ...(options.breachedPasswordChecker
         ? { breachedPasswordChecker: options.breachedPasswordChecker }
         : {}),
+      ...(options.onUserCreated ? { onUserCreated: options.onUserCreated } : {}),
     },
     ...(options.routerFactories ? { routerFactories: options.routerFactories } : {}),
     ...(options.testRouterFactories ? { testRouterFactories: options.testRouterFactories } : {}),

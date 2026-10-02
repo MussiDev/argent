@@ -58,6 +58,7 @@ import { DrizzleUserIdentityRepository } from './infrastructure/db/drizzle-user-
 import { DrizzleUserRepository } from './infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from './infrastructure/db/postgres-attempt-limiter';
 import type { IdentityDb } from './infrastructure/db/schema';
+import type { UserCreatedHook } from './infrastructure/db/user-created-hook';
 import type { EmailTransport } from './infrastructure/email/email-transport';
 import { EmailWorker } from './infrastructure/email/email-worker';
 import { OutboxEmailSender } from './infrastructure/email/outbox-email-sender';
@@ -116,6 +117,7 @@ export * from './application/ports/unit-of-work';
 export * from './application/ports/user-identity-repository';
 export * from './application/ports/user-repository';
 export type { IdentityDb } from './infrastructure/db/schema';
+export type { UserCreatedHook } from './infrastructure/db/user-created-hook';
 export { systemClock } from './infrastructure/system-clock';
 export { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './infrastructure/http/session-cookies';
 export { createEmailTransport } from './infrastructure/email/email-transport';
@@ -128,6 +130,11 @@ export interface IdentityInfrastructureDependencies {
   env: Pick<Env, 'BREACH_CHECKER' | 'TOTP_ENCRYPTION_KEY'>;
   logger: Logger;
   clock?: Clock;
+  /**
+   * Run, in order, inside the transaction that creates a user (registration and Google sign-up),
+   * so other modules can provision a new account; a rejection rolls the creation back.
+   */
+  onUserCreated?: readonly UserCreatedHook[];
 }
 
 export interface IdentityInfrastructure {
@@ -162,6 +169,7 @@ export function createIdentityInfrastructure({
   env,
   logger,
   clock = systemClock,
+  onUserCreated,
 }: IdentityInfrastructureDependencies): IdentityInfrastructure {
   const attemptLimiter = new PostgresAttemptLimiter(db, clock);
   const oauthStates = new DrizzleOAuthStateRepository(db);
@@ -184,7 +192,7 @@ export function createIdentityInfrastructure({
         : new HibpBreachedPasswordChecker({ logger }),
     tokenGenerator: new CryptoTokenGenerator(),
     emailSender: new OutboxEmailSender(db, clock),
-    unitOfWork: new DrizzleUnitOfWork(db, clock),
+    unitOfWork: new DrizzleUnitOfWork(db, clock, onUserCreated),
     twoFactor: new DrizzleTwoFactorRepository(db),
     recoveryCodes: new DrizzleRecoveryCodeRepository(db),
     signInChallenges,

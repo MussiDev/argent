@@ -60,6 +60,13 @@ All notable changes to this project are documented in this file. The format foll
   screens, the recovery codes file and every email, in Spanish and English. The workspace packages
   are `@pesly/*`, and Railway builds the services by path, so a package rename cannot break a
   deploy. No user is signed out: cookie names and token claims are unchanged.
+- DISC-001-01e Display name at sign-up: the registration screen and `POST /auth/register` require a
+  name (1 to 50 characters, no NUL character), stored on the new account and shown in the profile;
+  registering an already registered email still answers exactly as before and never touches the
+  existing account. A Google sign-up takes the name from the Google profile (`profile` scope; a
+  missing or empty name gives none, a longer one is cut to 50 characters), and a Google sign-in that
+  takes over an unverified password account replaces the name typed at registration; linking a
+  verified account or signing in again never changes it. No migration.
 
 ### Fixed
 

@@ -474,6 +474,10 @@
       "manual": "Manual",
       "automatic": "Automatic"
     },
+    "notices": {
+      "merged": "{ticker} already existed, so the quantities were added together. New quantity: {quantity}.",
+      "deleted": "Deleted. Your account balances did not change."
+    },
     "forms": {
       "required": "Required",
       "createPortfolio": {

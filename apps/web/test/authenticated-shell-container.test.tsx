@@ -141,6 +141,26 @@ describe('AuthenticatedShellContainer', () => {
     expect(
       screen.getByRole('link', { name: es.app.nav.home }).getAttribute('aria-current'),
     ).toBeNull();
+    expect(
+      screen.getByRole('link', { name: es.app.nav.investments }).getAttribute('aria-current'),
+    ).toBeNull();
+  });
+
+  it('marks the investments link as the current page on /investments', async () => {
+    stubApi({ 'GET /auth/session': session(true) });
+    renderApp(
+      <AuthenticatedShellContainer>
+        <p>private content</p>
+      </AuthenticatedShellContainer>,
+      { pathname: '/es/investments' },
+    );
+
+    const link = await screen.findByRole('link', { name: es.app.nav.investments });
+    expect(link.getAttribute('aria-current')).toBe('page');
+    expect(link.getAttribute('href')).toBe('/es/investments');
+    for (const name of [es.app.nav.home, es.app.nav.security, es.app.nav.profile]) {
+      expect(screen.getByRole('link', { name }).getAttribute('aria-current')).toBeNull();
+    }
   });
 
   it('links to the categories and marks them as the current page there', async () => {

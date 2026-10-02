@@ -474,6 +474,10 @@
       "manual": "Manual",
       "automatic": "Automático"
     },
+    "notices": {
+      "merged": "{ticker} ya existía, así que se sumaron las cantidades. Cantidad resultante: {quantity}.",
+      "deleted": "Eliminado. El saldo de tus cuentas no cambió."
+    },
     "forms": {
       "required": "Obligatorio",
       "createPortfolio": {

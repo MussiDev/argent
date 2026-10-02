@@ -11,7 +11,7 @@
 | Sub-ticket | Title | PRD | Dependencies | Status |
 |---|---|---|---|---|
 | DISC-001-02a | Accounts | prd-DISC-001-02a.md | PRD 01a (users, ownership) | done — on its draft PR, merges when the PR merges; migration 0006's journal `when` is intentionally later than 0007's (0007 is already deployed), do not lower it |
-| DISC-001-02b | Categories | prd-DISC-001-02b.md | PRD 01a (users, ownership); FR-11 needs the interface language from PRD 01 (01d); independent of a | active |
+| DISC-001-02b | Categories | prd-DISC-001-02b.md | PRD 01a (users, ownership); FR-11 needs the interface language from PRD 01 (01d); independent of a | done — on its draft PR, merges when the PR merges; migration 0009's journal `when` is later than every other entry, the later-merging ticket re-chains the snapshot |
 
 ## Suggested implementation order
 a → b

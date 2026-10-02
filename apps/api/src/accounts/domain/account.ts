@@ -1,4 +1,4 @@
-import { addExact, type AccountCurrency, type AccountType } from '@argent/shared';
+import { addExact, type AccountCurrency, type AccountType } from '@pesly/shared';
 
 export interface Account {
   id: string;

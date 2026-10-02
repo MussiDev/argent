@@ -37,7 +37,7 @@ touching accounts code, and no movements table is created here.
   `0005_two_factor`). It stays provisional: DISC-001-01d and the 07a ticket may also claim 0006;
   whichever merges later renumbers its files
   (SQL, rollback script, `meta/_journal.json` entry and snapshot, regenerated with
-  `pnpm --filter @argent/api db:generate`) and the migration-count test constants.
+  `pnpm --filter @pesly/api db:generate`) and the migration-count test constants.
 - **Layering and imports:** domain and application of `accounts` import `AccessScope` and
   `ResourceNotFound` only from the `shared/access` barrel, never from `shared/access/infrastructure`
   (`scopedTo` is used only by the repository adapter). Lint rules per `eslint.config.mjs`: domain
@@ -204,7 +204,7 @@ Execution order: Block 1 → Block 2 → Block 3 → Block 4 → Block 5 → Blo
 
 **Completion criterion**
 `pnpm test` runs the two new test files green, `pnpm typecheck` passes for `packages/shared`, and
-`@argent/shared` exports `formatMoney`, `parseAmountInput`, `sumMinorUnits` and the account schemas.
+`@pesly/shared` exports `formatMoney`, `parseAmountInput`, `sumMinorUnits` and the account schemas.
 
 ## Block 2 — Error codes wiring (shared, API error handler, web client)
 
@@ -233,7 +233,7 @@ The 409 status is chosen because both conditions conflict with the current state
 - [ ] `i18n-catalogs.test.ts` still passes: both catalogs carry the same keys.
 
 **Completion criterion**
-`pnpm typecheck` passes for `@argent/shared`, `@argent/api` and `@argent/web`, and the three
+`pnpm typecheck` passes for `@pesly/shared`, `@pesly/api` and `@pesly/web`, and the three
 touched test files pass.
 
 ## Block 3 — Accounts domain and application (apps/api/src/accounts)
@@ -268,7 +268,7 @@ touched test files pass.
     `ResourceNotFound`; archive and unarchive are idempotent.
   - delete: find with the write scope (404 if absent), `hasMovements` true throws `AccountHasMovements`,
     otherwise delete; a foreign-key violation raised by the repository also surfaces as `AccountHasMovements`.
-- Money arithmetic uses `sumMinorUnits` and `addMinorUnits` from `@argent/shared`.
+- Money arithmetic uses `sumMinorUnits` and `addMinorUnits` from `@pesly/shared`.
 
 **Input validation**
 - Use cases receive values already parsed by the shared schemas in Block 1; they re-check nothing
@@ -588,7 +588,7 @@ test output, and `pnpm test` stays green including the boundary probes.
 - [ ] `sumExact` over 100,000 amounts of 10^15 equals exactly 10^20 with no error, and `addExact` of two int64 maxima equals twice the maximum (validates NFR-06).
 
 **Completion criterion**
-The two shared test files pass, `pnpm --filter @argent/shared typecheck` and `pnpm --filter @argent/api typecheck` pass, and `@argent/shared` exports `addExact`, `sumExact`, `exactIntegerStringSchema` and `OPENING_BALANCE_LIMIT_MINOR_UNITS`.
+The two shared test files pass, `pnpm --filter @pesly/shared typecheck` and `pnpm --filter @pesly/api typecheck` pass, and `@pesly/shared` exports `addExact`, `sumExact`, `exactIntegerStringSchema` and `OPENING_BALANCE_LIMIT_MINOR_UNITS`.
 
 ## Block 10 — Exact balances and totals, bound enforced in the database and the routes (API)
 
@@ -667,7 +667,7 @@ The three accounts test files and `migration.test.ts` pass, `pnpm exec drizzle-k
 - [ ] e2e: the form refuses an opening balance beyond the limit and a zero-width-only name, shows the messages, and creates nothing (validates AC-18, AC-21).
 
 **Completion criterion**
-The two web test files and `i18n-catalogs.test.ts` pass, `pnpm --filter @argent/web typecheck` passes, and `pnpm e2e` passes the amended `accounts.spec.ts` with free ports 3000, 4000 and 4100.
+The two web test files and `i18n-catalogs.test.ts` pass, `pnpm --filter @pesly/web typecheck` passes, and `pnpm e2e` passes the amended `accounts.spec.ts` with free ports 3000, 4000 and 4100.
 
 ## Final verification
 - `pnpm lint`, `pnpm typecheck`, `pnpm test:coverage` (80% floor over the three trees), `pnpm test:perf`

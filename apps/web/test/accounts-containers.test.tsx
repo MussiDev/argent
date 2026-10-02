@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { ACCOUNT_NAME_MAX_LENGTH, formatMoney, type AccountResponse } from '@argent/shared';
+import { ACCOUNT_NAME_MAX_LENGTH, formatMoney, type AccountResponse } from '@pesly/shared';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';

@@ -1,4 +1,4 @@
-import type { AccountCurrency, AccountType } from '@argent/shared';
+import type { AccountCurrency, AccountType } from '@pesly/shared';
 import type { AccessScope } from '../../../shared/access';
 import type { Account } from '../../domain/account';
 

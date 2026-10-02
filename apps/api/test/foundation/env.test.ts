@@ -78,10 +78,9 @@ describe('environment production rules', () => {
     delete source.EMAIL_FROM;
     expect(() => parseEnv(source)).toThrow(/EMAIL_FROM/);
     expect(
-      parseEnv(
-        testEnvSource({ ...productionOverrides, EMAIL_FROM: 'Argent <no-reply@argent.app>' }),
-      ).EMAIL_FROM,
-    ).toBe('Argent <no-reply@argent.app>');
+      parseEnv(testEnvSource({ ...productionOverrides, EMAIL_FROM: 'Pesly <no-reply@pesly.app>' }))
+        .EMAIL_FROM,
+    ).toBe('Pesly <no-reply@pesly.app>');
   });
 
   it.each(['development', 'test'])(
@@ -91,7 +90,7 @@ describe('environment production rules', () => {
         NODE_ENV: nodeEnv,
         EMAIL_PROVIDER: 'resend',
         RESEND_API_KEY: 're_test',
-        EMAIL_FROM: 'Argent <no-reply@argent.app>',
+        EMAIL_FROM: 'Pesly <no-reply@pesly.app>',
       };
       expect(() => parseEnv(testEnvSource(resend))).toThrow(
         /EMAIL_PROVIDER: resend requires NODE_ENV=production/,
@@ -103,6 +102,10 @@ describe('environment production rules', () => {
     for (const provider of ['console', 'mailpit']) {
       expect(parseEnv(testEnvSource({ EMAIL_PROVIDER: provider })).EMAIL_FROM).toMatch(/@/);
     }
+  });
+
+  it('names Pesly in the local sender when EMAIL_FROM is unset', () => {
+    expect(parseEnv(testEnvSource()).EMAIL_FROM).toBe('Pesly <no-reply@pesly.local>');
   });
 
   it('defaults the Google endpoints to Google and leaves the client unset outside production', () => {

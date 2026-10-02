@@ -1,4 +1,4 @@
-import { AppError, sumExact, type AccountCurrency, LIST_ACCOUNTS_MAX_LIMIT } from '@argent/shared';
+import { AppError, sumExact, type AccountCurrency, LIST_ACCOUNTS_MAX_LIMIT } from '@pesly/shared';
 import type { AccessScope } from '../../shared/access';
 import type { AccountWithBalance } from '../domain/account';
 import { balanceOf } from '../domain/account';

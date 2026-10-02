@@ -45,7 +45,7 @@ describe('hexagonal import boundaries', () => {
 
   it('allows domain code to import shared schemas and other domain files', async () => {
     const source =
-      "import { z } from 'zod';\nimport { AppError } from '@argent/shared';\nimport { y } from './email';\n";
+      "import { z } from 'zod';\nimport { AppError } from '@pesly/shared';\nimport { y } from './email';\n";
     expect(await restrictedImports(DOMAIN_FILE, source)).toEqual([]);
   });
 

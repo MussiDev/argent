@@ -63,17 +63,17 @@ const SERVICE_SECRETS: Record<string, readonly string[]> = {
 
 const BUILDS = {
   'argent-api': {
-    buildCommand: 'pnpm --filter @argent/api build',
+    buildCommand: 'pnpm --filter ./apps/api --fail-if-no-match build',
     watchPatterns: ['/apps/api/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     startCommand: 'node --max-old-space-size=320 apps/api/dist/server.js',
   },
   'argent-worker': {
-    buildCommand: 'pnpm --filter @argent/api build',
+    buildCommand: 'pnpm --filter ./apps/api --fail-if-no-match build',
     watchPatterns: ['/apps/api/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     startCommand: 'node --max-old-space-size=192 apps/api/dist/worker.js',
   },
   'argent-web': {
-    buildCommand: 'pnpm --filter @argent/web build',
+    buildCommand: 'pnpm --filter ./apps/web --fail-if-no-match build',
     watchPatterns: ['/apps/web/**', '/packages/shared/**', '/pnpm-lock.yaml'],
     startCommand:
       'node --max-old-space-size=320 apps/web/node_modules/next/dist/bin/next start apps/web',
@@ -157,6 +157,25 @@ function heapCapIssues(services: readonly ServiceNode[], caps: Record<string, nu
       issues.push(`${name}: start command has no --max-old-space-size (expected ${cap})`);
     } else if (Number(match[1]) !== cap) {
       issues.push(`${name}: --max-old-space-size=${match[1] ?? ''}, expected ${cap}`);
+    }
+  }
+  return issues;
+}
+
+/**
+ * A build command that selects its package by name, or lets an unmatched filter pass: Railway builds
+ * from `main`, so a name filter breaks when the package is renamed, and pnpm exits 0 on no match.
+ */
+function buildFilterIssues(services: readonly ServiceNode[]): string[] {
+  const issues: string[] = [];
+  for (const node of services) {
+    const command = node.build?.buildCommand ?? '';
+    const filters = [...command.matchAll(/--filter[ =](\S+)/g)].map((match) => match[1] ?? '');
+    if (filters.length === 0 || filters.some((filter) => !filter.startsWith('./'))) {
+      issues.push(`${node.name}: build filter is not a ./ path (${command})`);
+    }
+    if (!command.includes('--fail-if-no-match')) {
+      issues.push(`${node.name}: missing --fail-if-no-match (${command})`);
     }
   }
   return issues;
@@ -277,6 +296,10 @@ describe('Railway Infrastructure as Code definition', () => {
     }
   });
 
+  it('selects every build package by path and fails the build when the filter matches nothing', () => {
+    expect(buildFilterIssues(services)).toEqual([]);
+  });
+
   it('each application service keeps the ON_FAILURE default and restarts at most 5 times', () => {
     for (const name of APP_SERVICES) {
       const deploy = serviceNamed(name).deploy;
@@ -373,6 +396,24 @@ describe('Railway Infrastructure as Code definition', () => {
 });
 
 describe('Railway definition checks (sad paths)', () => {
+  it('build filter error: a package-name filter, or one without --fail-if-no-match, names the service', () => {
+    const nodes = [
+      service('argent-api', { build: { buildCommand: 'pnpm --filter @pesly/api build' } }),
+      service('argent-web', { build: { buildCommand: 'pnpm --filter ./apps/web build' } }),
+      service('argent-worker', {
+        build: {
+          buildCommand: 'pnpm --filter ./apps/api --filter @pesly/web --fail-if-no-match build',
+        },
+      }),
+    ];
+    expect(buildFilterIssues(nodes)).toEqual([
+      'argent-api: build filter is not a ./ path (pnpm --filter @pesly/api build)',
+      'argent-api: missing --fail-if-no-match (pnpm --filter @pesly/api build)',
+      'argent-web: missing --fail-if-no-match (pnpm --filter ./apps/web build)',
+      'argent-worker: build filter is not a ./ path (pnpm --filter ./apps/api --filter @pesly/web --fail-if-no-match build)',
+    ]);
+  });
+
   it('container limit error: a memory limit below twice the heap, or none, names the service and the minimum', () => {
     const nodes = [
       service('argent-api', {

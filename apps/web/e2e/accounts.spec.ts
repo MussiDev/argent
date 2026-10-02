@@ -1,4 +1,4 @@
-import { formatMoney } from '@argent/shared';
+import { formatMoney } from '@pesly/shared';
 import { expect, test, type Page } from '@playwright/test';
 import { catalogs } from './support/catalogs';
 import { resetAttemptLimits } from './support/database';

@@ -1,4 +1,4 @@
-import { ACCOUNT_CURRENCIES, ACCOUNT_TYPES } from '@argent/shared';
+import { ACCOUNT_CURRENCIES, ACCOUNT_TYPES } from '@pesly/shared';
 import { sql, type SQL } from 'drizzle-orm';
 import {
   bigint,

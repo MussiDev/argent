@@ -2,7 +2,7 @@ import {
   formatMinorUnitsString,
   type AccountResponse,
   type ListAccountsResponse,
-} from '@argent/shared';
+} from '@pesly/shared';
 import type { AccountList } from '../../application/list-accounts';
 import type { AccountWithBalance } from '../../domain/account';
 

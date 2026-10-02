@@ -7,7 +7,7 @@ import {
   twoFactorEnableResponseSchema,
   twoFactorSetupResponseSchema,
   twoFactorStatusResponseSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { Router, type RequestHandler } from 'express';
 import { requireVerifiedEmail } from '../../../shared/http/require-verified-email';
 import { validate } from '../../../shared/http/validate';

@@ -1,5 +1,5 @@
 {
-  "name": "argent",
+  "name": "pesly",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",
@@ -7,14 +7,14 @@
     "node": ">=24"
   },
   "scripts": {
-    "lint": "pnpm --filter @argent/web exec next typegen && eslint . && prettier --check .",
+    "lint": "pnpm --filter @pesly/web exec next typegen && eslint . && prettier --check .",
     "format": "prettier --write .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:perf": "pnpm --filter @argent/api test:perf",
+    "test:perf": "pnpm --filter @pesly/api test:perf",
     "e2e": "playwright test --pass-with-no-tests",
-    "db:migrate": "pnpm --filter @argent/api db:migrate",
+    "db:migrate": "pnpm --filter @pesly/api db:migrate",
     "railway:plan": "node scripts/railway-config.mjs plan",
     "railway:apply": "node scripts/railway-config.mjs apply"
   },

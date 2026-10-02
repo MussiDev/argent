@@ -7,7 +7,7 @@ import {
   ACCOUNT_NAME_MAX_LENGTH,
   type AccountCurrency,
   type AccountResponse,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { CircleAlert, Plus } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useId, useRef, type SubmitEvent } from 'react';

@@ -1,4 +1,4 @@
-import { DISPLAY_CURRENCY_VALUES, LANGUAGE_VALUES, type RateType } from '@argent/shared';
+import { DISPLAY_CURRENCY_VALUES, LANGUAGE_VALUES, type RateType } from '@pesly/shared';
 
 export const DISPLAY_CURRENCIES = DISPLAY_CURRENCY_VALUES;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];

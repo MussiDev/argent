@@ -42,7 +42,7 @@ import {
   type UpdateProfileRequest,
   type VerifyEmailRequest,
   type VerifyEmailResponse,
-} from '@argent/shared';
+} from '@pesly/shared';
 import type { z } from 'zod';
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;

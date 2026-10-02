@@ -1,6 +1,6 @@
 'use client';
 
-import { ACCOUNT_NAME_MAX_LENGTH } from '@argent/shared';
+import { ACCOUNT_NAME_MAX_LENGTH } from '@pesly/shared';
 import { useTranslations } from 'next-intl';
 import { useId, type ReactNode } from 'react';
 import { Label } from '@/components/ui/label';

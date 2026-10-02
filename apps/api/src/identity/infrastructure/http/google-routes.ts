@@ -1,4 +1,4 @@
-import { googleCallbackQuerySchema, googleStartQuerySchema } from '@argent/shared';
+import { googleCallbackQuerySchema, googleStartQuerySchema } from '@pesly/shared';
 import { Router } from 'express';
 import { validate } from '../../../shared/http/validate';
 import type { Logger } from '../../../shared/logging/logger';

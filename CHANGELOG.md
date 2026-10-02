@@ -56,6 +56,10 @@ All notable changes to this project are documented in this file. The format foll
   bidirectional characters.
 - DISC-001-02a Shared integer-only money helpers: exact sums, locale-aware formatting and parsing
   of amounts, and amounts that travel as decimal strings.
+- FEAT-002 The product is named Pesly everywhere a user sees it: the web title and PWA name, the
+  screens, the recovery codes file and every email, in Spanish and English. The workspace packages
+  are `@pesly/*`, and Railway builds the services by path, so a package rename cannot break a
+  deploy. No user is signed out: cookie names and token claims are unchanged.
 
 ### Fixed
 

@@ -5,7 +5,7 @@ import {
   ACCOUNT_TYPES,
   formatMoney,
   type AccountResponse,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NextIntlClientProvider } from 'next-intl';

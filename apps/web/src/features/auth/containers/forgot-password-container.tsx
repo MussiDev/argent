@@ -1,6 +1,6 @@
 'use client';
 
-import { passwordResetRequestSchema } from '@argent/shared';
+import { passwordResetRequestSchema } from '@pesly/shared';
 import { useState } from 'react';
 import { useApiClient } from '@/lib/api-client-provider';
 import {

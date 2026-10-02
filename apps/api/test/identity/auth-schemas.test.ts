@@ -16,7 +16,7 @@ import {
   resendVerificationResponseSchema,
   verifyEmailRequestSchema,
   verifyEmailResponseSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import { PASSWORD_MAX_LENGTH } from '../../src/identity/domain/password-rules';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { ACCOUNT_CURRENCIES, ACCOUNT_TYPES } from '@argent/shared';
+import { ACCOUNT_CURRENCIES, ACCOUNT_TYPES } from '@pesly/shared';
 import { useTranslations } from 'next-intl';
 import type { SubmitEvent } from 'react';
 import { Button } from '@/components/ui/button';

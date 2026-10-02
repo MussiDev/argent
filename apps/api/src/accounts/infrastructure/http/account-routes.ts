@@ -5,7 +5,7 @@ import {
   listAccountsQuerySchema,
   listAccountsResponseSchema,
   renameAccountRequestSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { Router } from 'express';
 import type { RouterFactory } from '../../../app';
 import {

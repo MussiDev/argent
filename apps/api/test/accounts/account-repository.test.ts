@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { AccountCurrency, AccountType } from '@argent/shared';
+import type { AccountCurrency, AccountType } from '@pesly/shared';
 import { AccountHasMovements, AccountNameTaken } from '../../src/accounts/domain/errors';
 import type { AccountMovements } from '../../src/accounts/application/ports/account-movements';
 import type { CreateAccountData } from '../../src/accounts/application/ports/account-repository';

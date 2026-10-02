@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MINOR_UNITS_MAX, sumMinorUnits } from '@argent/shared';
+import { MINOR_UNITS_MAX, sumMinorUnits } from '@pesly/shared';
 import {
   AccountHasMovements,
   AccountNameTaken,

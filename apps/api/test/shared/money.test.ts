@@ -12,7 +12,7 @@ import {
   parseMinorUnits,
   sumExact,
   sumMinorUnits,
-} from '@argent/shared';
+} from '@pesly/shared';
 
 describe('exact arithmetic for derived values', () => {
   it('sumExact over 100,000 amounts of 10^15 equals exactly 10^20 with no error', () => {

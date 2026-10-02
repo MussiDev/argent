@@ -51,12 +51,12 @@ importers:
 
   apps/api:
     dependencies:
-      '@argent/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@node-rs/argon2':
         specifier: ^2.2.1
         version: 2.2.1
+      '@pesly/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -133,7 +133,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@argent/shared':
+      '@pesly/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       class-variance-authority:

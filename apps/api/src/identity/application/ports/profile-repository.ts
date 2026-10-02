@@ -1,4 +1,4 @@
-import type { RateType } from '@argent/shared';
+import type { RateType } from '@pesly/shared';
 import type { DisplayCurrency, Language } from '../../domain/account-defaults';
 
 export interface Profile {

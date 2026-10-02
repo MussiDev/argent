@@ -1,6 +1,6 @@
 'use client';
 
-import { registerRequestSchema } from '@argent/shared';
+import { registerRequestSchema } from '@pesly/shared';
 import { useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { useApiClient } from '@/lib/api-client-provider';

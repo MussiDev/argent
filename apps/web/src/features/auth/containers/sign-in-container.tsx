@@ -1,6 +1,6 @@
 'use client';
 
-import { SIGN_IN_ERRORS, signInRequestSchema, type SignInError } from '@argent/shared';
+import { SIGN_IN_ERRORS, signInRequestSchema, type SignInError } from '@pesly/shared';
 import { useEffect, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { useApiClient } from '@/lib/api-client-provider';

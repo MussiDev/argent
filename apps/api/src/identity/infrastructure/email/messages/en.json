@@ -1,26 +1,26 @@
 {
   "verification": {
-    "subject": "Confirm your email for Argent",
-    "intro": "Hi. To finish creating your Argent account, confirm your email address.",
+    "subject": "Confirm your email for Pesly",
+    "intro": "Hi. To finish creating your Pesly account, confirm your email address.",
     "action": "Confirm email",
     "expiry": "The link expires in 24 hours and works only once.",
-    "ignore": "If you did not create an Argent account, ignore this message."
+    "ignore": "If you did not create a Pesly account, ignore this message."
   },
   "password_reset": {
-    "subject": "Reset your Argent password",
-    "intro": "Hi. We received a request to reset the password of your Argent account.",
+    "subject": "Reset your Pesly password",
+    "intro": "Hi. We received a request to reset the password of your Pesly account.",
     "action": "Choose a new password",
     "expiry": "The link expires in 60 minutes and works only once.",
     "ignore": "If you did not ask for it, ignore this message: your password stays the same."
   },
   "two_factor_enabled": {
-    "subject": "Two-factor authentication is on for your Argent account",
-    "body": "Hi. Two-factor authentication was turned on for your Argent account, and every other session was signed out.",
+    "subject": "Two-factor authentication is on for your Pesly account",
+    "body": "Hi. Two-factor authentication was turned on for your Pesly account, and every other session was signed out.",
     "advice": "If you did not do this, reset your password right away: someone else may have access to your account."
   },
   "two_factor_disabled": {
-    "subject": "Two-factor authentication is off for your Argent account",
-    "body": "Hi. Two-factor authentication was turned off for your Argent account, and every other session was signed out.",
+    "subject": "Two-factor authentication is off for your Pesly account",
+    "body": "Hi. Two-factor authentication was turned off for your Pesly account, and every other session was signed out.",
     "advice": "If you did not do this, reset your password and turn two-factor authentication on again right away: someone else may have access to your account."
   }
 }

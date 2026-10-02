@@ -4,7 +4,7 @@ import {
   renameAccountRequestSchema,
   type AccountCurrency,
   type AccountResponse,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { useEffect, useState } from 'react';
 import type { ErrorMessageKey } from '@/features/auth/form-errors';
 import { useRouter } from '@/i18n/navigation';

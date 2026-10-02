@@ -7,7 +7,7 @@ import {
   formatMoney,
   openingBalanceSchema,
   parseAmountInput,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { useLocale } from 'next-intl';
 import { useState } from 'react';
 import { useRouter } from '@/i18n/navigation';

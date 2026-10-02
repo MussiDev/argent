@@ -1,4 +1,4 @@
-import { ACCOUNT_NAME_MAX_LENGTH } from '@argent/shared';
+import { ACCOUNT_NAME_MAX_LENGTH } from '@pesly/shared';
 import type { ErrorMessageKey } from '@/features/auth/form-errors';
 
 export type AccountFieldName = 'name' | 'type' | 'currency' | 'openingBalance';

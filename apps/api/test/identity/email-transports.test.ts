@@ -18,7 +18,7 @@ const MESSAGE = {
   text: 'Abrí este enlace: https://app.argent.test/es/verify-email?token=abc',
   html: '<p><a href="https://app.argent.test/es/verify-email?token=abc">Confirmar</a></p>',
 };
-const FROM = 'Argent <no-reply@argent.test>';
+const FROM = 'Pesly <no-reply@pesly.test>';
 const silent = createLogger({ level: 'silent' });
 
 interface SmtpSession {
@@ -116,7 +116,7 @@ describe('MailpitTransport (SMTP)', () => {
     expect(result.messageId).toMatch(/^<.+@.+>$/);
     const [session] = sessions;
     expect(session?.commands[0]).toMatch(/^EHLO /);
-    expect(session?.commands).toContain('MAIL FROM:<no-reply@argent.test>');
+    expect(session?.commands).toContain('MAIL FROM:<no-reply@pesly.test>');
     expect(session?.commands).toContain('RCPT TO:<ana@example.com>');
     expect(session?.commands.at(-1)).toBe('QUIT');
     expect(session?.data).toContain('To: ana@example.com');

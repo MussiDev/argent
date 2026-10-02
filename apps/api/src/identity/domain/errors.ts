@@ -1,4 +1,4 @@
-import { AppError } from '@argent/shared';
+import { AppError } from '@pesly/shared';
 
 /** The email does not have a valid format or is longer than 254 characters. */
 export class InvalidEmail extends AppError {

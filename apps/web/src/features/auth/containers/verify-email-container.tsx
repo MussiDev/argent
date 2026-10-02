@@ -1,6 +1,6 @@
 'use client';
 
-import { verifyEmailRequestSchema } from '@argent/shared';
+import { verifyEmailRequestSchema } from '@pesly/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from '@/i18n/navigation';
 import { useApiClient } from '@/lib/api-client-provider';

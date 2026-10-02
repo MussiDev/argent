@@ -12,7 +12,7 @@ import {
   listAccountsQuerySchema,
   listAccountsResponseSchema,
   renameAccountRequestSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 
 const valid = { name: 'Cash', type: 'cash', currency: 'ARS' } as const;
 const UUID = '0b0f6f0e-8c1d-4c8e-9a53-3d1f2a9c5b11';

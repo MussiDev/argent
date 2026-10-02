@@ -1,4 +1,4 @@
-import { AppError } from '@argent/shared';
+import { AppError } from '@pesly/shared';
 
 /** The owner already has an account with this name (compared ignoring case). */
 export class AccountNameTaken extends AppError {

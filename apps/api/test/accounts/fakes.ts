@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AccountCurrency } from '@argent/shared';
+import type { AccountCurrency } from '@pesly/shared';
 import type { Account } from '../../src/accounts/domain/account';
 import { AccountNameTaken } from '../../src/accounts/domain/errors';
 import type {

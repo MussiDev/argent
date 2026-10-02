@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { accountResponseSchema } from '@argent/shared';
+import { accountResponseSchema } from '@pesly/shared';
 import type { Express } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

@@ -1,5 +1,6 @@
 // Bundles the API entry points for production, so they run on plain `node` without tsx.
 // Usage: node scripts/build.mjs [--outdir <dir>] [entry.ts ...]
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -7,9 +8,19 @@ import { build } from 'esbuild';
 const apiRoot = fileURLToPath(new URL('..', import.meta.url));
 const DEFAULT_ENTRY_POINTS = ['src/server.ts', 'src/worker.ts', 'src/shared/db/migrate.ts'];
 
-// `@argent/shared` exports TypeScript source, so it is bundled; every other package stays external
-// and resolves to the installed, lockfile-pinned version at runtime.
-const BUNDLED_PACKAGE = /^@argent\/shared(\/|$)/;
+// The shared workspace package exports TypeScript source, so it is bundled; every other package
+// stays external and resolves to the installed, lockfile-pinned version at runtime. Its name is
+// read from its package.json, so renaming the scope cannot leave this matcher behind.
+const sharedPackageName = JSON.parse(
+  readFileSync(new URL('../../../packages/shared/package.json', import.meta.url), 'utf8'),
+).name;
+// Without a name the matcher would match nothing and the shared package would silently stay
+// external, breaking the bundle at runtime instead of here.
+if (typeof sharedPackageName !== 'string' || sharedPackageName === '') {
+  throw new Error('packages/shared/package.json has no name');
+}
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const BUNDLED_PACKAGE = new RegExp(`^${escapeRegExp(sharedPackageName)}(/|$)`);
 
 const externalPackages = {
   name: 'external-packages',

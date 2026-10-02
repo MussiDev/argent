@@ -1,7 +1,9 @@
 import {
   accountResponseSchema,
+  categoryResponseSchema,
   errorResponseSchema,
   listAccountsResponseSchema,
+  listCategoriesResponseSchema,
   passwordResetConfirmResponseSchema,
   passwordResetResponseSchema,
   profileResponseSchema,
@@ -16,10 +18,14 @@ import {
   twoFactorStatusResponseSchema,
   verifyEmailResponseSchema,
   type AccountResponse,
+  type CategoryResponse,
   type createAccountRequestSchema,
+  type CreateCategoryRequest,
   type ErrorCode,
   type ListAccountsQuery,
   type ListAccountsResponse,
+  type ListCategoriesQuery,
+  type ListCategoriesResponse,
   type PasswordResetConfirmRequest,
   type PasswordResetConfirmResponse,
   type PasswordResetRequest,
@@ -39,6 +45,7 @@ import {
   type TwoFactorEnableResponse,
   type TwoFactorSetupResponse,
   type TwoFactorStatusResponse,
+  type UpdateCategoryRequest,
   type UpdateProfileRequest,
   type VerifyEmailRequest,
   type VerifyEmailResponse,
@@ -111,9 +118,9 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
 };
 
 /** `null` when the id is not a plain path segment: '.' and '..' survive encoding and would be normalized. */
-function accountPath(id: string): string | null {
+function resourcePath(collection: string, id: string): string | null {
   if (id === '' || id === '.' || id === '..') return null;
-  return `/accounts/${encodeURIComponent(id)}`;
+  return `/${collection}/${encodeURIComponent(id)}`;
 }
 
 function failure(code: ApiFailureCode): ApiFailure {
@@ -143,6 +150,16 @@ export type CreateAccountInput = z.input<typeof createAccountRequestSchema>;
 export type RenameAccountInput = Pick<RenameAccountRequest, 'name'>;
 
 export type ListAccountsParams = Partial<Pick<ListAccountsQuery, 'archived' | 'limit' | 'offset'>>;
+
+/** What the containers send to create a category: the validated body of `POST /categories`. */
+export type CreateCategoryInput = CreateCategoryRequest;
+
+/** Only `name`, `icon` and `color` change; `kind` and `parentId` are immutable. */
+export type UpdateCategoryInput = Pick<UpdateCategoryRequest, 'name' | 'icon' | 'color'>;
+
+export type ListCategoriesParams = Partial<
+  Pick<ListCategoriesQuery, 'kind' | 'archived' | 'limit' | 'offset'>
+>;
 
 export interface ApiClientOptions {
   /** The API origin, e.g. `https://api.argent.app`. */
@@ -178,6 +195,13 @@ export interface ApiClient {
   archiveAccount(id: string): Promise<ApiResult<AccountResponse>>;
   unarchiveAccount(id: string): Promise<ApiResult<AccountResponse>>;
   deleteAccount(id: string): Promise<ApiResult<undefined>>;
+  listCategories(query: ListCategoriesParams): Promise<ApiResult<ListCategoriesResponse>>;
+  createCategory(body: CreateCategoryInput): Promise<ApiResult<CategoryResponse>>;
+  getCategory(id: string): Promise<ApiResult<CategoryResponse>>;
+  updateCategory(id: string, body: UpdateCategoryInput): Promise<ApiResult<CategoryResponse>>;
+  archiveCategory(id: string): Promise<ApiResult<CategoryResponse>>;
+  unarchiveCategory(id: string): Promise<ApiResult<CategoryResponse>>;
+  deleteCategory(id: string): Promise<ApiResult<undefined>>;
   getProfile(): Promise<ApiResult<ProfileResponse>>;
   updateProfile(body: UpdateProfileRequest): Promise<ApiResult<ProfileResponse>>;
 }
@@ -268,7 +292,15 @@ export function createApiClient({
     id: string,
     build: (path: string) => Promise<ApiResult<T>>,
   ): Promise<ApiResult<T>> {
-    const path = accountPath(id);
+    const path = resourcePath('accounts', id);
+    return path === null ? Promise.resolve(failure('VALIDATION_FAILED')) : build(path);
+  }
+
+  function onCategory<T>(
+    id: string,
+    build: (path: string) => Promise<ApiResult<T>>,
+  ): Promise<ApiResult<T>> {
+    const path = resourcePath('categories', id);
     return path === null ? Promise.resolve(failure('VALIDATION_FAILED')) : build(path);
   }
 
@@ -415,6 +447,76 @@ export function createApiClient({
       ),
     deleteAccount: (id) =>
       onAccount(id, (path) =>
+        request({
+          method: 'DELETE',
+          path,
+          response: null,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    listCategories: ({ kind, archived, limit, offset }) => {
+      const query = new URLSearchParams();
+      if (kind !== undefined) query.set('kind', kind);
+      if (archived !== undefined) query.set('archived', archived ? 'true' : 'false');
+      if (limit !== undefined) query.set('limit', String(limit));
+      if (offset !== undefined) query.set('offset', String(offset));
+      const queryString = query.toString();
+      return request({
+        method: 'GET',
+        path: queryString ? `/categories?${queryString}` : '/categories',
+        response: listCategoriesResponseSchema,
+        refreshOnUnauthenticated: true,
+      });
+    },
+    createCategory: (body) =>
+      request({
+        method: 'POST',
+        path: '/categories',
+        body,
+        response: categoryResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
+    getCategory: (id) =>
+      onCategory(id, (path) =>
+        request({
+          method: 'GET',
+          path,
+          response: categoryResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    updateCategory: (id, body) =>
+      onCategory(id, (path) =>
+        request({
+          method: 'PATCH',
+          path,
+          body,
+          response: categoryResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    archiveCategory: (id) =>
+      onCategory(id, (path) =>
+        request({
+          method: 'POST',
+          path: `${path}/archive`,
+          body: {},
+          response: categoryResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    unarchiveCategory: (id) =>
+      onCategory(id, (path) =>
+        request({
+          method: 'POST',
+          path: `${path}/unarchive`,
+          body: {},
+          response: categoryResponseSchema,
+          refreshOnUnauthenticated: true,
+        }),
+      ),
+    deleteCategory: (id) =>
+      onCategory(id, (path) =>
         request({
           method: 'DELETE',
           path,

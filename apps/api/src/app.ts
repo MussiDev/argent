@@ -116,7 +116,8 @@ export function createApp({
 
   app.use(requestContext(logger));
   app.use(helmet());
-  app.use(cors({ origin: [env.WEB_ORIGIN], credentials: true }));
+  // A browser on the web origin hides Retry-After from scripts unless it is exposed.
+  app.use(cors({ origin: [env.WEB_ORIGIN], credentials: true, exposedHeaders: ['Retry-After'] }));
   // Before the HTTPS guard: platform health probes call it over plain HTTP inside the network.
   app.use(healthRoutes());
   app.use(httpsGuard(env));

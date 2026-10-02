@@ -4,6 +4,7 @@ import { createCategoryRoutes, seedDefaultCategories } from './categories';
 // Deep import on purpose: the exchange-rates barrel would load the providers and the sync job into the API process (NFR-03, R-08).
 import { createExchangeRateRoutes } from './exchange-rates/infrastructure/http/exchange-rate-routes';
 import { createInvestmentsRoutes } from './investments';
+import { createAccountMovements, createCategoryUsage, createMovementRoutes } from './movements';
 import { parseEnv } from './shared/config/env';
 import { createDatabase } from './shared/db/client';
 import { createLogger } from './shared/logging/logger';
@@ -19,10 +20,11 @@ const app = createApp({
   // categories in the transaction that creates them.
   identity: { db, onUserCreated: [seedDefaultCategories] },
   routerFactories: [
-    createAccountRoutes({ db, logger }),
-    createCategoryRoutes({ db, logger }),
+    createAccountRoutes({ db, logger, movements: createAccountMovements(db) }),
+    createCategoryRoutes({ db, logger, usage: createCategoryUsage(db) }),
     createExchangeRateRoutes({ db }),
     createInvestmentsRoutes({ db, logger }),
+    createMovementRoutes({ db, logger }),
   ],
 });
 

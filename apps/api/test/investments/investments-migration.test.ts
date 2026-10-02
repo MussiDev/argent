@@ -24,6 +24,11 @@ const EARLIER_TABLES = [
   'users',
 ];
 const ALL_TABLES = [...EARLIER_TABLES, 'holdings', 'portfolios'].sort();
+// Migrations applied after 0013 are rolled back first, so 0013 can be the one re-applied; the
+// migrator replays everything not recorded, so they come back with it.
+const LATER_MIGRATIONS = ['0014_movements'];
+const LATER_TABLES = ['movement_rate_limits', 'movements'];
+const TABLES_AFTER_REAPPLY = [...ALL_TABLES, ...LATER_TABLES].sort();
 
 /** Its own throwaway database: the other migration tests reset theirs, and none may clash. */
 const migrationDatabaseUrl = (() => {
@@ -117,6 +122,13 @@ function insertHolding(
   );
 }
 
+async function rollBackInvestments(): Promise<void> {
+  for (const tag of [...LATER_MIGRATIONS].reverse()) {
+    await client.query(await rollback(tag));
+  }
+  await client.query(await rollback('0013_investments'));
+}
+
 function rollback(tag: string): Promise<string> {
   return readFile(`${migrationsFolder}/rollback/${tag}.down.sql`, 'utf8');
 }
@@ -128,16 +140,16 @@ async function appliedMigrations(): Promise<number> {
 describe('0013_investments migration', () => {
   it('applies on a database that already holds the earlier migrations and their data', async () => {
     await runMigrations(migrationDatabaseUrl);
-    const earlierCount = (await appliedMigrations()) - 1;
-    await client.query(await rollback('0013_investments'));
+    const earlierCount = (await appliedMigrations()) - 1 - LATER_MIGRATIONS.length;
+    await rollBackInvestments();
     expect(await publicTables()).toEqual(EARLIER_TABLES);
     expect(await appliedMigrations()).toBe(earlierCount);
     await insertUser('before@investments.test');
 
     await runMigrations(migrationDatabaseUrl);
 
-    expect(await publicTables()).toEqual(ALL_TABLES);
-    expect(await appliedMigrations()).toBe(earlierCount + 1);
+    expect(await publicTables()).toEqual(TABLES_AFTER_REAPPLY);
+    expect(await appliedMigrations()).toBe(earlierCount + 1 + LATER_MIGRATIONS.length);
     expect(
       await countOf("select count(*) as n from users where email = 'before@investments.test'"),
     ).toBe(1);
@@ -284,9 +296,9 @@ describe('0013_investments migration', () => {
   });
 
   it('is reverted by its rollback script, dropping both tables and keeping earlier data, and re-applies', async () => {
-    const earlierCount = (await appliedMigrations()) - 1;
+    const earlierCount = (await appliedMigrations()) - 1 - LATER_MIGRATIONS.length;
 
-    await client.query(await rollback('0013_investments'));
+    await rollBackInvestments();
 
     expect(await publicTables()).toEqual(EARLIER_TABLES);
     expect(await appliedMigrations()).toBe(earlierCount);
@@ -295,7 +307,7 @@ describe('0013_investments migration', () => {
     ).toBe(1);
 
     await runMigrations(migrationDatabaseUrl);
-    expect(await publicTables()).toEqual(ALL_TABLES);
-    expect(await appliedMigrations()).toBe(earlierCount + 1);
+    expect(await publicTables()).toEqual(TABLES_AFTER_REAPPLY);
+    expect(await appliedMigrations()).toBe(earlierCount + 1 + LATER_MIGRATIONS.length);
   });
 });

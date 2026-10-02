@@ -83,3 +83,16 @@ The implementer reported 22 tests; the verifier counted 23 (9 + 7 + 7), which is
 Review: verifier PASS, auditor no blockers. Advisories left as they are: the default time zone constant is duplicated from shared (candidate to export from shared later), chunk size of 500 is not pinned by a spy, and `new Date()` seeds one limiter test clock (frozen, so not flaky).
 
 After: 401/401 in 15 files (movements, accounts, categories); typecheck, eslint and prettier clean.
+
+## Block 5 — HTTP routes and composition (24 route tests, 5 error-handler tests)
+
+| Test file | Tests | Red result |
+|---|---|---|
+| `apps/api/test/movements/movement-routes.test.ts` | 24 | headline only: the suite failed to load, `Failed to resolve import '../../src/movements'`, so no test ran (the mass-assignment test was added after review, run green on first write: the stripping schema and the handler's field-by-field pick already guarantee it) |
+| `apps/api/test/foundation/error-handler.test.ts` | 5 new | 1 of 5 failed first: `maps a RetryableError to 429 with a Retry-After header` with `expected undefined to be '42'`; the 4 code-mapping tests passed before implementation because Block 1 had already registered the codes, so they are regression guards |
+
+Out-of-block fix: `apps/api/test/investments/investments-migration.test.ts` (07a's test) assumed 0013 was the newest migration and failed once 0014 existed (4 tests). It now rolls back later migrations first and expects them back after the replay. Run green on its own database: 4/4.
+
+Review: verifier PASS, auditor no blockers. Advisories left: `clock` option added to `createMovementRoutes` (spec wording to update), barrel uses `export *` for the routes file, release-failure logging has no test, `err` logged raw (logger redaction to confirm in SAST).
+
+Known red until Block 6: `apps/api/test/identity/user-erasure.test.ts` (5 tests), because the erasure guard now sees the movements relations without the `erase-step` policy.

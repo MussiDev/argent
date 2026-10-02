@@ -1,4 +1,4 @@
-import { AppError, ERROR_CODES } from '@pesly/shared';
+import { AppError, ERROR_CODES, RetryableError } from '@pesly/shared';
 import { Router } from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
@@ -45,6 +45,21 @@ function buildApp(env: Env, lines: string[] = []) {
   });
   router.get('/archived', () => {
     throw new AppError('ACCOUNT_ARCHIVED');
+  });
+  router.get('/movement-future', () => {
+    throw new AppError('MOVEMENT_DATE_IN_FUTURE');
+  });
+  router.get('/rate-required', () => {
+    throw new AppError('RATE_REQUIRED');
+  });
+  router.get('/movement-kind', () => {
+    throw new AppError('MOVEMENT_CATEGORY_KIND_MISMATCH');
+  });
+  router.get('/category-archived', () => {
+    throw new AppError('CATEGORY_ARCHIVED');
+  });
+  router.get('/retryable', () => {
+    throw new RetryableError('RATE_LIMITED', 42);
   });
   router.get('/fields', () => {
     throw new AppError('VALIDATION_FAILED', 'detail', ['body.someField']);
@@ -133,6 +148,27 @@ describe('error handler', () => {
 
     expect(response.status).toBe(409);
     expect(response.body).toEqual({ code: 'ACCOUNT_ARCHIVED' });
+  });
+
+  it.each([
+    ['/movement-future', 400, 'MOVEMENT_DATE_IN_FUTURE'],
+    ['/rate-required', 400, 'RATE_REQUIRED'],
+    ['/movement-kind', 400, 'MOVEMENT_CATEGORY_KIND_MISMATCH'],
+    ['/category-archived', 409, 'CATEGORY_ARCHIVED'],
+  ] as const)('maps %s to %i with only its code and no Retry-After', async (path, status, code) => {
+    const response = await request(buildApp(testEnv())).get(path);
+
+    expect(response.status).toBe(status);
+    expect(response.body).toEqual({ code });
+    expect(response.headers['retry-after']).toBeUndefined();
+  });
+
+  it('maps a RetryableError to 429 with a Retry-After header and only its code', async () => {
+    const response = await request(buildApp(testEnv())).get('/retryable');
+
+    expect(response.status).toBe(429);
+    expect(response.headers['retry-after']).toBe('42');
+    expect(response.body).toEqual({ code: 'RATE_LIMITED' });
   });
 
   it('emits fields for any AppError that carries them', async () => {

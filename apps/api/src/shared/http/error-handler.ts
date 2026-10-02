@@ -1,4 +1,4 @@
-import { AppError, type ErrorCode, type ErrorResponse } from '@pesly/shared';
+import { AppError, RetryableError, type ErrorCode, type ErrorResponse } from '@pesly/shared';
 import type { ErrorRequestHandler, NextFunction, Request, Response } from 'express';
 import type { Logger } from '../logging/logger';
 
@@ -69,6 +69,7 @@ function isBodyParserError(error: unknown): error is BodyParserError {
 interface MappedError {
   status: number;
   body: ErrorResponse;
+  retryAfterSeconds?: number;
 }
 
 function mapError(error: unknown): MappedError {
@@ -77,7 +78,9 @@ function mapError(error: unknown): MappedError {
     const body: ErrorResponse = error.fields
       ? { code: error.code, fields: [...error.fields] }
       : { code: error.code };
-    return { status, body };
+    return error instanceof RetryableError
+      ? { status, body, retryAfterSeconds: error.retryAfterSeconds }
+      : { status, body };
   }
   if (isBodyParserError(error)) {
     // Oversized (413), malformed (400) and unsupported-encoding (415) bodies.
@@ -96,7 +99,7 @@ export function createErrorHandler(logger: Logger): ErrorRequestHandler {
       next(error);
       return;
     }
-    const { status, body } = mapError(error);
+    const { status, body, retryAfterSeconds } = mapError(error);
     const context = {
       requestId: res.locals.requestId,
       method: req.method,
@@ -109,6 +112,7 @@ export function createErrorHandler(logger: Logger): ErrorRequestHandler {
     } else {
       logger.warn(context, 'request rejected');
     }
+    if (retryAfterSeconds !== undefined) res.setHeader('Retry-After', String(retryAfterSeconds));
     res.status(status).json(body);
   };
 }

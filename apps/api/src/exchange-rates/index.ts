@@ -11,6 +11,7 @@ import { systemClock } from './infrastructure/system-clock';
 
 export { DolarapiRateProvider } from './infrastructure/provider/dolarapi-rate-provider';
 export { FakeRateProvider } from './infrastructure/provider/fake-rate-provider';
+export { createExchangeRateRoutes } from './infrastructure/http/exchange-rate-routes';
 export type { RateProvider } from './application/ports/rate-provider';
 export type { RatesSyncJob } from './infrastructure/jobs/rates-sync-job';
 

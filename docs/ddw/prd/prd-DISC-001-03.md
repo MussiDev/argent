@@ -78,6 +78,21 @@ requirement.
 | 03e FR-04, AC-04, AC-05 | Future date and non-positive amount rejected on edit | applies the original FR-20 and AC-02 to edits |
 | 03e NFR-03 | Edit and delete < 300 ms p95 | extends the original NFR-04 (saving) to edit and delete |
 
+## Added while defining and planning DISC-001-03b (not in the original text)
+Each is derived from an obligation, a convention or a human decision on record (2026-10-02).
+
+| New ID | What | Why |
+|---|---|---|
+| 03b FR-13, AC-22, AC-23 | Ordered erasure of a user's movements | human decision: keep ON DELETE RESTRICT and erase movements first (DISC-001-01f guard) |
+| 03b FR-14, AC-24 | Movements count in Available and Net worth | FEAT-003 totals with the real AccountMovements adapter |
+| 03b FR-15, AC-25 to AC-27 | A movement on an archived account or category is rejected | human decision Q2 |
+| 03b FR-16, NFR-08, AC-28 to AC-30 | 60 manual creations per minute per user, counters in the database, imports not counted | human decision Q4 |
+| 03b AC-31 and the timestamp in FR-01, FR-02, FR-08, FR-09 | A movement stores date and time (UTC instant, shown in the user's time zone) | human decision Q3 |
+| 03b design: caps and read route | Amount at most 10^15 minor units, note at most 500 characters, `RATE_REQUIRED` is a 400, `GET /movements/:id` exists | human decision Q3 (confirmed) |
+
+## Future tickets noted
+- **Movement import (for example from Excel):** no PRD covers it yet. It must create movements through the application use case without going through the manual-entry limit of DISC-001-03b (FR-16, AC-30).
+
 ## Deferred obligations discharged by this split
 - DISC-001-02a (deferred to PRD 03): AC-10 end to end, the history half of AC-07, NFR-01 and NFR-02
   against the real table, and a foreign key from movements to accounts with `ON DELETE RESTRICT`

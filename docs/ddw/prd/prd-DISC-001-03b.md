@@ -5,7 +5,7 @@
 | Ticket | DISC-001-03b |
 | Tracker | none |
 | Date | 2026-10-02 |
-| PRD loops | 2 |
+| PRD loops | 3 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -25,10 +25,11 @@ maps every original ID to its new one.
 - List the user's movements, newest first.
 
 ## Functional Requirements
-- FR-01: The system must allow a user to record an expense with an amount greater than 0, a date,
-  one of their accounts, an expense category and an optional note (tags: DISC-001-03d).
-- FR-02: The system must allow a user to record an income with an amount greater than 0, a date,
-  one of their accounts, an income category and an optional note (tags: DISC-001-03d).
+- FR-01: The system must allow a user to record an expense with an amount greater than 0, a date
+  and time (the entry form defaults to the current moment and lets the user edit both), one of
+  their accounts, an expense category and an optional note (tags: DISC-001-03d).
+- FR-02: The system must allow a user to record an income with an amount greater than 0, a date
+  and time, one of their accounts, an income category and an optional note (tags: DISC-001-03d).
 - FR-03: The system must store on every expense and income the ARS-per-USD rate used to convert
   it to the other currency, and the source of that rate (automatic with its rate type, or
   manual).
@@ -41,9 +42,10 @@ maps every original ID to its new one.
   updated.
 - FR-07: The system must update each account balance according to the movement type: an expense
   subtracts from its account and an income adds to its account.
-- FR-08: The system must list the user's expenses and income ordered by date, newest first.
-- FR-09: The system must reject a movement with a date later than the current day in the user's
-  time zone (PRD 01, FR-24) (future payments belong to PRD 08).
+- FR-08: The system must list the user's expenses and income ordered by date and time, newest first.
+- FR-09: The system must reject a movement whose date, taken in the user's time zone (PRD 01,
+  FR-24), is later than the current day (future payments belong to PRD 08); the date and time are
+  stored as a UTC instant and shown in the user's time zone.
 - FR-10: The system must let a user read only their own movements (movements shared through
   groups are governed by PRD 05).
 - FR-11: The system must show the age of the stored rate on the entry form when it is older than
@@ -53,6 +55,10 @@ maps every original ID to its new one.
   deleted (PRD 01, account deletion), in the same transaction as the deletion.
 - FR-14: The system must include movements in the Available and Net worth totals of the account
   list (DISC-001-02a FR-10 and FEAT-003).
+- FR-15: The system must reject an expense or income recorded on an archived account or in an
+  archived category, and must tell the user to unarchive it first.
+- FR-16: The system must limit the manual creation of movements to 60 per minute per user, and
+  must not count movements that are created by a path other than manual entry (a future import).
 
 ## Non-Functional Requirements
 - NFR-01: Amounts must be stored as 64-bit integers in minor units (1 unit = 0.01 ARS or 0.01
@@ -68,16 +74,20 @@ maps every original ID to its new one.
   real movements table).
 - NFR-07: Every movement must belong to exactly one user, and 100% of queries on movements must
   be filtered by the owner (PRD 01, FR-23).
+- NFR-08: The counters of the creation limit must be stored in the database, with 0 counters kept
+  in process memory (stateless API, PRD 01 NFR-09).
 
 ## Acceptance Criteria
-- AC-01 (FR-01): WHEN a user saves an expense with an amount greater than 0, a date, one of their
-  accounts and an expense category, THE system SHALL store it and show it in the movement list.
+- AC-01 (FR-01): WHEN a user saves an expense with an amount greater than 0, a date and time, one
+  of their accounts and an expense category, THE system SHALL store it and show it in the movement
+  list.
 - AC-02 (FR-01): IF a user saves an expense with an amount of 0 or less, THEN THE system SHALL
   reject it and show "Amount must be greater than 0".
 - AC-03 (FR-01): IF a user saves an expense with an income category, THEN THE system SHALL
   reject it.
-- AC-04 (FR-02): WHEN a user saves an income with an amount greater than 0, a date, one of their
-  accounts and an income category, THE system SHALL store it and show it in the movement list.
+- AC-04 (FR-02): WHEN a user saves an income with an amount greater than 0, a date and time, one
+  of their accounts and an income category, THE system SHALL store it and show it in the movement
+  list.
 - AC-05 (FR-02): IF a user saves an income with an expense category, THEN THE system SHALL
   reject it.
 - AC-06 (FR-03): WHEN a user saves an expense or income, THE system SHALL store with it the rate
@@ -96,9 +106,9 @@ maps every original ID to its new one.
 - AC-13 (FR-07): WHEN an income of 100.00 is saved on an account with a balance of 500.00, THE
   system SHALL show a balance of 600.00 for that account.
 - AC-14 (FR-08): WHEN a user opens the movement list, THE system SHALL show their movements
-  ordered by date, newest first, in pages of at most 100.
-- AC-15 (FR-09): IF a user saves a movement dated after the current day, THEN THE system SHALL
-  reject it.
+  ordered by date and time, newest first, in pages of at most 100.
+- AC-15 (FR-09): IF a user saves a movement whose date in the user's time zone is after the
+  current day in that time zone, THEN THE system SHALL reject it.
 - AC-16 (FR-10): IF a user requests to read a movement owned by another user and not shared with
   them through a group, THEN THE system SHALL answer 404 Not Found.
 - AC-17 (FR-10): WHEN a user opens the movement list, THE system SHALL show only movements they
@@ -122,6 +132,23 @@ maps every original ID to its new one.
   500.00, THE system SHALL show Available and Net worth totals that are 100.00 lower than before
   the expense.
 
+- AC-25 (FR-15): IF a user saves a movement on an archived account, THEN THE system SHALL reject
+  it, store nothing and tell the user to unarchive the account first.
+- AC-26 (FR-15): IF a user saves a movement in an archived category, THEN THE system SHALL reject
+  it, store nothing and tell the user to unarchive the category first.
+- AC-27 (FR-15): WHEN a user unarchives an account or category that had refused a movement, THE
+  system SHALL accept a movement on it again.
+- AC-28 (FR-16): IF a user creates a 61st movement by manual entry within one minute, THEN THE
+  system SHALL reject it with a 429 answer that states when to retry, and store no movement beyond
+  the 60th of that minute.
+- AC-29 (FR-16): WHEN the minute of a user's limit has passed, THE system SHALL accept manual
+  creation again.
+- AC-30 (FR-16): WHILE movements are created by a path other than manual entry, THE system SHALL
+  NOT count them toward the limit of 60 per minute.
+- AC-31 (FR-01): WHEN a user opens the entry form of a new expense or income, THE system SHALL show
+  the date and time defaulted to the current moment in the user's time zone and let the user edit
+  both.
+
 ## Out of Scope
 - Transfers and currency exchanges (DISC-001-03c).
 - Tags and filters on the list (DISC-001-03d).
@@ -133,7 +160,8 @@ maps every original ID to its new one.
 - Future-dated and recurring movements (PRD 08).
 - Receipt photos or file attachments.
 - Currencies other than ARS and USD.
-- Bulk import of movements (CSV, bank statements).
+- Bulk import of movements (CSV, bank statements, Excel): a future ticket, which must bypass the creation limit (AC-30).
+- A cap on the total number of movements per user.
 - Splitting one movement across several categories.
 
 ## Risks and Mitigations
@@ -148,6 +176,10 @@ maps every original ID to its new one.
   DISC-001-01f erasure guard.
 - **No stored rate exists yet** → decided (2026-10-02): the form requires a manual rate (FR-04,
   AC-20, AC-21).
+- **Writing a movement on an archived account or category** → decided (2026-10-02): rejected
+  (FR-15, AC-25 to AC-27).
+- **A client or script floods the creation route** → a per-user limit of 60 per minute (FR-16,
+  AC-28 to AC-30) stored in the database (NFR-08), with no cap on the total.
 
 ## Dependencies
 - DISC-001-03a (Exchange Rates, Store and Sync) — the stored rates to prefill (FR-04, FR-11).
@@ -191,6 +223,19 @@ maps every original ID to its new one.
   stay. FR-14 and AC-24 (movements count in the Available and Net worth totals) are not in the original
   text: they follow from FEAT-003 and the real AccountMovements adapter, and are listed here as added
   while defining.
-- 2026-10-02: STILL OPEN with the human: which timestamp drives the rate age of FR-11 and AC-11 (the
-  provider's update time or the time of our refresh). The requirement is kept as written until it is
-  decided.
+- 2026-10-02: Human decision Q1 (relayed by the orchestrator): the rate age of FR-11 and AC-11 is
+  measured from the time of our own refresh (`fetchedAt`), not from the provider's update time.
+- 2026-10-02: Human decision Q2: a movement on an archived account or category is rejected by the API
+  (account: the existing ACCOUNT_ARCHIVED 409 with its own message; category: a new CATEGORY_ARCHIVED
+  409) and the screen tells the user to unarchive first: FR-15, AC-25 to AC-27.
+- 2026-10-02: Human decision Q3: the caps (amount at most 10^15 minor units, note at most 500
+  characters), RATE_REQUIRED as a 400 and the read route GET /movements/:id are confirmed. CHANGED: a
+  movement stores DATE AND TIME as a UTC instant, shown in the user's time zone, and the entry form
+  defaults to the current moment and is editable (FR-01, FR-02, FR-08, FR-09, AC-01, AC-04, AC-14,
+  AC-15, AC-31). The rule "no movement after the current day in the user's time zone" is kept on the
+  date taken in that zone (AC-15), which allows a later time on the same day; whether a later time
+  today should also be refused is raised as an open question and not decided here.
+- 2026-10-02: Human decision Q4: manual movement creation is limited to 60 per minute per user, a
+  rejected excess answers 429 with a retry time, the counters are stored in the database, bulk import
+  (for example from Excel, a future ticket with no PRD yet) must not count against it, and the limit
+  is not a cap on the total number of movements: FR-16, NFR-08, AC-28 to AC-30.

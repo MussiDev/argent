@@ -6,15 +6,16 @@
 | PRD | docs/ddw/prd/prd-DISC-001-02b.md |
 | Tier | FEATURE |
 | Date | 2026-10-01 |
-| Spec loops | 1 |
+| Spec loops | 3 |
 | Loops since last human decision | 0 |
 
 ## Summary
 Adds the `categories` module (its own module under `apps/api/src/categories/`, human decision Q4) and
 the matching web feature. A category has a kind (expense or income), an optional parent (one level
 only, same kind), an icon and a color taken from fixed lists, and is archived instead of deleted when
-history may depend on it. The default set of Appendix A is seeded once per user from a catalog in
-`packages/shared` keyed by stable keys. A default category stores its key and no name until the user
+history may depend on it. The default set of Appendix A is created from a catalog in `packages/shared` keyed by stable keys:
+in the same transaction as the user, for email and password registration and for Google sign-up
+(human decision D1), and by an idempotent backfill inside the migration for users that already exist. A default category stores its key and no name until the user
 renames it; the web shows `defaultCategoryName(key, language)` for the active locale, so untouched
 defaults follow the interface language and stop translating the moment the user renames them (human
 decision Q3). The API never needs the user's language: it returns `key` and `name` (null while
@@ -38,13 +39,36 @@ whose only adapter returns `false` until PRD 03, the same pattern as accounts.
   string stays in the catalogs. The response shape is `key` (set for defaults, kept after a rename) and
   `name` (null while untouched); any other client (reports, exports, push) resolves a label with
   `displayCategoryName` from the shared package.
-- **Seeding is lazy and once per user (D1):** the first categories request of a user inserts the
-  defaults in one transaction and records `category_defaults_seeded`, so it covers users created before
-  this ticket and new users, needs no change to the identity module, and never resurrects a default the
-  user deleted. `ensureDefaults` first checks the marker with a plain select (one cheap read on every
-  later request) and returns nothing; the seeding transaction commits on its own before the use case
-  runs, so a later failure keeps the defaults. Any backend reader that must see defaults (reports, PRD
-  03 joins) has to call the categories module, not read the table directly. See "Open decisions".
+- **Defaults are created at account creation (D1, human):** identity declares a port
+  `NewUserProvisioning.provision(userId)` and calls it right after `users.create` in both creation
+  paths (`register-user.ts` and the Google sign-up branch of `complete-google-sign-in.ts`), inside the
+  transaction both already run in. The port is part of `TransactionalRepositories`; the identity
+  infrastructure `DrizzleUnitOfWork` builds it from a list of transaction-bound hooks
+  `(tx, userId) => Promise<void>` handed to `createIdentityModule` through a new `onUserCreated`
+  option; the composition root (`server.ts`) registers the categories module's
+  `seedDefaultCategories(tx, userId)`. Identity never imports categories (dependency direction:
+  composition root to both). Same transaction because the account and its defaults must exist
+  together or not at all: a seeding failure rolls the whole creation back, registration answers the
+  same 500 `INTERNAL` as any unexpected failure and creates nothing (AC-19), and the user can simply
+  retry; the cost is two multi-row inserts (33 rows) added to a registration that already hashes a
+  password with Argon2id. The supersede path of Google sign-up (`supersedeUnverified`) updates an
+  existing row and creates no user, so it seeds nothing: that user got their defaults at
+  registration or through the backfill.
+- **Backfill for existing users (D1, human):** `0009_categories.sql` ends with one idempotent
+  statement (before the guard trigger is appended): for every user without a `category_defaults_seeded` row it inserts the marker and the
+  default rows from a literal `values` list pasted from the shared catalog. The marker is what
+  makes a re-run, or a user who deleted a default, never get it back (FR-14). The list is
+  pasted into the SQL once, from the catalog, with a throwaway snippet that is not committed. A test
+  migrates a database that already has users and compares the rows with a FROZEN fixture of the
+  0009 set (`apps/api/test/categories/fixtures/default-set-0009.ts`), because a migration is frozen
+  history and the live catalog may legitimately change later; a separate test checks that the live
+  catalog matches what `seedDefaultCategories` writes. Cost is proportional to users times 33 rows in one
+  pre-deploy transaction (about 330 rows today); the 100,000-user revisit point is a guess, not a
+  measured limit.
+- **Safety net (D9, open):** the use cases still call `ensureDefaults`, which checks the marker with
+  a plain select and seeds only when it is missing. It covers users created in the window between the
+  migration and the deploy of the hooks and any future creation path that forgets the hook, and it is
+  the same function as the hook, so it never creates duplicates or resurrects deleted defaults.
 - **Name uniqueness (D2):** compared case-insensitively among siblings (same owner, kind and parent),
   archived ones included. The effective names of an untouched default are BOTH its Spanish and its
   English name, so a custom name equal to either is refused.
@@ -80,38 +104,31 @@ whose only adapter returns `false` until PRD 03, the same pattern as accounts.
   unique-violation.ts` are copied byte-identical from DISC-001-02a's branch so both branches add the
   same content and the later merge is clean.
 
-## Open decisions for the human (do not block CODE; the defaults below are what this spec builds)
-- **D1, how defaults reach users:** the PRD says "for every new user". Default built: lazy, once per
-  user, on the first categories request (covers existing and new users, no identity coupling, no
-  resurrection of deleted defaults). Alternative: seed in the registration use cases plus a one-off
-  backfill migration for existing users. Recommendation: lazy. Tradeoff: a user's rows exist only after
-  their first categories request, which is unobservable because every read seeds first.
-- **D2, names that collide across languages:** a user-created category named "Comida" while the default
-  "Food" is untouched would collide when the language switches to Spanish. Default built: refuse any
-  custom name equal to the Spanish or English name of an untouched sibling default (409
-  `CATEGORY_NAME_TAKEN`), so uniqueness holds in every language at all times. Alternatives: allow it and
-  mark the translation as taken, or let the custom name win silently. Recommendation: refuse. Tradeoff: an
-  English user cannot reuse a Spanish default word until they rename the default.
-- **D3, icons, colors and their default values:** the PRD names an icon and a color without a set.
-  Default built: the fixed lists above and a proposed icon and color for each default (a
-  subcategory inherits its parent's). Recommendation: accept; changing values later is a catalog edit.
-- **D4, what counts as "renamed":** only a name change makes a default the user's own; editing its icon
-  or color keeps the name translating. Recommendation: keep.
-- **D6, list defaults and the archived filter:** `limit` defaults to 100 (the maximum) so a user's whole
-  set arrives in one call in practice, the web container pages until `total` is reached so nothing is
-  silently truncated, and `archived=false` returns only active categories while `archived=true` returns
-  only archived ones. Recommendation: keep.
-- **D7, uniqueness scope and small rules the PRD does not state:** names are unique among archived
-  siblings too (an archived "Gym" blocks a new "Gym" under the same parent and kind); unarchiving does
-  not unarchive subcategories; archive and unarchive are idempotent; the database refuses changing a
-  category's owner, kind, parent or default key. Recommendation: keep.
-- **D8, AGENTS.md exception for default names:** default category names live in `packages/shared`
-  (needed server-side for D2) instead of the web catalogs; this ticket adds one sentence to AGENTS.md
-  to record it. Alternative: keep the strings in the web catalogs and have the API import them (not
-  possible across the app boundary) or duplicate them with a sync test. Recommendation: the exception.
-- **D5, archived parent:** creating a subcategory under an archived parent is allowed, and unarchiving a
-  subcategory does not require an active parent (the PRD says nothing). Recommendation: keep, review
-  when movement pickers exist (PRD 03).
+## Human decisions taken during PLAN (settled; do not re-raise in reviews)
+- **D1 (changed):** defaults are created at account creation (email and password, Google sign-up) in
+  the same transaction, and existing users get them through the idempotent migration backfill; deleted
+  defaults are never recreated.
+- **D2:** a custom name equal to the Spanish or English name of an untouched sibling default is refused
+  with 409 `CATEGORY_NAME_TAKEN`, so uniqueness holds in every language at all times.
+- **D3:** icon and color are keys from fixed lists (24 and 12) with a proposed value per default.
+- **D4:** only a name change makes a default the user's own; editing icon or color keeps the name
+  translating.
+- **D5:** creating a subcategory under an archived parent is allowed.
+- **D6:** `limit` defaults to 100, the web pages until `total` is reached, and `archived=false` means
+  only active rows while `archived=true` means only archived ones.
+- **D7:** names are unique among archived siblings too, unarchiving does not unarchive subcategories,
+  archive and unarchive are idempotent, and the database refuses changing owner, kind, parent or
+  default key.
+- **D8 (approved):** default category names live in `packages/shared` and AGENTS.md records the
+  exception.
+
+## Open decision for the human (does not block CODE; the default below is what this spec builds)
+- **D9, lazy safety net on top of creation-time seeding:** keep `ensureDefaults` in the use cases (one
+  plain select per request) as an idempotent fallback for users created between the migration and the
+  deploy of the hooks and for future creation paths that forget the hook; it respects the marker, so
+  it never resurrects a deleted default. Alternative: remove it and rely on the hook and the backfill
+  only. Recommendation: keep it; tradeoff: one extra cheap read per categories request and a second
+  code path to maintain.
 
 ## Deferred to PRD 03 (explicit, and not silent gaps)
 - AC-05 "shows it in every existing movement" and AC-06 "keeps it on existing movements": movements do
@@ -124,7 +141,7 @@ whose only adapter returns `false` until PRD 03, the same pattern as accounts.
 ## Coverage: PRD → blocks
 | Requirement | Covered by |
 |---|---|
-| FR-01 | Block 1, Block 3, Block 4, Block 5, Block 7 |
+| FR-01 | Block 1, Block 3, Block 4, Block 5, Block 7, Block 9 |
 | FR-02 | Block 1, Block 3, Block 4, Block 5, Block 7 |
 | FR-03 | Block 1, Block 3, Block 4, Block 5 |
 | FR-04 | Block 3, Block 4, Block 5 |
@@ -136,16 +153,19 @@ whose only adapter returns `false` until PRD 03, the same pattern as accounts.
 | FR-10 | Block 3, Block 4, Block 5, Block 6 |
 | FR-11 | Block 1, Block 7, Block 8 |
 | FR-12 | Block 1, Block 3, Block 4, Block 5, Block 7 |
+| FR-13 | Block 4 |
+| FR-14 | Block 3, Block 4, Block 9 |
 | NFR-01 | Strategy: the list query validator caps `limit` at 100 with a default of 100 and the whole default set (33 rows) fits one page (Block 1, Block 5) |
 | NFR-02 | Strategy: every repository method requires an `AccessScope` and filters with `scopedTo` in the same statement; the owner column is `NOT NULL` with composite foreign keys that keep parent and child under one owner (Block 4) |
 | NFR-03 | Strategy: the name validator trims, normalizes and counts code points (1 to 50) and a `CHECK` on `char_length` mirrors it (Block 1, Block 4) |
 
 ## Dependencies between blocks
-Execution order: Block 1 → Block 2 → Block 3 → Block 4 → Block 5 → Block 6 → Block 7 → Block 8.
+Execution order: Block 1 → Block 2 → Block 3 → Block 4 → Block 9 → Block 5 → Block 6 → Block 7 → Block 8.
 - Block 2 needs the error codes added in Block 1's package.
 - Block 3 needs Blocks 1 and 2 (catalog, validators, error codes).
 - Block 4 implements the ports defined in Block 3.
 - Block 5 composes Blocks 3 and 4 with `requireSession`, `requireVerifiedEmail`, `validate` and `AccessPolicy`.
+- Block 9 (added for decision D1) needs Blocks 3 and 4 (the tx-bound seeding function) and runs before Block 5, whose registration-based tests depend on it; the order is 1, 2, 3, 4, 9, 5, 6, 7, 8.
 - Block 6 calls the contract fixed in Block 5; Block 7 uses Block 6; Block 8 runs against everything.
 
 ## Block 1 — Default catalog and category contracts (packages/shared)
@@ -224,7 +244,7 @@ The two shared test files pass, `pnpm typecheck` passes, and `@pesly/shared` exp
 
 **Logic**
 - `effectiveNames(category)` returns the custom name alone when `name` is set, and both language names of its key when untouched. `findNameConflict(siblings, candidate, excludeId)` compares NFC lower-cased names against the effective names of every sibling except `excludeId` and answers the conflicting sibling or null.
-- Ports (no framework imports; `AccessScope` from the `shared/access` barrel only): `CategoryRepository` with `ensureDefaults(scope write)` (checks the seed marker and seeds once per owner; returns nothing), `findById(scope, id)`, `list(scope, { kind?, archived, limit, offset })` returning `{ items, total }`, `setArchived(scope write, id, archived)` (archiving also archives the subcategories), `countChildren(scope, id)`, `delete(scope write, id)`, and `runExclusive(scope write, fn)`, which runs `fn` in one transaction under the per-owner lock with a transactional view offering `findById`, `listSiblings(kind, parentId)`, `insert` and `updateFields`; the use cases decide, the adapter only provides atomic primitives. `CategoryUsage.isUsed(categoryId)` is the only door through which movements reach categories; PRD 03 implements it, and the port is unscoped by design: it only receives ids the scoped repository returned.
+- Ports (no framework imports; `AccessScope` from the `shared/access` barrel only): `CategoryRepository` with `ensureDefaults(scope write)` (the safety net of D9: checks the seed marker and seeds only when it is missing; returns nothing; the same seeding function the creation hook uses), `findById(scope, id)`, `list(scope, { kind?, archived, limit, offset })` returning `{ items, total }`, `setArchived(scope write, id, archived)` (archiving also archives the subcategories), `countChildren(scope, id)`, `delete(scope write, id)`, and `runExclusive(scope write, fn)`, which runs `fn` in one transaction under the per-owner lock with a transactional view offering `findById`, `listSiblings(kind, parentId)`, `insert` and `updateFields`; the use cases decide, the adapter only provides atomic primitives. `CategoryUsage.isUsed(categoryId)` is the only door through which movements reach categories; PRD 03 implements it, and the port is unscoped by design: it only receives ids the scoped repository returned.
 - Use cases: every one calls `ensureDefaults` first. `create` runs inside `runExclusive`: it loads the parent through the transactional view (a foreign, missing or concurrently deleted parent is 404), refuses a parent that already has a parent (`CategoryNestingTooDeep`, AC-03) and a parent of another kind (`CategoryParentKindMismatch`, AC-04), applies `findNameConflict` to the siblings and inserts; `update` runs inside `runExclusive` too and changes name, icon and color (a name change on a default stores the custom name and keeps the key, so the category stops translating; a name change applies `findNameConflict` excluding the category itself); `set-category-archived` archives (with its subcategories, AC-07) or unarchives only the target (AC-08), idempotently; `delete` finds with the write scope (404), refuses when `isUsed` or `countChildren` is non-zero (`CategoryInUse`, AC-10), then deletes; a foreign-key violation from the repository also surfaces as `CategoryInUse`.
 
 **Input validation**
@@ -238,7 +258,7 @@ The two shared test files pass, `pnpm typecheck` passes, and `@pesly/shared` exp
 - A repository foreign-key violation on delete raises `CategoryInUse`; a failing usage port propagates the error.
 
 **Required tests**
-- [ ] A new user's first call seeds exactly the Appendix A defaults once, and a second call seeds nothing; a deleted default is not recreated (validates AC-01).
+- [ ] `ensureDefaults` for a user without the marker seeds exactly the Appendix A defaults once, a second call seeds nothing, and a deleted default is not recreated (validates AC-22).
 - [ ] the in-memory fake implements only the atomic primitives, so the AC-11 and AC-16 tests below run the production `findNameConflict` through the use cases (validates AC-11, AC-16).
 - [ ] create returns the category and it appears in the list under its kind (validates AC-02).
 - [ ] a subcategory under a subcategory fails with the `CategoryNestingTooDeep` error (validates AC-03).
@@ -266,11 +286,13 @@ The two shared test files pass, `pnpm typecheck` passes, and `@pesly/shared` exp
 - `apps/api/src/shared/db/pg-errors.ts` (new) — `violatedConstraint(error, code)` for 23505 and 23503, and `apps/api/src/identity/infrastructure/db/unique-violation.ts` (modified) delegating to it; both are copied byte-identical from DISC-001-02a's branch (`git show origin/feat/DISC-001-02a-accounts:<path>`), so the later merge is clean.
 - `apps/api/src/categories/infrastructure/db/drizzle-category-repository.ts` (new) — implements the repository port.
 - `apps/api/src/categories/infrastructure/usage/no-usage-adapter.ts` (new) — answers `false`.
-- `apps/api/test/categories/category-repository.test.ts` (new), `apps/api/test/identity/migration.test.ts` and `apps/api/test/deploy/build-output.test.ts` (modified).
+- `apps/api/src/categories/infrastructure/db/seed-default-categories.ts` (new) — `seedDefaultCategories(tx, userId)`: transaction-bound, shared by the creation hook and `ensureDefaults`; exported from `apps/api/src/categories/index.ts`.
+- `apps/api/test/categories/category-repository.test.ts` and `apps/api/test/categories/fixtures/default-set-0009.ts` (new), `apps/api/test/identity/migration.test.ts` and `apps/api/test/deploy/build-output.test.ts` (modified).
 
 **Logic**
-- Repository: every method takes the scope first and filters with `scopedTo(scope, { owner: categories.ownerId })` in the same statement; foreign or missing rows give `null` or `false`. `ensureDefaults` inserts the owner's row in `category_defaults_seeded` with `on conflict do nothing returning` and, only when that row was new, inserts the roots then the children (joined by key) in the same transaction, so concurrent first requests seed once and deleted defaults never return. `runExclusive` opens one transaction, takes `pg_advisory_xact_lock(hashtextextended('categories:name:' || owner_id, 0))` and exposes the transactional primitives; the conflict rule itself runs in the use case; a unique violation on `categories_owner_name_unique` also becomes `CategoryNameTaken`, and a foreign-key violation (23503) on insert under a parent that vanished becomes `ResourceNotFound`. `update` sets `name` (turning an untouched default into the user's own), `icon`, `color` and `updated_at` explicitly. `setArchived(…, true)` archives the target and its children in one statement (`id = ? or parent_id = ?`) and keeps existing `archived_at`; unarchiving clears only the target. A foreign-key violation (23503) on delete becomes `CategoryInUse`; any other error propagates unchanged.
+- Repository: every method takes the scope first and filters with `scopedTo(scope, { owner: categories.ownerId })` in the same statement; foreign or missing rows give `null` or `false`. `seedDefaultCategories(tx, userId)` (also behind `ensureDefaults`) runs ONE statement with data-modifying CTEs (marker `on conflict do nothing returning`, then the roots, then the children joined by key), so a registration pays one round trip and concurrent callers seed once; it inserts the owner's row in `category_defaults_seeded` with `on conflict do nothing returning` and, only when that row was new, inserts the roots then the children (joined by key) in the same transaction, so concurrent first requests seed once and deleted defaults never return. `runExclusive` opens one transaction, takes `pg_advisory_xact_lock(hashtextextended('categories:name:' || owner_id, 0))` and exposes the transactional primitives; the conflict rule itself runs in the use case; a unique violation on `categories_owner_name_unique` also becomes `CategoryNameTaken`, and a foreign-key violation (23503) on insert under a parent that vanished becomes `ResourceNotFound`. `update` sets `name` (turning an untouched default into the user's own), `icon`, `color` and `updated_at` explicitly. `setArchived(…, true)` archives the target and its children in one statement (`id = ? or parent_id = ?`) and keeps existing `archived_at`; unarchiving clears only the target. A foreign-key violation (23503) on delete becomes `CategoryInUse`; any other error propagates unchanged.
 - A trigger rejects changing `owner_id`, `kind`, `parent_id` or `default_key` after insert, and rejects a parent that itself has a parent (defence in depth for FR-03, FR-04).
+- Backfill: after creating the tables, `0009_categories.sql` inserts, for every user without a `category_defaults_seeded` row, the marker and the 33 default rows (roots first, children joined by key) from a literal `values` list generated from the shared catalog, as ONE statement with data-modifying CTEs (new owners = users without a marker, inserted with their marker; then the roots; then the children joined to the roots by key), placed before the guard trigger is created because rows written by a CTE are invisible to a `BEFORE` row trigger of the same statement (the composite foreign key still holds), and touching no other row; the marker is written for every user, verified or not, so D9 stays load-bearing for users created between the migration and the deploy of the hooks.
 - Rollback: run `0009_categories.down.sql`, which drops the trigger, the function and both tables and deletes the journal row whose `created_at` equals the journal `when` of 0009, then revert the commit. DESTRUCTIVE (every category is lost), so it needs an explicit plan and the API stopped. Because 0009 has the newest `when`, it is rolled back before every other migration.
 
 **Data model**
@@ -279,6 +301,7 @@ The two shared test files pass, `pnpm typecheck` passes, and `@pesly/shared` exp
 - Entity `category_defaults_seeded`: `owner_id` uuid primary key, foreign key to `users.id` on delete cascade; `seeded_at` timestamptz not null default `now()`.
 
 **Error handling**
+- Both tables reference `users.id` with `ON DELETE CASCADE`, so deleting a user (as several existing tests do) removes their categories and marker instead of failing with 23503.
 - A custom name colliding on `categories_owner_name_unique` raises `CategoryNameTaken`, never a raw driver error.
 - Delete blocked by a referencing row (23503) raises `CategoryInUse`.
 - A direct update that changes `owner_id`, `kind`, `parent_id` or `default_key`, or inserts a child under a child, fails at the database with 23514 and leaves the row unchanged.
@@ -286,7 +309,11 @@ The two shared test files pass, `pnpm typecheck` passes, and `@pesly/shared` exp
 - Any other database error propagates and becomes 500 `INTERNAL` through the shared error handler.
 
 **Required tests**
-- [ ] `ensureDefaults` seeds the 33 defaults once per owner, concurrent first calls seed once, and a second owner gets their own set (validates AC-01, NFR-02).
+- [ ] `seedDefaultCategories` creates the 33 defaults once per owner, concurrent calls seed once, and a second owner gets their own set (validates AC-01, NFR-02).
+- [ ] the backfill on a database that already has users creates exactly the rows of the frozen 0009 fixture (keys, kinds, parents, icons, colors) for each user and changes no other row (validates AC-20).
+- [ ] `seedDefaultCategories` writes exactly the live `DEFAULT_CATEGORIES` set (validates AC-01).
+- [ ] running the backfill statements a second time, or for a user who already has the set, creates no duplicate (validates AC-21).
+- [ ] a default deleted before a second backfill run, or before `ensureDefaults`, is not recreated and the failure of the duplicate insert is never raised (validates AC-22, error path).
 - [ ] create and read a category under a default parent; update changes name, icon, color; a default renamed keeps its key and stores the name (validates AC-02, AC-05, AC-16).
 - [ ] archive archives the target and its children, unarchive restores only the target, and the default list excludes archived rows (validates AC-06, AC-07, AC-08).
 - [ ] delete of an unreferenced leaf removes it; delete of a category referenced by a test-only table with `ON DELETE RESTRICT` fails with the `CategoryInUse` error and the row stays (validates AC-09, AC-10).
@@ -303,6 +330,44 @@ The two shared test files pass, `pnpm typecheck` passes, and `@pesly/shared` exp
 **Completion criterion**
 The repository test, `migration.test.ts` and `build-output.test.ts` pass against PostgreSQL, `pnpm exec drizzle-kit generate` reports no pending difference, and the only hand-written SQL is the appended guard function and trigger.
 
+## Block 9 — Create defaults when an account is created (identity wiring)
+
+**Files**
+- `apps/api/src/identity/application/ports/new-user-provisioning.ts` (new) — the port `NewUserProvisioning.provision(userId)`.
+- `apps/api/src/identity/application/ports/unit-of-work.ts` (modified) — `TransactionalRepositories` gains `provisioning`.
+- `apps/api/src/identity/application/register-user.ts` and `apps/api/src/identity/application/complete-google-sign-in.ts` (modified) — call `provisioning.provision(user.id)` right after `users.create`.
+- `apps/api/src/identity/infrastructure/db/user-created-hook.ts` (new) — the hook type `(tx, userId) => Promise<void>`; `apps/api/src/identity/infrastructure/db/drizzle-unit-of-work.ts` (modified) — builds `provisioning` from the hooks inside each transaction.
+- `apps/api/src/identity/index.ts` (modified) — `IdentityInfrastructureDependencies` (inherited by `createIdentityModule`) gets the optional `onUserCreated` hook list and passes it as an optional third parameter (default none) of `DrizzleUnitOfWork`; the hook type is re-exported next to `IdentityDb`; `apps/api/src/app.ts` (modified) — `IdentityModuleOptions` gets the option and `createApp` forwards it field by field.
+- `apps/api/src/server.ts` (modified) — registers `seedDefaultCategories` from the categories module as a hook.
+- `apps/api/test/helpers/identity-harness.ts` (modified) — accepts `onUserCreated` (default none, so existing identity tests are unchanged); every full literal fake of `TransactionalRepositories` (found by typecheck: `apps/api/test/identity/register-user.test.ts`, `refresh-session.test.ts`, `password-reset-use-cases.test.ts` and any other) gets a `provisioning` stub, the doc comment of the interface is broadened (it already holds the email sender), and `register-user.test.ts` gains the provisioning assertions; `apps/api/test/identity/identity-infrastructure.test.ts` (modified) tests the hook list of the unit of work; `eslint.config.mjs` (modified) adds a `no-restricted-imports` pattern (`**/categories` and `**/categories/**`) for `apps/api/src/identity/**`, repeated in the domain and application blocks because each block's option replaces the others'.
+- `apps/api/test/categories/account-creation.test.ts` (new) — integration tests through the harness with real sessions, reading the `categories` rows directly before any categories request; `apps/api/test/perf/auth-latency.perf.test.ts` and `apps/api/test/perf/google-callback.perf.test.ts` (modified) pass `onUserCreated: [seedDefaultCategories]` explicitly so their budgets include the seeding; `apps/api/test/foundation/architecture-boundaries.test.ts` (modified) probes that identity domain, application, `index.ts` and infrastructure files reject imports from the categories module.
+
+**Logic**
+- Identity declares the port in its application layer and never imports the categories module; hooks receive the transaction handle and live in infrastructure, so the application layer stays free of drivers. The composition root is the only place that knows both modules.
+- Both creation paths already run inside the unit of work, so the defaults and the user commit together; a hook that throws rejects the whole transaction and the use case fails like any other unexpected error (500 `INTERNAL`, no user, no verification email, no session). The supersede path creates no user and calls nothing. The duplicate-email branch of registration creates nothing and seeds nothing.
+- The hook is `seedDefaultCategories(tx, userId)` of Block 4, which is idempotent through the seed marker; its `tx` parameter uses a structural alias declared in the categories infrastructure (`PgDatabase<NodePgQueryResultHKT>`), so categories never imports identity internals for it.
+- Users inserted by test helpers such as `seedUser` bypass the unit of work and get no defaults at creation; they rely on the `ensureDefaults` safety net (D9), and one test proves it.
+- Seeding failures are logged distinctly from other registration failures. The registration limiter records its attempt before the transaction and does not refund it, so a rolled-back seeding failure costs one of the five registrations per IP per hour; a deterministic seeding fault would also make the created path answer 500 while the existing-email path answers 200, which is the same oracle any internal failure of the created path already is (accepted, noted in the threat document).
+
+**Error handling**
+- A hook failure during registration rolls back the user, the verification email and the seeding, and answers 500 `INTERNAL`.
+- A hook failure during Google sign-up rolls back the user, the identity link and the session; the callback has no catch of its own, so the shared error handler answers the generic 500 `INTERNAL` (the OAuth state is already consumed, so the user restarts the flow); no new catch is added in this ticket.
+- A registration for an email that already exists seeds nothing and still answers the same generic success.
+
+**Required tests**
+- [ ] after email and password registration the user has exactly the Appendix A defaults (33 rows, keys and kinds from the catalog) (validates AC-01).
+- [ ] after Google sign-up of a new user the user has exactly the defaults (validates AC-18).
+- [ ] a hook that throws leaves no user, no verification email and no categories after registration (500 `INTERNAL`), and no user, link or session after Google sign-up (the shared handler's 500, state consumed) (error path, validates AC-19).
+- [ ] the Google supersede path and the duplicate-email registration create no categories and no error (validates FR-01).
+- [ ] a user inserted with `seedUser` (no hook) has no `categories` rows until the first categories request, which seeds them through `ensureDefaults` (validates AC-01 for the safety net).
+- [ ] registering two users gives each their own set and a deleted default is not recreated by a later sign-in (validates AC-22).
+- [ ] the unit of work calls every registered hook with the transaction handle and the new user id, and a hook that rejects rolls the user back (error path, validates AC-19).
+- [ ] the registration use case calls `provision` with the new user id after `users.create` and a rejecting `provision` makes `execute` reject with no verification email enqueued (error path, validates AC-19).
+- [ ] with no hook registered the existing identity behaviour is unchanged: registration and Google sign-up still succeed, a missing hook does not fail them and no categories are created (error path, validates the dependency direction).
+
+**Completion criterion**
+`account-creation.test.ts` and the whole identity test folder pass, `pnpm lint` reports no boundary violation (identity imports nothing from categories, enforced by the new lint pattern and a probe), `server.ts` registers the hook, and `pnpm test:perf` still passes `auth-latency.perf.test.ts` (registration p95 under its budget) and `google-callback.perf.test.ts` with the seeding included, because the harness used there registers the hook.
+
 ## Block 5 — HTTP routes, wiring and AGENTS.md
 
 **Files**
@@ -314,7 +379,7 @@ The repository test, `migration.test.ts` and `build-output.test.ts` pass against
 - `apps/api/test/categories/category-routes.test.ts` (new) — HTTP tests through the identity harness with real sessions.
 
 **Logic**
-`createCategoryRoutes({ db, usage?, logger })` builds the repository and the use cases (default usage adapter: `NoUsageAdapter`) and returns a `RouterFactory` that mounts `requireSession` and `requireVerifiedEmail` on `/categories`, then each route with the shared `validate` middleware. The scope comes from `OwnerOrGroupMemberAccessPolicy` with the deny-all membership reader; every handler asks for a write scope because the first call seeds defaults. An empty result becomes 404. Create, update, archive, unarchive and delete write an info audit line with the user id and category id only (never a name). `createApp` does not self-mount the module; `server.ts` passes the factory next to any other module factory.
+`createCategoryRoutes({ db, usage?, logger })` builds the repository and the use cases (default usage adapter: `NoUsageAdapter`) and returns a `RouterFactory` that mounts `requireSession` and `requireVerifiedEmail` on `/categories`, then each route with the shared `validate` middleware. The scope comes from `OwnerOrGroupMemberAccessPolicy` with the deny-all membership reader; every handler asks for a write scope because `ensureDefaults` (the safety net of D9) may seed. An empty result becomes 404. Create, update, archive, unarchive and delete write an info audit line with the user id and category id only (never a name). `createApp` does not self-mount the module; `server.ts` passes the factory next to any other module factory.
 
 **API contract**
 - `GET /categories` — Query: `kind` (optional), `archived` (`true` or `false`, default false), `limit` (1 to 100, default 100), `offset`. Response 200: `{ items: CategoryResponse[], total, limit, offset }`. Errors: 400, 401, 403. Auth: session plus verified email.
@@ -336,7 +401,7 @@ The repository test, `migration.test.ts` and `build-output.test.ts` pass against
 - A response body that does not match its validator becomes 500 `INTERNAL` (fail closed), never a leak.
 
 **Required tests**
-- [ ] a new verified user's first `GET /categories` returns exactly the Appendix A defaults (33) with `key` set and `name` null (validates AC-01).
+- [ ] a user registered through the identity harness with the categories hook gets, on the first `GET /categories`, exactly the Appendix A defaults (33) with `key` set and `name` null (validates AC-01).
 - [ ] create returns 201 and the category appears in the list and under its kind (validates AC-02).
 - [ ] create with a parent that has a parent answers 400 `CATEGORY_NESTING_TOO_DEEP` and with a parent of another kind answers 400 `CATEGORY_PARENT_KIND_MISMATCH` (validates AC-03, AC-04).
 - [ ] PATCH persists name, icon and color and returns them; PATCH with `kind` or `parentId` answers 400 and the category is unchanged (validates AC-05).
@@ -435,7 +500,7 @@ The web test files and `i18n-catalogs.test.ts` pass, `pnpm typecheck` and `pnpm 
 
 **Files**
 - `apps/web/e2e/categories.spec.ts` (new) — Playwright flows with a fresh verified user.
-- `apps/api/test/foundation/architecture-boundaries.test.ts` (modified) — probes for `apps/api/src/categories/domain` (I/O libraries and infrastructure) and `apps/api/src/categories/application` (infrastructure, including `shared/access/infrastructure`); the categories persistence file imports `users` from the identity persistence file only, never from the identity barrel.
+- `apps/api/test/foundation/architecture-boundaries.test.ts` (modified) — probes for `apps/api/src/categories/domain` (I/O libraries and infrastructure) and `apps/api/src/categories/application` (infrastructure, including `shared/access/infrastructure`); the categories persistence file imports `users` from the identity persistence file only, never from the identity barrel; a probe also asserts that identity domain and application files reject imports from the categories module.
 
 **Logic**
 - The e2e spec registers and verifies a user through Mailpit like `auth.spec.ts`, opens `/es/categories`, checks the defaults in Spanish, opens `/en/categories` and checks the English names, renames a default and checks the custom name in both locales while another default still translates, creates a category and a subcategory, rejects a duplicate name and a name equal to a default's translation, archives and unarchives a parent with its subcategory, deletes an unused category, and checks that a second user never sees the first user's categories. Copy for labels comes from `e2e/support/catalogs.ts`; default names come from the shared catalog.
@@ -459,6 +524,6 @@ The web test files and `i18n-catalogs.test.ts` pass, `pnpm typecheck` and `pnpm 
 
 ## Final verification
 - `pnpm lint`, `pnpm typecheck`, `pnpm test:coverage` (80% floor over the three trees) and `pnpm e2e` pass.
-- Every FR-01 to FR-12 and AC-01 to AC-17 maps to a test above; the deferrals to PRD 03 are the ones listed and nothing else.
+- Every FR-01 to FR-14 and AC-01 to AC-22 maps to a test above; the deferrals to PRD 03 are the ones listed and nothing else.
 - `pnpm audit --prod --audit-level high` is unchanged: no runtime dependency is added to any package.
 - Rollback: `0009_categories.down.sql` drops both tables and the trigger (destructive, explicit plan required); the rest of the change is reverted with the commit.

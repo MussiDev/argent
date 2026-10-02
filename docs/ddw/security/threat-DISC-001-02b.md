@@ -7,7 +7,7 @@
 | Tier | FEATURE |
 | Date | 2026-10-01 |
 
-Risk identifiers are local to this ticket (R-01 to R-14).
+Risk identifiers are local to this ticket (R-01 to R-17).
 
 ## Components
 | Component | Source in the spec |
@@ -17,6 +17,8 @@ Risk identifiers are local to this ticket (R-01 to R-14).
 | `apps/api/src/categories/domain/naming.ts` + `apps/api/src/categories/application/ensure-defaults.ts` + `apps/api/src/categories/application/ports/category-usage.ts` (name rule, lazy seeding, usage port) | Block 3 |
 | `apps/api/src/categories/infrastructure/db/schema.ts` + `apps/api/drizzle/0009_categories.sql` (`categories`, `category_defaults_seeded`, composite foreign key, guard trigger, unique indexes) + `apps/api/drizzle/rollback/0009_categories.down.sql` | Block 4 |
 | `apps/api/src/categories/infrastructure/db/drizzle-category-repository.ts` + `apps/api/src/categories/infrastructure/usage/no-usage-adapter.ts` | Block 4 |
+| `apps/api/src/categories/infrastructure/db/seed-default-categories.ts` + the backfill statements of `apps/api/drizzle/0009_categories.sql` (default rows for existing users) | Block 4 |
+| `apps/api/src/identity/application/ports/new-user-provisioning.ts` + `apps/api/src/identity/application/register-user.ts` + `apps/api/src/identity/application/complete-google-sign-in.ts` + `apps/api/src/identity/infrastructure/db/drizzle-unit-of-work.ts` + `apps/api/src/server.ts` (creation-time provisioning hook inside the user transaction) | Block 9 |
 | `apps/api/src/categories/infrastructure/http/category-routes.ts` (`GET /categories`, `POST /categories`, `GET /categories/:id`, `PATCH /categories/:id`, `POST /categories/:id/archive`, `POST /categories/:id/unarchive`, `DELETE /categories/:id`) + `apps/api/src/server.ts` wiring | Block 5 |
 | `apps/web/src/lib/api-client.ts` category methods | Block 6 |
 | `apps/web/src/features/categories/containers/categories-container.tsx` + `apps/web/src/features/categories/components/category-list.tsx` + `apps/web/src/features/categories/components/category-visual.tsx` | Block 7 |
@@ -25,10 +27,27 @@ Risk identifiers are local to this ticket (R-01 to R-14).
 - Browser → API (Express): public internet; category names, kinds, icons, colors and parent ids in requests, categories in responses, session cookies, all over TLS; the origin guard and `X-Requested-With` protect state-changing routes.
 - API (categories routes) → application layer: the authenticated user id and the `AccessScope` issued by the `AccessPolicy` cross here; bodies have been parsed by the shared validators.
 - Application layer → PostgreSQL: private network; owner-scoped `categories` rows and the per-owner seed marker.
+- Identity transaction → categories seeding hook (composition root wiring): the user id and the open transaction handle cross it; the hook writes only categories rows for that id and any failure rolls the whole user creation back.
 - Application layer → `CategoryUsage` port: the boundary PRD 03 will implement; only category ids already filtered by the scope cross it.
 - Web containers → presentational components: names reach the DOM only through React's escaping; icon and color arrive as keys mapped to Lucide components and theme tokens, never as raw values.
 
 ## STRIDE analysis
+### `apps/api/src/categories/infrastructure/db/seed-default-categories.ts` + the backfill statements of `apps/api/drizzle/0009_categories.sql` (default rows for existing users)
+- **Spoofing:** the hook receives the id of the user just created by the same transaction and writes only rows owned by that id; the backfill derives owners from `users` itself, so no input names an owner (R-01).
+- **Tampering:** the marker row inserted with `on conflict do nothing` makes the seeding and the backfill idempotent, so a re-run or a user who deleted a default never changes existing rows (R-15); the backfill is insert-only and touches no other table.
+- **Repudiation:** the migration is recorded in the Drizzle journal and the backfill is a single reviewed statement pair; registration failures are logged by the shared handler.
+- **Information Disclosure:** the rows carry only catalog keys, icons and colors, no user data beyond the owner id.
+- **Denial of Service:** the backfill is one pre-deploy transaction of users times 33 rows (about 330 rows today) and holds locks only on the new tables; the creation-time seeding is one statement of 33 rows on top of a registration that hashes a password, so it adds milliseconds (R-16).
+- **Elevation of Privilege:** the hook runs with the identity transaction handle, so it could in principle write anywhere; it is a fixed function of the categories module registered by the composition root, typed for its one purpose, and covered by tests that read back only categories rows (R-17).
+
+### `apps/api/src/identity/application/ports/new-user-provisioning.ts` + `apps/api/src/identity/application/register-user.ts` + `apps/api/src/identity/application/complete-google-sign-in.ts` + `apps/api/src/identity/infrastructure/db/drizzle-unit-of-work.ts` + `apps/api/src/server.ts` (creation-time provisioning hook inside the user transaction)
+- **Spoofing:** provisioning runs only after `users.create` in the two creation paths; the supersede path and the duplicate-email branch create no user and call nothing, so nobody can trigger seeding for an account they do not own.
+- **Tampering:** user, verification email or Google link, and defaults commit together or not at all; a failing hook rolls everything back, so no half-created account exists (R-16).
+- **Repudiation:** a failed creation is logged with request id and code like any unexpected failure; no business event is lost because nothing committed.
+- **Information Disclosure:** registration keeps its anti-enumeration answer: the duplicate-email branch seeds nothing and answers the same generic success, and a seeding failure answers the generic 500 without detail (R-16).
+- **Denial of Service:** the registration limiter still runs first, before hashing and before any seeding, so seeding cannot be driven faster than registrations are allowed (R-16).
+- **Elevation of Privilege:** identity depends only on its own port; the composition root registers the categories hook, so identity gains no access to categories internals and categories gains none to identity beyond the transaction handle (R-17).
+
 ### `packages/shared/src/categories/default-categories.ts` + `packages/shared/src/categories/category.ts` (default catalog, request and response validators, icon and color keys)
 - **Spoofing:** the contracts carry no user id, owner or role, so a client cannot name another owner (R-01).
 - **Tampering:** `kind` and `parentId` on update are declared `never`, so they cannot be changed by mass assignment (R-03); icon and color are checked against fixed key lists, so no free text or raw style value is accepted (R-09).
@@ -113,6 +132,9 @@ Risk identifiers are local to this ticket (R-01 to R-14).
 | R-04 | concurrent create or rename produces two categories with the same name under one parent, or two seeds of the defaults | T | M | M | per-owner transaction advisory lock around name writes, unique index on custom names, unique index on the default key, seed marker row inserted with `on conflict do nothing` in the same transaction |
 | R-05 | names collide across languages: a custom name equal to the other language's default name breaks uniqueness after a language switch (PRD FR-09, FR-11) | T | M | M | the name rule compares with the Spanish and English names of every untouched sibling default and refuses with 409 `CATEGORY_NAME_TAKEN`; decision D2 is raised to the human |
 | R-06 | a category is deleted while a movement is being recorded against it (check-then-act race) or while it has subcategories, destroying history (PRD FR-08) | T | L | H | `isUsed` and children checks, then a database foreign key `ON DELETE RESTRICT` required of PRD 03 and the parent foreign key `RESTRICT`, both mapped to `CATEGORY_IN_USE`; tested with a test-only referencing table |
+| R-15 | the backfill creates wrong, duplicate or missing default rows for existing users, resurrects a default a user deleted, or runs for too long (PRD FR-13, FR-14) | T | M | M | one idempotent insert-only statement pair keyed by the per-owner marker, a literal list generated from the shared catalog and a test that migrates a database with users and compares rows with the catalog, a re-run test, a deleted-default test, and a size note (users times 33 rows in one pre-deploy transaction) |
+| R-16 | seeding inside the user transaction slows registration or makes it fail, or leaves a half-created account (PRD AC-19) | D | L | M | the registration limiter runs before hashing and seeding (its attempt is not refunded after a rollback, so a failure costs one of the five registrations per IP per hour), seeding is one statement of 33 rows, seeding failures are logged distinctly, the created path answering 500 while the existing-email path answers 200 is the same oracle any internal failure of the created path already is, any failure rolls back user, email and defaults together and answers the generic 500, covered by a throwing-hook test for registration and for Google sign-up |
+| R-17 | the creation hook gets the identity transaction handle and could be abused or break the dependency direction | E | L | M | identity declares only a port and hook type, the composition root registers one fixed categories function, a boundary probe forbids identity importing categories, and the hook is covered by tests reading back only categories rows |
 | R-14 | cross-site request forges an archive or delete | S | M | M | origin guard with web origin and `X-Requested-With`, SameSite cookies, tests for the missing header |
 | R-07 | oversized lists, repeated seeding or lock contention degrade the service (PRD NFR-01) | D | L | M | `limit` at most 100, 16 kb body limit, owner indexes, seeding once per owner, owner-scoped transaction-level lock, timeouts left to the platform |
 | R-08 | category names leak through logs, validation messages or error bodies, or existence of other users' categories leaks through differing answers | I | M | M | logs carry routes, ids and statuses only; validation errors list paths only; responses are validator-stripped; 404 before any 409 or 400 for foreign ids; web shows message keys only |

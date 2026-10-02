@@ -2,9 +2,26 @@ import { describe, expect, it } from 'vitest';
 import {
   formatAmount,
   formatDateTime,
+  formatMoney,
   formatPercentage,
   formatQuantity,
 } from '../src/lib/format-amount';
+
+describe('formatMoney', () => {
+  const NBSP = ' ';
+
+  it('joins the amount and the currency code with a non-breaking space', () => {
+    expect(formatMoney(18_500_000n, 'ARS', 'en')).toBe(`185,000.00${NBSP}ARS`);
+    expect(formatMoney(18_500_000n, 'ARS', 'es')).toBe(`185.000,00${NBSP}ARS`);
+    expect(formatMoney(50_000n, 'USD', 'es')).toBe(`500,00${NBSP}USD`);
+  });
+
+  it('handles negative and zero amounts', () => {
+    expect(formatMoney(-123_456n, 'USD', 'en')).toBe(`-1,234.56${NBSP}USD`);
+    expect(formatMoney(-5n, 'ARS', 'es')).toBe(`-0,05${NBSP}ARS`);
+    expect(formatMoney(0n, 'ARS', 'en')).toBe(`0.00${NBSP}ARS`);
+  });
+});
 
 describe('formatAmount', () => {
   it('formats 18500000 minor units per language (AC-10)', () => {

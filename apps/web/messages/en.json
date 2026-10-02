@@ -14,7 +14,8 @@
       "home": "Home",
       "security": "Security",
       "profile": "Profile",
-      "categories": "Categories"
+      "categories": "Categories",
+      "investments": "Investments"
     }
   },
   "auth": {
@@ -421,6 +422,117 @@
       "body": "If your account has no password and Google cannot confirm it is you, set a password first with the forgot-password flow, then come back to delete your account.",
       "note": "No password and Google cannot confirm you? Set a password first.",
       "link": "Set a password with forgot password"
+    }
+  },
+  "investments": {
+    "title": "Investments",
+    "description": "Your portfolios and holdings, valued with the latest price you have.",
+    "empty": {
+      "title": "Create your first portfolio",
+      "description": "A portfolio groups your holdings, usually one per broker."
+    },
+    "portfolio": {
+      "totalsLabel": "Total value",
+      "holdingsWithoutPrice": "{count, plural, one {# holding without price} other {# holdings without price}}",
+      "holdingsLabel": "Holdings",
+      "noHoldings": "This portfolio has no holdings yet.",
+      "addHolding": "Add holding",
+      "delete": "Delete portfolio"
+    },
+    "holding": {
+      "quantity": "Quantity: {quantity}",
+      "priceNeeded": "Price needed",
+      "gain": "Gain {amount} ({percent})",
+      "loss": "Loss {amount} ({percent})",
+      "stalePrice": "Price from {date}",
+      "showDetails": "Show details",
+      "showDetailsFor": "Show details for {ticker}",
+      "hideDetailsFor": "Hide details for {ticker}",
+      "editFor": "Edit {ticker}",
+      "setPriceFor": "Set price for {ticker}",
+      "deleteFor": "Delete {ticker}",
+      "hideDetails": "Hide details",
+      "unitPrice": "Unit price",
+      "priceSource": "Price source",
+      "pricedAt": "Price date and time",
+      "noPrice": "No price yet",
+      "edit": "Edit",
+      "setPrice": "Set price",
+      "delete": "Delete"
+    },
+    "instrumentTypes": {
+      "stock": "Stock",
+      "cedear": "CEDEAR",
+      "bond": "Bond",
+      "mutual_fund": "Mutual fund",
+      "fixed_term_deposit": "Fixed-term deposit",
+      "crypto": "Crypto",
+      "other": "Other"
+    },
+    "priceSources": {
+      "import": "Import",
+      "manual": "Manual",
+      "automatic": "Automatic"
+    },
+    "forms": {
+      "required": "Required",
+      "createPortfolio": {
+        "title": "New portfolio",
+        "name": "Name",
+        "submit": "Create portfolio",
+        "pending": "Creating…"
+      },
+      "addHolding": {
+        "title": "Add holding",
+        "ticker": "Ticker",
+        "instrumentName": "Instrument name",
+        "instrumentType": "Type",
+        "quantity": "Quantity",
+        "currency": "Currency",
+        "totalCost": "Total cost (optional)",
+        "submit": "Add holding",
+        "pending": "Adding…",
+        "merged": "This holding already existed, so the quantities were added together."
+      },
+      "editHolding": {
+        "title": "Edit holding",
+        "quantity": "Quantity",
+        "currency": "Currency",
+        "totalCost": "Total cost",
+        "currencyChangeNotice": "Changing the currency clears the price and asks for the total cost again.",
+        "submit": "Save changes",
+        "pending": "Saving…"
+      },
+      "price": {
+        "title": "Set price",
+        "unitPrice": "Unit price",
+        "submit": "Save price",
+        "pending": "Saving…"
+      },
+      "cancel": "Cancel",
+      "confirmDelete": {
+        "portfolio": "Deleting this portfolio also deletes all its holdings. Your account balances do not change.",
+        "holding": "Delete this holding? Your account balances do not change.",
+        "confirm": "Yes, delete"
+      }
+    },
+    "errors": {
+      "network": "We could not reach the server. Check your connection.",
+      "retryLater": "Something went wrong. Try again in a moment.",
+      "unexpected": "Something unexpected happened. Try again.",
+      "currencyMismatch": "This holding already exists in the other currency. Use the same currency.",
+      "costRequired": "Enter the total cost to change the currency.",
+      "cryptoOnlyUsd": "Crypto can only be valued in USD.",
+      "notFound": "We could not find it. It may have been deleted.",
+      "nameRequired": "Enter a name.",
+      "nameTooLong": "The name can have at most 60 characters.",
+      "tickerInvalid": "Enter a ticker of up to 20 letters, digits, dots or dashes.",
+      "instrumentNameRequired": "Enter the instrument name (up to 100 characters).",
+      "ambiguousSeparator": "Ambiguous number. Write the decimal separator for your language and no thousands separator.",
+      "empty": "Enter a number.",
+      "notANumber": "Enter a valid number.",
+      "tooManyDecimals": "Too many decimals.",
+      "notPositive": "The number must be greater than zero."
     }
   }
 }

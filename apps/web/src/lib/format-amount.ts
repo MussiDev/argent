@@ -6,11 +6,18 @@ const SEPARATORS = {
   es: { group: '.', decimal: ',' },
 } as const;
 
+const NBSP = String.fromCharCode(0xa0);
+
 const DATE_LOCALE: Record<Locale, string> = { en: 'en-US', es: 'es-AR' };
 
 /** Minor units (2 decimals) with the language's separators, e.g. 185,000.00 or 185.000,00. */
 export function formatAmount(minorUnits: bigint, language: Locale): string {
   return formatMinorUnits(minorUnits, language);
+}
+
+/** An amount followed by its currency code, joined by a non-breaking space. */
+export function formatMoney(minorUnits: bigint, currency: 'ARS' | 'USD', language: Locale): string {
+  return `${formatAmount(minorUnits, language)}${NBSP}${currency}`;
 }
 
 /** A quantity scaled by 10^8; trailing zeros are dropped, grouping uses string operations. */

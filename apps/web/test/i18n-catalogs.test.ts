@@ -129,6 +129,16 @@ describe('available balance labels (FEAT-003 AC-23, NFR-05)', () => {
   });
 });
 
+describe('investments catalog (DISC-001-07a)', () => {
+  it.each(LOCALES)('has the investments namespace and the navigation label in %s', (locale) => {
+    const catalog = loadCatalog(locale);
+
+    expect(typeof catalog.investments).toBe('object');
+    expect(readString(catalog, 'investments.title')).toBeTruthy();
+    expect(readString(catalog, 'app.nav.investments')).toBeTruthy();
+  });
+});
+
 describe('product name in the web catalogs (FEAT-002)', () => {
   it.each(LOCALES)('titles the app "Pesly" in %s', (locale) => {
     const catalog = loadCatalog(locale);

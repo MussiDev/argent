@@ -14,7 +14,8 @@
       "home": "Inicio",
       "security": "Seguridad",
       "profile": "Perfil",
-      "categories": "Categorías"
+      "categories": "Categorías",
+      "investments": "Inversiones"
     }
   },
   "auth": {
@@ -421,6 +422,117 @@
       "body": "Si tu cuenta no tiene contraseña y Google no puede confirmar que eres tú, primero define una contraseña con el flujo de recuperación de contraseña y después vuelve a eliminar tu cuenta.",
       "note": "¿Sin contraseña y Google no puede confirmarte? Define primero una contraseña.",
       "link": "Definir una contraseña con la recuperación"
+    }
+  },
+  "investments": {
+    "title": "Inversiones",
+    "description": "Tus carteras y posiciones, valuadas con el último precio que tengas.",
+    "empty": {
+      "title": "Crea tu primera cartera",
+      "description": "Una cartera agrupa tus posiciones, normalmente una por broker."
+    },
+    "portfolio": {
+      "totalsLabel": "Valor total",
+      "holdingsWithoutPrice": "{count, plural, one {# posición sin precio} other {# posiciones sin precio}}",
+      "holdingsLabel": "Posiciones",
+      "noHoldings": "Esta cartera todavía no tiene posiciones.",
+      "addHolding": "Agregar posición",
+      "delete": "Eliminar cartera"
+    },
+    "holding": {
+      "quantity": "Cantidad: {quantity}",
+      "priceNeeded": "Falta precio",
+      "gain": "Ganancia {amount} ({percent})",
+      "loss": "Pérdida {amount} ({percent})",
+      "stalePrice": "Precio al {date}",
+      "showDetails": "Ver detalle",
+      "showDetailsFor": "Ver detalle de {ticker}",
+      "hideDetailsFor": "Ocultar detalle de {ticker}",
+      "editFor": "Editar {ticker}",
+      "setPriceFor": "Cargar precio de {ticker}",
+      "deleteFor": "Eliminar {ticker}",
+      "hideDetails": "Ocultar detalle",
+      "unitPrice": "Precio unitario",
+      "priceSource": "Origen del precio",
+      "pricedAt": "Fecha y hora del precio",
+      "noPrice": "Sin precio todavía",
+      "edit": "Editar",
+      "setPrice": "Cargar precio",
+      "delete": "Eliminar"
+    },
+    "instrumentTypes": {
+      "stock": "Acción",
+      "cedear": "CEDEAR",
+      "bond": "Bono",
+      "mutual_fund": "Fondo común de inversión",
+      "fixed_term_deposit": "Plazo fijo",
+      "crypto": "Cripto",
+      "other": "Otro"
+    },
+    "priceSources": {
+      "import": "Importación",
+      "manual": "Manual",
+      "automatic": "Automático"
+    },
+    "forms": {
+      "required": "Obligatorio",
+      "createPortfolio": {
+        "title": "Nueva cartera",
+        "name": "Nombre",
+        "submit": "Crear cartera",
+        "pending": "Creando…"
+      },
+      "addHolding": {
+        "title": "Agregar posición",
+        "ticker": "Ticker",
+        "instrumentName": "Nombre del instrumento",
+        "instrumentType": "Tipo",
+        "quantity": "Cantidad",
+        "currency": "Moneda",
+        "totalCost": "Costo total (opcional)",
+        "submit": "Agregar posición",
+        "pending": "Agregando…",
+        "merged": "Esta posición ya existía, así que se sumaron las cantidades."
+      },
+      "editHolding": {
+        "title": "Editar posición",
+        "quantity": "Cantidad",
+        "currency": "Moneda",
+        "totalCost": "Costo total",
+        "currencyChangeNotice": "Cambiar la moneda borra el precio y vuelve a pedir el costo total.",
+        "submit": "Guardar cambios",
+        "pending": "Guardando…"
+      },
+      "price": {
+        "title": "Cargar precio",
+        "unitPrice": "Precio unitario",
+        "submit": "Guardar precio",
+        "pending": "Guardando…"
+      },
+      "cancel": "Cancelar",
+      "confirmDelete": {
+        "portfolio": "Eliminar esta cartera también elimina todas sus posiciones. El saldo de tus cuentas no cambia.",
+        "holding": "¿Eliminar esta posición? El saldo de tus cuentas no cambia.",
+        "confirm": "Sí, eliminar"
+      }
+    },
+    "errors": {
+      "network": "No pudimos conectarnos con el servidor. Revisa tu conexión.",
+      "retryLater": "Algo salió mal. Vuelve a intentarlo en un momento.",
+      "unexpected": "Ocurrió algo inesperado. Vuelve a intentarlo.",
+      "currencyMismatch": "Esta posición ya existe en la otra moneda. Usa la misma moneda.",
+      "costRequired": "Ingresa el costo total para cambiar la moneda.",
+      "cryptoOnlyUsd": "Las criptomonedas solo se valúan en USD.",
+      "notFound": "No lo encontramos. Puede que ya se haya eliminado.",
+      "nameRequired": "Ingresa un nombre.",
+      "nameTooLong": "El nombre puede tener como máximo 60 caracteres.",
+      "tickerInvalid": "Ingresa un ticker de hasta 20 letras, dígitos, puntos o guiones.",
+      "instrumentNameRequired": "Ingresa el nombre del instrumento (hasta 100 caracteres).",
+      "ambiguousSeparator": "Número ambiguo. Escribe el separador decimal de tu idioma y sin separador de miles.",
+      "empty": "Ingresa un número.",
+      "notANumber": "Ingresa un número válido.",
+      "tooManyDecimals": "Demasiados decimales.",
+      "notPositive": "El número debe ser mayor que cero."
     }
   }
 }

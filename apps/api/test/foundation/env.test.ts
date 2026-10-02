@@ -222,3 +222,66 @@ describe('environment production rules', () => {
     expect(parseEnv(withoutKey).TOTP_ENCRYPTION_KEY).toBeUndefined();
   });
 });
+
+describe('exchange rate provider settings', () => {
+  const DEFAULT_BASE_URL = 'https://dolarapi.com';
+
+  it('defaults RATE_PROVIDER to dolarapi and DOLARAPI_BASE_URL to https://dolarapi.com', () => {
+    const source = testEnvSource();
+    delete source.RATE_PROVIDER;
+
+    const env = parseEnv(source);
+
+    expect(env.RATE_PROVIDER).toBe('dolarapi');
+    expect(env.DOLARAPI_BASE_URL).toBe(DEFAULT_BASE_URL);
+  });
+
+  it('accepts fake outside production and a different base URL', () => {
+    const env = parseEnv(
+      testEnvSource({ RATE_PROVIDER: 'fake', DOLARAPI_BASE_URL: 'http://127.0.0.1:4200' }),
+    );
+
+    expect(env.RATE_PROVIDER).toBe('fake');
+    expect(env.DOLARAPI_BASE_URL).toBe('http://127.0.0.1:4200');
+  });
+
+  it.each([
+    ['RATE_PROVIDER', 'unknown-provider-value'],
+    ['DOLARAPI_BASE_URL', 'not-a-url-value'],
+  ])('rejects an invalid %s by name, without printing the value', (name, value) => {
+    let message = '';
+    try {
+      parseEnv(testEnvSource({ [name]: value }));
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toContain(name);
+    expect(message).not.toContain(value);
+  });
+
+  it('rejects fake in production', () => {
+    expect(() =>
+      parseEnv(testEnvSource({ ...productionOverrides, RATE_PROVIDER: 'fake' })),
+    ).toThrow('RATE_PROVIDER: must be dolarapi in production');
+  });
+
+  it('rejects a changed base URL in production without printing it', () => {
+    const attempt = () =>
+      parseEnv(
+        testEnvSource({ ...productionOverrides, DOLARAPI_BASE_URL: 'https://evil.example.com' }),
+      );
+
+    expect(attempt).toThrow(
+      'DOLARAPI_BASE_URL: must be the default dolarapi endpoint in production',
+    );
+    expect(attempt).not.toThrow(/evil\.example/);
+  });
+
+  it('accepts production with only the defaults', () => {
+    const env = parseEnv(testEnvSource(productionOverrides));
+
+    expect(env.RATE_PROVIDER).toBe('dolarapi');
+    expect(env.DOLARAPI_BASE_URL).toBe(DEFAULT_BASE_URL);
+  });
+});

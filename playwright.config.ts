@@ -24,6 +24,8 @@ const WORKER_ENV = {
   DATABASE_URL: E2E_DATABASE_URL,
   WEB_BASE_URL: WEB_URL,
   EMAIL_PROVIDER: 'mailpit',
+  // Never reach dolarapi.com from e2e.
+  RATE_PROVIDER: 'fake',
 };
 
 /** The e2e API's environment: the worker's database and email settings plus its own. */

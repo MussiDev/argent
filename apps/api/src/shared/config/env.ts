@@ -42,6 +42,9 @@ function googleEndpoint(name: GoogleEndpoint) {
   );
 }
 
+/** The only dolarapi host production may call; only a local fake server replaces it elsewhere. */
+export const DOLARAPI_BASE_URL_DEFAULT = 'https://dolarapi.com';
+
 type Issue = { path: string[]; message: string };
 
 /**
@@ -56,6 +59,9 @@ const workerFields = {
   // No default: which provider delivers email must be a deliberate choice per environment.
   EMAIL_PROVIDER: z.enum(['console', 'mailpit', 'resend']),
   RESEND_API_KEY: z.string().optional(),
+  /** Which adapter feeds the exchange rates; `fake` is for local runs and e2e only. */
+  RATE_PROVIDER: z.enum(['dolarapi', 'fake']).default('dolarapi'),
+  DOLARAPI_BASE_URL: z.url().default(DOLARAPI_BASE_URL_DEFAULT),
   /** Sender of auth emails; required with Resend, whose sending domain must be verified. */
   EMAIL_FROM: z
     .string()
@@ -71,6 +77,8 @@ interface RawWorkerEnv {
   RESEND_API_KEY?: string | undefined;
   EMAIL_FROM?: string | undefined;
   WEB_BASE_URL: string;
+  RATE_PROVIDER: string;
+  DOLARAPI_BASE_URL: string;
 }
 
 interface RawEnv extends RawWorkerEnv {
@@ -116,6 +124,16 @@ function workerProductionIssues(env: RawWorkerEnv): Issue[] {
   const issues: Issue[] = [];
   if (env.EMAIL_PROVIDER !== 'resend') {
     issues.push({ path: ['EMAIL_PROVIDER'], message: 'must be resend in production' });
+  }
+  if (env.RATE_PROVIDER !== 'dolarapi') {
+    issues.push({ path: ['RATE_PROVIDER'], message: 'must be dolarapi in production' });
+  }
+  // A misconfigured URL would send the worker's requests somewhere else.
+  if (env.DOLARAPI_BASE_URL !== DOLARAPI_BASE_URL_DEFAULT) {
+    issues.push({
+      path: ['DOLARAPI_BASE_URL'],
+      message: 'must be the default dolarapi endpoint in production',
+    });
   }
   return [...issues, ...httpsIssue('WEB_BASE_URL', env.WEB_BASE_URL)];
 }

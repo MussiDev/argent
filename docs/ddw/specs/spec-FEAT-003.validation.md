@@ -14,7 +14,7 @@
   ✅ F-SPEC-10: every block documents its error handling
   ✅ F-SPEC-16: every documented error is named by a test
   ✅ F-SPEC-11: dependencies between blocks are declared
-  ⚠️ W-SPEC-02: large block, consider splitting: Block 2 (Migration 0011 and Drizzle schema) (7 files, 668 words), Block 3 (Domain, ports and use cases (accounts module, application layer)) (9 files, 560 words), Block 5 (HTTP routes and presenter) (4 files, 718 words), Block 7 (Web screens: headline, Debt section, setting control) (9 files, 680 words)
+  ⚠️ W-SPEC-02: large block, consider splitting: Block 2 (Migration 0011 and Drizzle schema) (7 files, 675 words), Block 3 (Domain, ports and use cases (accounts module, application layer)) (9 files, 560 words), Block 5 (HTTP routes and presenter) (4 files, 718 words), Block 7 (Web screens: headline, Debt section, setting control) (9 files, 680 words)
   👁  F-SPEC-12 (contradicts the PRD) and F-SPEC-13 (terminology diverging from
       the PRD) are MANUAL: judge them and say so explicitly in your report.
   ✅ F-SPEC-LOOP: 0 loop(s) since a human decided, under the ceiling of 3; 0 in total for this document

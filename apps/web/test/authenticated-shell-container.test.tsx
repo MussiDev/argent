@@ -163,6 +163,23 @@ describe('AuthenticatedShellContainer', () => {
     }
   });
 
+  it('links to the movements list and marks it as the current page there (AC-14)', async () => {
+    stubApi({ 'GET /auth/session': session(true) });
+    renderApp(
+      <AuthenticatedShellContainer>
+        <p>private content</p>
+      </AuthenticatedShellContainer>,
+      { pathname: '/es/movements' },
+    );
+
+    const link = await screen.findByRole('link', { name: es.app.nav.movements });
+    expect(link.getAttribute('href')).toBe('/es/movements');
+    expect(link.getAttribute('aria-current')).toBe('page');
+    expect(
+      screen.getByRole('link', { name: es.app.nav.home }).getAttribute('aria-current'),
+    ).toBeNull();
+  });
+
   it('links to the categories and marks them as the current page there', async () => {
     stubApi({ 'GET /auth/session': session(true) });
     renderApp(

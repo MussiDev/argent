@@ -15,6 +15,7 @@
       "security": "Security",
       "profile": "Profile",
       "categories": "Categories",
+      "movements": "Movements",
       "investments": "Investments"
     }
   },
@@ -210,6 +211,15 @@
     }
   },
   "movements": {
+    "title": "Movements",
+    "list": {
+      "newMovement": "New movement",
+      "empty": "You have no movements yet.",
+      "showMore": "Show more",
+      "rate": "Rate: {rate} ARS per USD",
+      "unknownAccount": "Unknown account",
+      "unknownCategory": "Unknown category"
+    },
     "new": {
       "title": "New movement",
       "description": "Record an expense or an income."

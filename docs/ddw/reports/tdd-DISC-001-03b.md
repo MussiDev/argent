@@ -143,3 +143,17 @@ Deviations from the spec's file list (accepted by the verifier): client tests li
 Review: verifier PASS, auditor no blockers. Added after review: a `pending` guard against double submit. Advisories left: duplicated field wrapper and focus hook (accounts, categories, movements), no idempotency key (a lost response followed by a retry could create a duplicate; to confirm as an accepted limitation), validation logic could move out of the container, no container test for the repeated DST hour.
 
 After: 8 web test files, 320 tests green in the narrow run; typecheck and eslint clean.
+
+## Block 9 — Movement list screen and navigation (10 tests, plus 6 after review)
+
+| Test file | Tests | Red result |
+|---|---|---|
+| `apps/web/test/movements-list.test.tsx` | 8, then 6 more (14) | load failure: `Failed to resolve import ../src/features/movements/containers/movements-container`, 0 ran |
+| `apps/web/test/routes.test.tsx` | 1 new | load failure: `Failed to resolve import ../src/app/[locale]/(app)/movements/page` (existing tests could not run) |
+| `apps/web/test/authenticated-shell-container.test.tsx` | 1 new | `Found multiple elements with the role link` (the nav key was undefined) |
+
+Review round 1 additions (red where it could be): dedupe by id on show more `expected [...] to have a length of 101 but got 102`; invalid profile zone `RangeError: Invalid time zone specified: Not/AZone`; list role `expected null to be 'list'`. Three more tests lock existing behavior and had no red run: exactly six requests on load, 401 during show more, accounts and categories paging beyond 100 with the stale-total exit. The generation counter against a stale show-more response has no test (the UI cannot trigger the race) and the pending `aria-busy` value is not asserted (the stub cannot hold a response open).
+
+Review: verifier PASS, auditor no blockers. Advisories left: `loadAll` duplicated with the create container, the "unreachable" type-narrowing guard, a hardcoded `+` sign, eager fetch of the archived pages, no `sr-only` type label.
+
+After: 4 web files, 81 tests green; typecheck, eslint and prettier clean.

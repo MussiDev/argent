@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import AccountsPage from '../src/app/[locale]/(app)/accounts/page';
 import NewAccountPage from '../src/app/[locale]/(app)/accounts/new/page';
 import CategoriesPage from '../src/app/[locale]/(app)/categories/page';
+import MovementsPage from '../src/app/[locale]/(app)/movements/page';
 import NewMovementPage from '../src/app/[locale]/(app)/movements/new/page';
 import AppLayout from '../src/app/[locale]/(app)/layout';
 import HomePage from '../src/app/[locale]/(app)/page';
@@ -134,6 +135,57 @@ describe('routes', () => {
       await screen.findByRole('heading', { level: 1, name: es.accounts.new.title }),
     ).toBeDefined();
     expect(screen.getByLabelText(es.accounts.fields.name)).toBeDefined();
+  });
+
+  it('the movements list is only shown behind the session guard', async () => {
+    const empty = { status: 200, body: { items: [], total: 0, limit: 100, offset: 0 } };
+    const noAccounts = {
+      status: 200,
+      body: {
+        items: [],
+        availableTotals: { ARS: '0', USD: '0' },
+        netWorthTotals: { ARS: '0', USD: '0' },
+        debtTotals: { ARS: '0', USD: '0' },
+        creditCardCount: 0,
+        total: 0,
+        limit: 100,
+        offset: 0,
+      },
+    };
+    stubApi({
+      'GET /auth/session': SESSION,
+      'GET /profile': {
+        status: 200,
+        body: {
+          displayName: 'Ana',
+          email: 'ana@example.com',
+          twoFactorEnabled: false,
+          deletionReauth: 'password',
+          preferences: {
+            defaultRateType: 'blue',
+            displayCurrency: 'ARS',
+            timeZone: 'UTC',
+            language: 'es',
+          },
+        },
+      },
+      'GET /movements?limit=100': empty,
+      'GET /accounts?archived=false&limit=100': noAccounts,
+      'GET /accounts?archived=true&limit=100': noAccounts,
+      'GET /categories?archived=false&limit=100': empty,
+      'GET /categories?archived=true&limit=100': empty,
+    });
+    renderApp(
+      <AppLayout>
+        <MovementsPage />
+      </AppLayout>,
+    );
+
+    expect(screen.queryByRole('heading', { name: es.movements.title })).toBeNull();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: es.movements.title }),
+    ).toBeDefined();
+    expect(await screen.findByText(es.movements.list.empty)).toBeDefined();
   });
 
   it('the new movement form is only shown behind the session guard', async () => {

@@ -15,6 +15,7 @@
       "security": "Seguridad",
       "profile": "Perfil",
       "categories": "Categorías",
+      "movements": "Movimientos",
       "investments": "Inversiones"
     }
   },
@@ -210,6 +211,15 @@
     }
   },
   "movements": {
+    "title": "Movimientos",
+    "list": {
+      "newMovement": "Nuevo movimiento",
+      "empty": "Todavía no tienes movimientos.",
+      "showMore": "Ver más",
+      "rate": "Cotización: {rate} ARS por USD",
+      "unknownAccount": "Cuenta desconocida",
+      "unknownCategory": "Categoría desconocida"
+    },
     "new": {
       "title": "Nuevo movimiento",
       "description": "Registra un gasto o un ingreso."

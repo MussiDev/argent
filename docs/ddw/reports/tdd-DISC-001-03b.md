@@ -157,3 +157,19 @@ Review round 1 additions (red where it could be): dedupe by id on show more `exp
 Review: verifier PASS, auditor no blockers. Advisories left: `loadAll` duplicated with the create container, the "unreachable" type-narrowing guard, a hardcoded `+` sign, eager fetch of the archived pages, no `sr-only` type label.
 
 After: 4 web files, 81 tests green; typecheck, eslint and prettier clean.
+
+## Block 10 — End-to-end flow and cross-cutting scans
+
+Blocks 1-9 already exist, so the e2e flows and scans could not start red. Red evidence came from probes and two deliberate temporary breaks (both restored with `git checkout`).
+
+| Check | Red result |
+|---|---|
+| provider scanner probe in `apps/api/test/movements/request-path.test.ts` | `the provider scanner flags import type { RateProvider } from '.../ports/rate-provider'`: `expected [] to not deeply equal []`; the scanner pattern was fixed, 105 of 105 pass |
+| temporary `Number('1')` appended to `apps/web/src/features/movements/format-rate.ts` | `has no float constructs: format-rate.ts: Number(: expected ['Number('] to deeply equal []` (in `no-float-money.test.ts`, 48 tests) |
+| temporary `RATE_AGE_WARNING_MS` 2 h to 200 h | the age e2e failed: `expect(locator).toBeVisible() failed ... element(s) not found` |
+
+Files: `apps/web/e2e/movements.spec.ts` (5 flows: main, no stored rate, rate age, archived account with a second tab, validation), `apps/web/e2e/support/database.ts` (exports `withE2eDatabase`, adds `withoutStoredRates`, `withAgedRates`, `movementsOf`; the restore runs in `finally`), `apps/api/test/movements/{no-float-money,request-path}.test.ts`, probe block in `architecture-boundaries.test.ts`.
+
+Review: verifier PASS, auditor no blockers. Fixed after review: `withAgedRates` now sets `fetched_at = now() - hours` (absolute) instead of subtracting from the existing value, which could have rendered 6 hours instead of 5; the "fresh rates show no message" assertion now matches any hour count. Re-run green: age and archived flows. Advisories left: the scanners are regex based (known gaps: `'a//b'` strings hiding a line, `parseInt`, path aliases), the response guard ignores `/auth/` statuses, `API_URL` duplicated from the Playwright config, 105 per-file scan cases.
+
+Port check before each e2e run: 3000, 4000 and 4100 were free.

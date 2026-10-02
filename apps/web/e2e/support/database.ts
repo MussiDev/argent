@@ -23,7 +23,7 @@ interface PgModule {
 const requireFromApi = createRequire(new URL('../../../api/package.json', import.meta.url));
 const pg = requireFromApi('pg') as PgModule;
 
-async function withE2eDatabase<T>(work: (client: PgClient) => Promise<T>): Promise<T> {
+export async function withE2eDatabase<T>(work: (client: PgClient) => Promise<T>): Promise<T> {
   const name = new URL(E2E_DATABASE_URL).pathname.replace(/^\//, '');
   if (!name.endsWith('_e2e')) throw new Error(`Refusing to use "${name}": not an e2e database`);
   const client = new pg.Client({ connectionString: E2E_DATABASE_URL });
@@ -89,4 +89,98 @@ export async function accountRecord(email: string): Promise<AccountRecord> {
     emailVerified: row.email_verified === true,
     verificationEmails: Number(row.verification_emails ?? 0),
   };
+}
+
+interface StoredRateRow {
+  rateType: unknown;
+  buy: unknown;
+  sell: unknown;
+  providerUpdatedAt: unknown;
+  fetchedAt: unknown;
+}
+
+async function snapshotRates(client: PgClient): Promise<StoredRateRow[]> {
+  const { rows } = await client.query(
+    `select rate_type as "rateType", buy::text as buy, sell::text as sell,
+            provider_updated_at as "providerUpdatedAt", fetched_at as "fetchedAt"
+       from exchange_rates`,
+  );
+  if (rows.length === 0) throw new Error('The e2e worker has not stored any rate yet');
+  return rows as unknown as StoredRateRow[];
+}
+
+async function restoreRates(client: PgClient, rows: StoredRateRow[]): Promise<void> {
+  for (const row of rows) {
+    await client.query(
+      `insert into exchange_rates (rate_type, buy, sell, provider_updated_at, fetched_at)
+       values ($1, $2::bigint, $3::bigint, $4, $5)
+       on conflict (rate_type) do update
+         set buy = excluded.buy, sell = excluded.sell,
+             provider_updated_at = excluded.provider_updated_at, fetched_at = excluded.fetched_at`,
+      [row.rateType, row.buy, row.sell, row.providerUpdatedAt, row.fetchedAt],
+    );
+  }
+}
+
+/**
+ * Runs `work` with no stored exchange rate (the worker's next refresh is an hour away), then puts
+ * the rows back so the other flows still find them.
+ */
+export async function withoutStoredRates<T>(work: () => Promise<T>): Promise<T> {
+  const saved = await withE2eDatabase(async (client) => {
+    const rows = await snapshotRates(client);
+    await client.query('delete from exchange_rates');
+    return rows;
+  });
+  try {
+    return await work();
+  } finally {
+    await withE2eDatabase((client) => restoreRates(client, saved));
+  }
+}
+
+/**
+ * Runs `work` with every stored rate fetched exactly `hours` hours ago (absolute, so the age does not
+ * depend on how old the rates already were), then restores the original `fetched_at` values.
+ */
+export async function withAgedRates<T>(hours: number, work: () => Promise<T>): Promise<T> {
+  const saved = await withE2eDatabase(async (client) => {
+    const rows = await snapshotRates(client);
+    await client.query(
+      `update exchange_rates set fetched_at = now() - make_interval(hours => $1)`,
+      [hours],
+    );
+    return rows;
+  });
+  try {
+    return await work();
+  } finally {
+    await withE2eDatabase((client) => restoreRates(client, saved));
+  }
+}
+
+export interface StoredMovement {
+  type: string;
+  amount: string;
+  rate: string;
+  rateSource: string;
+}
+
+/** The movements saved for `email`, oldest first, with the rate frozen on each. */
+export async function movementsOf(email: string): Promise<StoredMovement[]> {
+  const { rows } = await withE2eDatabase((client) =>
+    client.query(
+      `select m.type, m.amount::text as amount, m.rate::text as rate, m.rate_source as rate_source
+         from movements m join users u on u.id = m.owner_id
+        where u.email = $1
+        order by m.created_at, m.id`,
+      [email],
+    ),
+  );
+  return rows.map((row) => ({
+    type: String(row.type),
+    amount: String(row.amount),
+    rate: String(row.rate),
+    rateSource: String(row.rate_source),
+  }));
 }

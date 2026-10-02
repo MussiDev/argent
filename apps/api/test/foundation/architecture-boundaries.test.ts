@@ -62,6 +62,48 @@ describe('investments module import boundaries', () => {
   });
 });
 
+describe('hexagonal import boundaries in the movements module', () => {
+  const MOVEMENTS_DOMAIN_FILE = 'apps/api/src/movements/domain/probe.ts';
+  const MOVEMENTS_APPLICATION_FILE = 'apps/api/src/movements/application/probe.ts';
+
+  it.each([
+    "import { x } from '../infrastructure/db/schema';",
+    "import { eq } from 'drizzle-orm';",
+    "import pg from 'pg';",
+    "import express from 'express';",
+    "import { randomUUID } from 'node:crypto';",
+  ])('rejects in movements domain: %s', async (source) => {
+    expect(await restrictedImports(MOVEMENTS_DOMAIN_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it.each([
+    "import { movements } from '../infrastructure/db/schema';",
+    "import { x } from '../infrastructure/http/movement-routes';",
+    "import { x } from '../infrastructure/system-clock';",
+  ])('rejects infrastructure imports in movements application: %s', async (source) => {
+    expect(await restrictedImports(MOVEMENTS_APPLICATION_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it('allows movements domain and application to import shared code, ports and the access port', async () => {
+    expect(
+      await restrictedImports(
+        MOVEMENTS_DOMAIN_FILE,
+        "import { AppError } from '@pesly/shared';\nimport { y } from './errors';\n",
+      ),
+    ).toEqual([]);
+    expect(
+      await restrictedImports(
+        MOVEMENTS_APPLICATION_FILE,
+        "import type { AccessScope } from '../../shared/access';\nimport { y } from '../domain/movement';\nimport type { Clock } from './ports/clock';\n",
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe('hexagonal import boundaries', () => {
   it.each([
     "import { x } from '../infrastructure/db/schema';",

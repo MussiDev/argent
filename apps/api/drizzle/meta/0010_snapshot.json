@@ -1,6 +1,6 @@
 {
-  "id": "b6f3ff86-42f6-4224-a4ad-444f6e5fdff7",
-  "prevId": "8320520c-8202-46a8-8aa6-eb9aaf79e58e",
+  "id": "6b5147df-330d-493a-8171-2117dfdc6fb4",
+  "prevId": "024e5aed-d001-4ce7-b932-361242492d00",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -152,6 +152,305 @@
           "value": "\"accounts\".\"currency\" in ('ARS', 'USD')"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.categories": {
+      "name": "categories",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_key": {
+          "name": "default_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "icon": {
+          "name": "icon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "categories_owner_default_key_unique": {
+          "name": "categories_owner_default_key_unique",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "default_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"categories\".\"default_key\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "categories_owner_name_unique": {
+          "name": "categories_owner_name_unique",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "coalesce(\"parent_id\", '00000000-0000-0000-0000-000000000000')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"name\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"categories\".\"name\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "categories_owner_kind_parent_idx": {
+          "name": "categories_owner_kind_parent_idx",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "parent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "categories_owner_created_idx": {
+          "name": "categories_owner_created_idx",
+          "columns": [
+            {
+              "expression": "owner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "categories_owner_id_users_id_fk": {
+          "name": "categories_owner_id_users_id_fk",
+          "tableFrom": "categories",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "categories_parent_owner_kind_fk": {
+          "name": "categories_parent_owner_kind_fk",
+          "tableFrom": "categories",
+          "tableTo": "categories",
+          "columnsFrom": [
+            "parent_id",
+            "owner_id",
+            "kind"
+          ],
+          "columnsTo": [
+            "id",
+            "owner_id",
+            "kind"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "categories_id_owner_kind_unique": {
+          "name": "categories_id_owner_kind_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "owner_id",
+            "kind"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "categories_kind_check": {
+          "name": "categories_kind_check",
+          "value": "\"categories\".\"kind\" in ('expense', 'income')"
+        },
+        "categories_default_key_length_check": {
+          "name": "categories_default_key_length_check",
+          "value": "\"categories\".\"default_key\" is null or char_length(\"categories\".\"default_key\") between 1 and 60"
+        },
+        "categories_name_length_check": {
+          "name": "categories_name_length_check",
+          "value": "\"categories\".\"name\" is null or char_length(\"categories\".\"name\") between 1 and 50"
+        },
+        "categories_key_or_name_check": {
+          "name": "categories_key_or_name_check",
+          "value": "\"categories\".\"default_key\" is not null or \"categories\".\"name\" is not null"
+        },
+        "categories_icon_length_check": {
+          "name": "categories_icon_length_check",
+          "value": "char_length(\"categories\".\"icon\") between 1 and 40"
+        },
+        "categories_color_length_check": {
+          "name": "categories_color_length_check",
+          "value": "char_length(\"categories\".\"color\") between 1 and 40"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.category_defaults_seeded": {
+      "name": "category_defaults_seeded",
+      "schema": "",
+      "columns": {
+        "owner_id": {
+          "name": "owner_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "seeded_at": {
+          "name": "seeded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "category_defaults_seeded_owner_id_users_id_fk": {
+          "name": "category_defaults_seeded_owner_id_users_id_fk",
+          "tableFrom": "category_defaults_seeded",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.auth_attempts": {

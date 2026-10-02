@@ -43,3 +43,7 @@ Verified by an independent `ddw-module-verifier` (two rounds). Round 1 was BLOCK
 - Merge notes: 02b and 07a must register their tables in the erasure guard; the migration `when` is bumped and 0010 regenerated if 0008 or 0009 land first.
 
 Result: PASSED
+
+## Post-closeout update (2026-10-02)
+
+PR #16 became conflicting when #15 (DISC-001-02b, migration 0009 with `when` 1790902441319) merged into main. The branch was rebased onto main: journal idx 9 is 0009 and idx 10 is 0010 (`when` 1790943164350, above main's maximum), the 0010 snapshot was re-chained onto 0009's snapshot (`drizzle-kit generate` reports no changes), the migration tests chain 0010, 0009, 0007 and down, and the erasure guard registers `categories` and `category_defaults_seeded` (policy `cascade`; the self-referencing key of the category tree is the one non-cascading key it accepts). Re-run on the rebased branch: Vitest 2041 of 2041 (132 files), coverage 96.93% lines, 95.64% statements, 92.17% branches, 94.76% functions; Playwright 67 of 67; ESLint, typecheck and prettier clean. No behaviour of the ticket changed.

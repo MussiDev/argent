@@ -187,6 +187,35 @@ const REGISTRY: readonly RegisteredTable[] = [
       });
     },
   },
+  {
+    table: 'categories',
+    userColumn: 'owner_id',
+    policy: 'cascade',
+    // A parent and a child, so the erasure also crosses the self-referencing key of the tree.
+    seed: async (context) => {
+      const parentId = randomUUID();
+      await query(
+        context,
+        "insert into categories (id, owner_id, kind, name, icon, color) values ($1, $2, 'expense', 'Parent', 'tag', 'blue')",
+        [parentId, context.userId],
+      );
+      await query(
+        context,
+        "insert into categories (owner_id, kind, parent_id, name, icon, color) values ($1, 'expense', $2, 'Child', 'tag', 'blue')",
+        [context.userId, parentId],
+      );
+    },
+  },
+  {
+    table: 'category_defaults_seeded',
+    userColumn: 'owner_id',
+    policy: 'cascade',
+    seed: async (context) => {
+      await query(context, 'insert into category_defaults_seeded (owner_id) values ($1)', [
+        context.userId,
+      ]);
+    },
+  },
 ];
 
 /** Created by the access-control tests and never dropped; they are not user data of the product. */
@@ -253,7 +282,9 @@ async function guardViolations(
         `table ${key.child} (key ${key.constraint}) is reachable from users but not registered`,
       );
     }
-    if (key.deleteAction !== 'c') {
+    // A self-referencing key (the category tree) restricts only rows of the same owner, which the
+    // cascade from users removes together; every other key must cascade.
+    if (key.deleteAction !== 'c' && key.child !== key.parent) {
       violations.push(`key ${key.constraint} of ${key.child} does not cascade on delete`);
     }
   }

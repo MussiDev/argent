@@ -605,6 +605,8 @@ export function createApiClient({
         path: '/profile/delete/google/start',
         body: {},
         response: startDeletionReauthResponseSchema,
+        refreshOnUnauthenticated: true,
+      }),
     listPortfolios: () =>
       request({
         method: 'GET',

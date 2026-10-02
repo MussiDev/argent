@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { CATEGORY_COLORS, CATEGORY_ICONS, DEFAULT_CATEGORIES } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import manifest from '../src/app/manifest';
 
@@ -51,6 +52,61 @@ describe('i18n catalogs (NFR-10)', () => {
 
   it('has every en key in es', () => {
     expect(enKeys.filter((key) => !esKeys.includes(key))).toEqual([]);
+  });
+});
+
+/** Every string of a catalog branch, with its dotted key. */
+function stringsOf(catalog: Catalog, prefix = ''): [string, string][] {
+  return Object.entries(catalog).flatMap(([key, value]): [string, string][] => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    return typeof value === 'string' ? [[path, value]] : stringsOf(value, path);
+  });
+}
+
+describe('categories catalog (DISC-001-02b)', () => {
+  it.each(LOCALES)('has a categories namespace and a nav label in %s', (locale) => {
+    const catalog = loadCatalog(locale);
+
+    expect(readString(catalog, 'categories.title')).toBeTruthy();
+    expect(readString(catalog, 'app.nav.categories')).toBeTruthy();
+  });
+
+  it.each(LOCALES)(
+    'does not duplicate any default category name in the %s namespace (shared catalog is the source)',
+    (locale) => {
+      const namespace = loadCatalog(locale)['categories'];
+      expect(typeof namespace).toBe('object');
+      const defaultNames = new Set(
+        DEFAULT_CATEGORIES.flatMap((entry) => [entry.names.es, entry.names.en]),
+      );
+      const leaks = stringsOf(namespace as Catalog, 'categories')
+        .filter(([, value]) => defaultNames.has(value))
+        .map(([key]) => key);
+
+      expect(leaks).toEqual([]);
+    },
+  );
+
+  it.each(LOCALES)('labels every category icon and color in %s', (locale) => {
+    const catalog = loadCatalog(locale);
+
+    for (const icon of CATEGORY_ICONS) {
+      expect(readString(catalog, `categories.icons.${icon}`)).toBeTruthy();
+    }
+    for (const color of CATEGORY_COLORS) {
+      expect(readString(catalog, `categories.colors.${color}`)).toBeTruthy();
+    }
+  });
+
+  it('default-name error: reports a namespace string equal to a default name', () => {
+    const namespace: Catalog = { sections: { expense: 'Comida' }, title: 'Categories' };
+    const defaultNames = new Set(['Comida']);
+
+    expect(
+      stringsOf(namespace, 'categories')
+        .filter(([, value]) => defaultNames.has(value))
+        .map(([key]) => key),
+    ).toEqual(['categories.sections.expense']);
   });
 });
 

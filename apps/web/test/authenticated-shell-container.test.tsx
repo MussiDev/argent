@@ -142,4 +142,21 @@ describe('AuthenticatedShellContainer', () => {
       screen.getByRole('link', { name: es.app.nav.home }).getAttribute('aria-current'),
     ).toBeNull();
   });
+
+  it('links to the categories and marks them as the current page there', async () => {
+    stubApi({ 'GET /auth/session': session(true) });
+    renderApp(
+      <AuthenticatedShellContainer>
+        <p>private content</p>
+      </AuthenticatedShellContainer>,
+      { pathname: '/es/categories' },
+    );
+
+    const link = await screen.findByRole('link', { name: es.app.nav.categories });
+    expect(link.getAttribute('href')).toBe('/es/categories');
+    expect(link.getAttribute('aria-current')).toBe('page');
+    expect(
+      screen.getByRole('link', { name: es.app.nav.security }).getAttribute('aria-current'),
+    ).toBeNull();
+  });
 });

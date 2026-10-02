@@ -67,6 +67,19 @@ All notable changes to this project are documented in this file. The format foll
   missing or empty name gives none, a longer one is cut to 50 characters), and a Google sign-in that
   takes over an unverified password account replaces the name typed at registration; linking a
   verified account or signing in again never changes it. No migration.
+- DISC-001-02b Categories: each user has expense and income categories with one level of
+  subcategories, created with a name, icon and color, renamed, archived (a parent takes its
+  subcategories with it), unarchived and deleted while unused. Names are unique per kind and parent
+  regardless of case, and an untouched default also blocks its name in the other language.
+- DISC-001-02b Default categories: 33 defaults (9 expense, 5 income, 19 subcategories) are created
+  with every new account, including Google sign-up, in the same transaction, and by migration
+  0009 for existing users; a deleted default is never recreated. Defaults show in the interface
+  language until renamed, then keep the name the user gave.
+- DISC-001-02b Categories screen in Spanish and English and the `categories` REST routes; the
+  `categories` module keeps the identity module free of any dependency on it. Migration 0009
+  adds two tables and a guard trigger; its rollback script is destructive. Deferred to PRD 03:
+  showing and keeping categories on movements, and blocking deletion of a category in use by a
+  movement.
 
 ### Fixed
 

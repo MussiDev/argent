@@ -13,7 +13,8 @@
     "nav": {
       "home": "Inicio",
       "security": "Seguridad",
-      "profile": "Perfil"
+      "profile": "Perfil",
+      "categories": "Categorías"
     }
   },
   "auth": {
@@ -123,6 +124,10 @@
     "twoFactorSetupRequired": "La activación cambió en otra sesión. Vuelve a empezar.",
     "accountNameTaken": "Ya existe una cuenta con ese nombre.",
     "accountHasMovements": "Esta cuenta tiene movimientos, por eso no se puede eliminar. Archívala en su lugar.",
+    "categoryNameTaken": "Ya existe una categoría con ese nombre.",
+    "categoryInUse": "Esta categoría está en uso, por eso no se puede eliminar. Archívala en su lugar.",
+    "categoryNestingTooDeep": "Las subcategorías no pueden tener subcategorías.",
+    "categoryParentKindMismatch": "Una subcategoría debe ser del mismo tipo que su categoría principal.",
     "totpCodeFormat": "Ingresa los 6 dígitos del código.",
     "secondFactorCodeFormat": "Ingresa un código de 6 dígitos o un código de recuperación."
   },
@@ -192,6 +197,103 @@
       "currencyRequired": "Elige una moneda.",
       "amountInvalid": "Ingresa un monto válido, por ejemplo 1.500,00.",
       "amountOutOfRange": "El saldo inicial no puede superar {max} en valor absoluto."
+    }
+  },
+  "categories": {
+    "title": "Categorías",
+    "new": {
+      "title": "Nueva categoría",
+      "description": "Agrega una categoría o una subcategoría propia."
+    },
+    "fields": {
+      "kind": "Tipo",
+      "parent": "Categoría principal",
+      "parentNone": "Ninguna (categoría principal)",
+      "name": "Nombre",
+      "icon": "Ícono",
+      "color": "Color"
+    },
+    "kinds": {
+      "expense": "Gasto",
+      "income": "Ingreso"
+    },
+    "sections": {
+      "expense": "Gastos",
+      "income": "Ingresos"
+    },
+    "form": {
+      "submit": "Crear categoría",
+      "pending": "Creando…"
+    },
+    "list": {
+      "activeTitle": "Categorías activas",
+      "archivedTitle": "Categorías archivadas",
+      "empty": "Todavía no tienes categorías.",
+      "emptyArchived": "No tienes categorías archivadas.",
+      "emptySection": "No hay categorías en esta sección.",
+      "showArchived": "Mostrar categorías archivadas",
+      "subcategories": "Subcategorías de {name}"
+    },
+    "actions": {
+      "edit": "Editar",
+      "editField": "Nuevo nombre de {name}",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "archive": "Archivar",
+      "unarchive": "Desarchivar",
+      "delete": "Eliminar",
+      "confirmDelete": "¿Eliminar {name}? Esta acción no se puede deshacer.",
+      "confirmDeleteYes": "Sí, eliminar",
+      "archiveInstead": "Archivar en vez de eliminar"
+    },
+    "errors": {
+      "nameRequired": "Ingresa un nombre.",
+      "nameTooLong": "El nombre puede tener como máximo {max} caracteres.",
+      "nameInvalidCharacters": "El nombre contiene caracteres que no se pueden mostrar. Quítalos e inténtalo de nuevo.",
+      "iconRequired": "Elige un ícono.",
+      "colorRequired": "Elige un color.",
+      "kindInvalid": "Elige un tipo de categoría.",
+      "parentInvalid": "Elige una categoría principal de la lista."
+    },
+    "icons": {
+      "utensils": "Cubiertos",
+      "car": "Auto",
+      "home": "Casa",
+      "heart-pulse": "Pulso",
+      "clapperboard": "Claqueta",
+      "shopping-bag": "Bolsa de compras",
+      "graduation-cap": "Birrete",
+      "receipt": "Recibo",
+      "ellipsis": "Puntos suspensivos",
+      "banknote": "Billete",
+      "laptop": "Notebook",
+      "trending-up": "Tendencia al alza",
+      "gift": "Regalo",
+      "wallet": "Billetera",
+      "piggy-bank": "Alcancía",
+      "plane": "Avión",
+      "shirt": "Camisa",
+      "book-open": "Libro abierto",
+      "briefcase": "Maletín",
+      "coffee": "Café",
+      "dumbbell": "Pesa",
+      "paw-print": "Huella",
+      "baby": "Bebé",
+      "wrench": "Llave inglesa"
+    },
+    "colors": {
+      "red": "Rojo",
+      "orange": "Naranja",
+      "amber": "Ámbar",
+      "yellow": "Amarillo",
+      "lime": "Lima",
+      "green": "Verde",
+      "teal": "Verde azulado",
+      "cyan": "Cian",
+      "blue": "Azul",
+      "violet": "Violeta",
+      "pink": "Rosa",
+      "slate": "Gris pizarra"
     }
   },
   "security": {

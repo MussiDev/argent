@@ -181,6 +181,7 @@ function buildConfirm(options: { consumes?: boolean; breachCheck?: () => Promise
         twoFactor: {} as TransactionalRepositories['twoFactor'],
         recoveryCodes: {} as TransactionalRepositories['recoveryCodes'],
         signInChallenges: {} as TransactionalRepositories['signInChallenges'],
+        provisioning: {} as TransactionalRepositories['provisioning'],
       });
       committed = true;
       return result;

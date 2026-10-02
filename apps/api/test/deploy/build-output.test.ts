@@ -18,6 +18,8 @@ const BUILD_CANARY = 'build-canary-4f1c9e27d8';
 const ALL_TABLES = [
   'accounts',
   'auth_attempts',
+  'categories',
+  'category_defaults_seeded',
   'email_outbox',
   'oauth_states',
   'one_time_tokens',

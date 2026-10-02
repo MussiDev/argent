@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import autocannon from 'autocannon';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { seedDefaultCategories } from '../../src/categories';
 import { DrizzleOAuthStateRepository } from '../../src/identity/infrastructure/db/drizzle-oauth-state-repository';
 import { CryptoTokenGenerator } from '../../src/identity/infrastructure/security/crypto-token-generator';
 import { GOOGLE_CALLBACK_PATH } from '../../src/identity/infrastructure/security/google-oidc-identity-provider';
@@ -100,7 +101,12 @@ async function seedCallbacks(now: Date): Promise<SeededCallback[]> {
 
 describe('Google callback latency (NFR-01)', () => {
   it('keeps p95 of the callback below 500 ms over 200 requests with 150 ms token latency', async () => {
-    const harness = createIdentityHarness(connection, { realSessions: true, google });
+    const harness = createIdentityHarness(connection, {
+      realSessions: true,
+      google,
+      // As in production, so the callback budget includes seeding the defaults of new users.
+      onUserCreated: [seedDefaultCategories],
+    });
     const seeded = await seedCallbacks(harness.clock.now());
     google.setTokenOptions({ delayMs: TOKEN_LATENCY_MS });
     server = createServer(harness.app);

@@ -4,6 +4,7 @@ import type { ComponentType } from 'react';
 import { describe, expect, it } from 'vitest';
 import AccountsPage from '../src/app/[locale]/(app)/accounts/page';
 import NewAccountPage from '../src/app/[locale]/(app)/accounts/new/page';
+import CategoriesPage from '../src/app/[locale]/(app)/categories/page';
 import AppLayout from '../src/app/[locale]/(app)/layout';
 import HomePage from '../src/app/[locale]/(app)/page';
 import CheckYourEmailPage from '../src/app/[locale]/(auth)/check-your-email/page';
@@ -147,6 +148,88 @@ describe('routes', () => {
       await screen.findByRole('heading', { level: 1, name: CATALOGS.en.accounts.title }),
     ).toBeDefined();
     expect(await screen.findByText(CATALOGS.en.accounts.list.empty)).toBeDefined();
+  });
+
+  it('the categories screen is only shown behind the session guard', async () => {
+    const { calls } = stubApi({
+      'GET /auth/session': SESSION,
+      'GET /categories?archived=false&limit=100&offset=0': {
+        status: 200,
+        body: {
+          items: [
+            {
+              id: '00000000-0000-4000-8000-000000000001',
+              kind: 'expense',
+              parentId: null,
+              key: 'food',
+              name: null,
+              icon: 'utensils',
+              color: 'orange',
+              archived: false,
+              archivedAt: null,
+              createdAt: '2026-10-01T00:00:00.000Z',
+            },
+          ],
+          total: 1,
+          limit: 100,
+          offset: 0,
+        },
+      },
+    });
+    renderApp(
+      <AppLayout>
+        <CategoriesPage />
+      </AppLayout>,
+    );
+
+    expect(screen.queryByRole('heading', { name: es.categories.title })).toBeNull();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: es.categories.title }),
+    ).toBeDefined();
+    expect(await screen.findByRole('listitem', { name: 'Comida' })).toBeDefined();
+    expect(calls.map((call) => call.path)).toEqual([
+      '/auth/session',
+      '/categories?archived=false&limit=100&offset=0',
+    ]);
+  });
+
+  it('renders the categories screen in English with the English default names', async () => {
+    stubApi({
+      'GET /auth/session': SESSION,
+      'GET /categories?archived=false&limit=100&offset=0': {
+        status: 200,
+        body: {
+          items: [
+            {
+              id: '00000000-0000-4000-8000-000000000001',
+              kind: 'expense',
+              parentId: null,
+              key: 'food',
+              name: null,
+              icon: 'utensils',
+              color: 'orange',
+              archived: false,
+              archivedAt: null,
+              createdAt: '2026-10-01T00:00:00.000Z',
+            },
+          ],
+          total: 1,
+          limit: 100,
+          offset: 0,
+        },
+      },
+    });
+    renderApp(
+      <AppLayout>
+        <CategoriesPage />
+      </AppLayout>,
+      { locale: 'en' },
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: CATALOGS.en.categories.title }),
+    ).toBeDefined();
+    expect(await screen.findByRole('listitem', { name: 'Food' })).toBeDefined();
   });
 
   it('the security settings are only shown behind the session guard', async () => {

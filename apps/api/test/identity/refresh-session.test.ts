@@ -116,6 +116,7 @@ function buildRefresh(
         twoFactor: {} as TransactionalRepositories['twoFactor'],
         recoveryCodes: {} as TransactionalRepositories['recoveryCodes'],
         signInChallenges: {} as TransactionalRepositories['signInChallenges'],
+        provisioning: {} as TransactionalRepositories['provisioning'],
       });
       committed.push(...staged);
       return result;

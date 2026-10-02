@@ -26,6 +26,18 @@ function buildApp(env: Env, lines: string[] = []) {
   router.get('/has-movements', () => {
     throw new AppError('ACCOUNT_HAS_MOVEMENTS');
   });
+  router.get('/category-name-taken', () => {
+    throw new AppError('CATEGORY_NAME_TAKEN');
+  });
+  router.get('/category-in-use', () => {
+    throw new AppError('CATEGORY_IN_USE');
+  });
+  router.get('/category-nesting', () => {
+    throw new AppError('CATEGORY_NESTING_TOO_DEEP');
+  });
+  router.get('/category-kind', () => {
+    throw new AppError('CATEGORY_PARENT_KIND_MISMATCH');
+  });
   const logger = createLogger({
     level: 'info',
     destination: { write: (line: string) => lines.push(line) },
@@ -80,6 +92,18 @@ describe('error handler', () => {
 
     expect(response.status).toBe(409);
     expect(response.body).toEqual({ code: 'ACCOUNT_HAS_MOVEMENTS' });
+  });
+
+  it.each([
+    ['/category-name-taken', 409, 'CATEGORY_NAME_TAKEN'],
+    ['/category-in-use', 409, 'CATEGORY_IN_USE'],
+    ['/category-nesting', 400, 'CATEGORY_NESTING_TOO_DEEP'],
+    ['/category-kind', 400, 'CATEGORY_PARENT_KIND_MISMATCH'],
+  ] as const)('maps %s to %i with only its code', async (path, status, code) => {
+    const response = await request(buildApp(testEnv())).get(path);
+
+    expect(response.status).toBe(status);
+    expect(response.body).toEqual({ code });
   });
 
   it('answers unknown routes with 404 NOT_FOUND', async () => {

@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 import { describe, expect, it } from 'vitest';
@@ -91,6 +93,66 @@ describe('hexagonal import boundaries', () => {
   });
 });
 
+describe('identity never imports the categories module (dependency direction)', () => {
+  it.each([
+    [DOMAIN_FILE, "import { x } from '../../categories';"],
+    [DOMAIN_FILE, "import { x } from '../../categories/domain/category';"],
+    [APPLICATION_FILE, "import { seedDefaultCategories } from '../../categories';"],
+    [APPLICATION_FILE, "import { x } from '../../categories/application/ensure-defaults';"],
+    ['apps/api/src/identity/index.ts', "import { seedDefaultCategories } from '../categories';"],
+    [
+      'apps/api/src/identity/index.ts',
+      "import { x } from './../categories/application/ensure-defaults';",
+    ],
+    [
+      'apps/api/src/identity/infrastructure/db/probe.ts',
+      "import { seedDefaultCategories } from '../../../categories';",
+    ],
+    [
+      'apps/api/src/identity/infrastructure/http/probe.ts',
+      "import { x } from '../../../categories/infrastructure/db/schema';",
+    ],
+  ])('rejects %s: %s', async (file, source) => {
+    expect(await restrictedImports(file, `${source}\n`)).toEqual(['no-restricted-imports']);
+  });
+
+  it('keeps rejecting infrastructure and test imports where the categories pattern was added', async () => {
+    expect(
+      await restrictedImports(
+        APPLICATION_FILE,
+        "import { x } from '../infrastructure/db/schema';\n",
+      ),
+    ).toEqual(['no-restricted-imports']);
+    expect(await restrictedImports(DOMAIN_FILE, "import { eq } from 'drizzle-orm';\n")).toEqual([
+      'no-restricted-imports',
+    ]);
+    expect(
+      await restrictedImports(
+        'apps/api/src/identity/infrastructure/db/probe.ts',
+        "import { x } from '../../../../test/fakes/mutable-clock';\n",
+      ),
+    ).toEqual(['no-restricted-imports']);
+  });
+
+  it('allows the composition root and other modules to import categories', async () => {
+    const source = "import { seedDefaultCategories } from './categories';\n";
+    expect(await restrictedImports('apps/api/src/server.ts', source)).toEqual([]);
+    expect(
+      await restrictedImports(
+        'apps/api/src/accounts/application/probe.ts',
+        "import { x } from '../../categories';\n",
+      ),
+    ).toEqual([]);
+  });
+
+  it('allows identity infrastructure to import its own files', async () => {
+    const source = "import { x } from './schema';\nimport { y } from '../email/email-transport';\n";
+    expect(
+      await restrictedImports('apps/api/src/identity/infrastructure/db/probe.ts', source),
+    ).toEqual([]);
+  });
+});
+
 describe('hexagonal import boundaries in the accounts module', () => {
   const ACCOUNTS_DOMAIN_FILE = 'apps/api/src/accounts/domain/probe.ts';
   const ACCOUNTS_APPLICATION_FILE = 'apps/api/src/accounts/application/probe.ts';
@@ -127,5 +189,115 @@ describe('hexagonal import boundaries in the accounts module', () => {
   it('allows accounts domain code to import shared schemas and its own files', async () => {
     const source = "import { z } from 'zod';\nimport { y } from './account-name';\n";
     expect(await restrictedImports(ACCOUNTS_DOMAIN_FILE, source)).toEqual([]);
+  });
+});
+
+describe('hexagonal import boundaries in the categories module', () => {
+  const CATEGORIES_DOMAIN_FILE = 'apps/api/src/categories/domain/probe.ts';
+  const CATEGORIES_APPLICATION_FILE = 'apps/api/src/categories/application/probe.ts';
+
+  it.each([
+    "import { eq } from 'drizzle-orm';",
+    "import { pgTable } from 'drizzle-orm/pg-core';",
+    "import pg from 'pg';",
+    "import express from 'express';",
+    "import { categories } from '../infrastructure/db/schema';",
+    "import { scopedTo } from '../../shared/access/infrastructure/drizzle-access-scope';",
+  ])('rejects in categories domain: %s', async (source) => {
+    expect(await restrictedImports(CATEGORIES_DOMAIN_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it.each([
+    "import { categories } from '../infrastructure/db/schema';",
+    "import { x } from '../infrastructure/http/category-routes';",
+    "import { x } from '../infrastructure/usage/no-usage-adapter';",
+    "import { scopedTo } from '../../shared/access/infrastructure/drizzle-access-scope';",
+  ])('rejects in categories application: %s', async (source) => {
+    expect(await restrictedImports(CATEGORIES_APPLICATION_FILE, `${source}\n`)).toEqual([
+      'no-restricted-imports',
+    ]);
+  });
+
+  it('allows categories application code to import its domain, ports and the shared access port', async () => {
+    const source =
+      "import { x } from '../domain/category';\nimport type { CategoryUsage } from './ports/category-usage';\nimport type { AccessScope } from '../../shared/access';\n";
+    expect(await restrictedImports(CATEGORIES_APPLICATION_FILE, source)).toEqual([]);
+  });
+
+  it('allows categories domain code to import shared schemas and its own files', async () => {
+    const source = "import { z } from 'zod';\nimport { y } from './naming';\n";
+    expect(await restrictedImports(CATEGORIES_DOMAIN_FILE, source)).toEqual([]);
+  });
+});
+
+describe('the categories persistence reaches identity only through its persistence file', () => {
+  const IDENTITY_SCHEMA = 'identity/infrastructure/db/schema';
+
+  /** Every module specifier the source imports, re-exports or dynamically imports. */
+  function specifiers(source: string): string[] {
+    const found = source.matchAll(
+      /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)(['"])([^'"]+)\1/g,
+    );
+    return [...found].map((match) => match[2] ?? '');
+  }
+
+  /** The specifiers that point into the identity module, with the file they appear in. */
+  function identityReferences(files: Record<string, string>): { file: string; target: string }[] {
+    return Object.entries(files).flatMap(([file, source]) =>
+      specifiers(source)
+        .filter((target) => /(^|\/)identity(\/|$)/.test(target))
+        .map((target) => ({ file, target })),
+    );
+  }
+
+  function categoriesSources(): Record<string, string> {
+    const root = join(repoRoot, 'apps/api/src/categories');
+    const files: Record<string, string> = {};
+    const walk = (directory: string): void => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (entry.name.endsWith('.ts')) {
+          files[relative(root, path).split(sep).join('/')] = readFileSync(path, 'utf8');
+        }
+      }
+    };
+    walk(root);
+    return files;
+  }
+
+  it('imports users from the identity persistence file and nowhere else in identity', () => {
+    const references = identityReferences(categoriesSources());
+    expect(references).toEqual([
+      { file: 'infrastructure/db/schema.ts', target: `../../../${IDENTITY_SCHEMA}` },
+    ]);
+  });
+
+  it('takes the users table from that persistence file', () => {
+    const schema = categoriesSources()['infrastructure/db/schema.ts'] ?? '';
+    expect(schema).toContain(`import { users } from '../../../${IDENTITY_SCHEMA}';`);
+  });
+
+  it.each([
+    "import { users } from '../../../identity';",
+    "import { users } from '../../../identity/index';",
+    "import { users } from '../../../identity/infrastructure/db/user-created-hook';",
+    "export { users } from '../../../identity';",
+    "const { users } = await import('../../../identity');",
+  ])('the scanner flags an identity reference other than the schema file: %s', (source) => {
+    const [reference] = identityReferences({ 'infrastructure/db/schema.ts': source });
+    expect(reference).toBeDefined();
+    expect(reference?.target).not.toBe(`../../../${IDENTITY_SCHEMA}`);
+  });
+
+  it('the scanner flags identity imports in other categories files', () => {
+    const references = identityReferences({
+      'application/probe.ts': "import { x } from '../../identity/domain/user';\n",
+    });
+    expect(references).toEqual([
+      { file: 'application/probe.ts', target: '../../identity/domain/user' },
+    ]);
   });
 });

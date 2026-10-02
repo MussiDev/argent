@@ -13,7 +13,8 @@
     "nav": {
       "home": "Home",
       "security": "Security",
-      "profile": "Profile"
+      "profile": "Profile",
+      "categories": "Categories"
     }
   },
   "auth": {
@@ -123,6 +124,10 @@
     "twoFactorSetupRequired": "The setup changed in another session. Start again.",
     "accountNameTaken": "You already have an account with that name.",
     "accountHasMovements": "This account has movements, so it cannot be deleted. Archive it instead.",
+    "categoryNameTaken": "You already have a category with that name.",
+    "categoryInUse": "This category is in use, so it cannot be deleted. Archive it instead.",
+    "categoryNestingTooDeep": "Subcategories cannot have subcategories.",
+    "categoryParentKindMismatch": "A subcategory must have the same kind as its parent.",
     "totpCodeFormat": "Enter the 6 digits of the code.",
     "secondFactorCodeFormat": "Enter a 6-digit code or a recovery code."
   },
@@ -192,6 +197,103 @@
       "currencyRequired": "Choose a currency.",
       "amountInvalid": "Enter a valid amount, for example 1,500.00.",
       "amountOutOfRange": "The opening balance cannot exceed {max} in absolute value."
+    }
+  },
+  "categories": {
+    "title": "Categories",
+    "new": {
+      "title": "New category",
+      "description": "Add a category or a subcategory of your own."
+    },
+    "fields": {
+      "kind": "Type",
+      "parent": "Parent category",
+      "parentNone": "None (top-level category)",
+      "name": "Name",
+      "icon": "Icon",
+      "color": "Color"
+    },
+    "kinds": {
+      "expense": "Expense",
+      "income": "Income"
+    },
+    "sections": {
+      "expense": "Expenses",
+      "income": "Income"
+    },
+    "form": {
+      "submit": "Create category",
+      "pending": "Creating…"
+    },
+    "list": {
+      "activeTitle": "Active categories",
+      "archivedTitle": "Archived categories",
+      "empty": "You have no categories yet.",
+      "emptyArchived": "You have no archived categories.",
+      "emptySection": "There are no categories in this section.",
+      "showArchived": "Show archived categories",
+      "subcategories": "Subcategories of {name}"
+    },
+    "actions": {
+      "edit": "Edit",
+      "editField": "New name of {name}",
+      "save": "Save",
+      "cancel": "Cancel",
+      "archive": "Archive",
+      "unarchive": "Unarchive",
+      "delete": "Delete",
+      "confirmDelete": "Delete {name}? This cannot be undone.",
+      "confirmDeleteYes": "Yes, delete",
+      "archiveInstead": "Archive instead of deleting"
+    },
+    "errors": {
+      "nameRequired": "Enter a name.",
+      "nameTooLong": "The name can be at most {max} characters long.",
+      "nameInvalidCharacters": "The name contains characters that cannot be displayed. Remove them and try again.",
+      "iconRequired": "Choose an icon.",
+      "colorRequired": "Choose a color.",
+      "kindInvalid": "Choose a category type.",
+      "parentInvalid": "Choose a parent category from the list."
+    },
+    "icons": {
+      "utensils": "Cutlery",
+      "car": "Car",
+      "home": "House",
+      "heart-pulse": "Heartbeat",
+      "clapperboard": "Clapperboard",
+      "shopping-bag": "Shopping bag",
+      "graduation-cap": "Graduation cap",
+      "receipt": "Receipt",
+      "ellipsis": "Ellipsis",
+      "banknote": "Banknote",
+      "laptop": "Laptop",
+      "trending-up": "Trending up",
+      "gift": "Gift",
+      "wallet": "Wallet",
+      "piggy-bank": "Piggy bank",
+      "plane": "Plane",
+      "shirt": "Shirt",
+      "book-open": "Open book",
+      "briefcase": "Briefcase",
+      "coffee": "Coffee",
+      "dumbbell": "Dumbbell",
+      "paw-print": "Paw print",
+      "baby": "Baby",
+      "wrench": "Wrench"
+    },
+    "colors": {
+      "red": "Red",
+      "orange": "Orange",
+      "amber": "Amber",
+      "yellow": "Yellow",
+      "lime": "Lime",
+      "green": "Green",
+      "teal": "Teal",
+      "cyan": "Cyan",
+      "blue": "Blue",
+      "violet": "Violet",
+      "pink": "Pink",
+      "slate": "Slate"
     }
   },
   "security": {

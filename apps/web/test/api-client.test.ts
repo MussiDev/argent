@@ -72,6 +72,10 @@ describe('api client', () => {
     [500, 'INTERNAL', 'unexpected'],
     [409, 'ACCOUNT_NAME_TAKEN', 'accountNameTaken'],
     [409, 'ACCOUNT_HAS_MOVEMENTS', 'accountHasMovements'],
+    [409, 'CATEGORY_NAME_TAKEN', 'categoryNameTaken'],
+    [409, 'CATEGORY_IN_USE', 'categoryInUse'],
+    [400, 'CATEGORY_NESTING_TOO_DEEP', 'categoryNestingTooDeep'],
+    [400, 'CATEGORY_PARENT_KIND_MISMATCH', 'categoryParentKindMismatch'],
   ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
     const { client } = clientWith(jsonResponse(status, { code }));
 
@@ -520,6 +524,278 @@ describe('api client: two-factor authentication', () => {
 
     expect(result).toEqual({ ok: false, code: 'UNAUTHENTICATED', messageKey: 'unauthenticated' });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('api client: categories', () => {
+  const ID = '7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
+  const PARENT_ID = '11111111-2222-4333-8444-555555555555';
+  const CATEGORY = {
+    id: ID,
+    kind: 'expense',
+    parentId: null,
+    key: null,
+    name: 'Pets',
+    icon: 'paw-print',
+    color: 'teal',
+    archived: false,
+    archivedAt: null,
+    createdAt: '2026-10-01T12:00:00.000Z',
+  };
+  const ARCHIVED = { ...CATEGORY, archived: true, archivedAt: '2026-10-02T00:00:00.000Z' };
+
+  it('creates a category with cookies, the CSRF header and a JSON body (AC-02)', async () => {
+    const created = { ...CATEGORY, parentId: PARENT_ID };
+    const { client, fetch } = clientWith(jsonResponse(201, created));
+    const body = {
+      name: 'Pets',
+      kind: 'expense',
+      icon: 'paw-print',
+      color: 'teal',
+      parentId: PARENT_ID,
+    } as const;
+
+    const result = await client.createCategory(body);
+
+    expect(result).toEqual({ ok: true, data: created });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/categories`);
+    expect(init.method).toBe('POST');
+    expect(init.credentials).toBe('include');
+    const headers = new Headers(init.headers);
+    expect(headers.get('X-Requested-With')).toBe('argent');
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual(body);
+  });
+
+  it('gets one category by its encoded id', async () => {
+    const { client, fetch } = clientWith(jsonResponse(200, CATEGORY));
+
+    const result = await client.getCategory('a/b?c');
+
+    expect(result).toEqual({ ok: true, data: CATEGORY });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/categories/a%2Fb%3Fc`);
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('updates with PATCH, the encoded id and a JSON body (AC-05)', async () => {
+    const updated = { ...CATEGORY, name: 'Mascotas', color: 'blue' };
+    const { client, fetch } = clientWith(jsonResponse(200, updated));
+
+    const result = await client.updateCategory('a/b', { name: 'Mascotas', color: 'blue' });
+
+    expect(result).toEqual({ ok: true, data: updated });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/categories/a%2Fb`);
+    expect(init.method).toBe('PATCH');
+    expect(init.credentials).toBe('include');
+    expect(new Headers(init.headers).get('X-Requested-With')).toBe('argent');
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'Mascotas', color: 'blue' });
+  });
+
+  it('archives and unarchives with POST, the right path and an empty JSON body (AC-06, AC-08)', async () => {
+    const { client, fetch } = clientWith(jsonResponse(200, ARCHIVED), jsonResponse(200, CATEGORY));
+
+    expect(await client.archiveCategory(ID)).toEqual({ ok: true, data: ARCHIVED });
+    expect(await client.unarchiveCategory(ID)).toEqual({ ok: true, data: CATEGORY });
+
+    expect(requestAt(fetch, 0).url).toBe(`${BASE_URL}/categories/${ID}/archive`);
+    expect(requestAt(fetch, 1).url).toBe(`${BASE_URL}/categories/${ID}/unarchive`);
+    for (const index of [0, 1]) {
+      const { init } = requestAt(fetch, index);
+      expect(init.method).toBe('POST');
+      expect(init.credentials).toBe('include');
+      expect(new Headers(init.headers).get('X-Requested-With')).toBe('argent');
+      expect(new Headers(init.headers).get('Content-Type')).toBe('application/json');
+      expect(JSON.parse(init.body as string)).toEqual({});
+    }
+  });
+
+  it('deletes with DELETE and accepts an empty 204 (AC-09)', async () => {
+    const { client, fetch } = clientWith(new Response(null, { status: 204 }));
+
+    const result = await client.deleteCategory(ID);
+
+    expect(result).toEqual({ ok: true, data: undefined });
+    const { url, init } = requestAt(fetch, 0);
+    expect(url).toBe(`${BASE_URL}/categories/${ID}`);
+    expect(init.method).toBe('DELETE');
+    expect(init.credentials).toBe('include');
+    expect(new Headers(init.headers).get('X-Requested-With')).toBe('argent');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('serializes kind, archived, limit and offset (AC-13)', async () => {
+    const list = { items: [CATEGORY], total: 1, limit: 20, offset: 40 };
+    const { client, fetch } = clientWith(jsonResponse(200, list));
+
+    const result = await client.listCategories({
+      kind: 'income',
+      archived: true,
+      limit: 20,
+      offset: 40,
+    });
+
+    expect(result).toEqual({ ok: true, data: list });
+    const { url, init } = requestAt(fetch, 0);
+    expect(init.method).toBe('GET');
+    const parsed = new URL(url);
+    expect(`${parsed.origin}${parsed.pathname}`).toBe(`${BASE_URL}/categories`);
+    expect(Object.fromEntries(parsed.searchParams)).toEqual({
+      kind: 'income',
+      archived: 'true',
+      limit: '20',
+      offset: '40',
+    });
+  });
+
+  it('serializes archived=false and omits the keys that are undefined', async () => {
+    const list = { items: [], total: 0, limit: 100, offset: 0 };
+    const { client, fetch } = clientWith(jsonResponse(200, list), jsonResponse(200, list));
+
+    const first = await client.listCategories({ archived: false, kind: undefined });
+    const second = await client.listCategories({});
+
+    expect(first).toEqual({ ok: true, data: list });
+    expect(second).toEqual({ ok: true, data: list });
+    expect(requestAt(fetch, 0).url).toBe(`${BASE_URL}/categories?archived=false`);
+    expect(requestAt(fetch, 1).url).toBe(`${BASE_URL}/categories`);
+  });
+
+  it('maps a 404 NOT_FOUND answer to the unexpected key', async () => {
+    const notFound = () => jsonResponse(404, { code: 'NOT_FOUND' });
+    const { client } = clientWith(notFound(), notFound(), notFound());
+
+    const expected = { ok: false, code: 'NOT_FOUND', messageKey: 'unexpected' };
+    expect(await client.updateCategory(ID, { name: 'x' })).toEqual(expected);
+    expect(await client.archiveCategory(ID)).toEqual(expected);
+    expect(await client.deleteCategory(ID)).toEqual(expected);
+  });
+
+  it('maps a 409 CATEGORY_NAME_TAKEN answer to categoryNameTaken (AC-11)', async () => {
+    const taken = () => jsonResponse(409, { code: 'CATEGORY_NAME_TAKEN' });
+    const { client } = clientWith(taken(), taken());
+
+    const expected = {
+      ok: false,
+      code: 'CATEGORY_NAME_TAKEN',
+      messageKey: 'categoryNameTaken',
+    };
+    expect(
+      await client.createCategory({ name: 'Pets', kind: 'expense', icon: 'car', color: 'red' }),
+    ).toEqual(expected);
+    expect(await client.updateCategory(ID, { name: 'Pets' })).toEqual(expected);
+  });
+
+  it('maps a 409 CATEGORY_IN_USE answer to categoryInUse (AC-10)', async () => {
+    const { client } = clientWith(jsonResponse(409, { code: 'CATEGORY_IN_USE' }));
+
+    expect(await client.deleteCategory(ID)).toEqual({
+      ok: false,
+      code: 'CATEGORY_IN_USE',
+      messageKey: 'categoryInUse',
+    });
+  });
+
+  it.each([
+    [400, 'CATEGORY_NESTING_TOO_DEEP', 'categoryNestingTooDeep'],
+    [400, 'CATEGORY_PARENT_KIND_MISMATCH', 'categoryParentKindMismatch'],
+  ] as const)('maps a %i %s answer of createCategory to %s', async (status, code, messageKey) => {
+    const { client } = clientWith(jsonResponse(status, { code }));
+
+    expect(
+      await client.createCategory({
+        name: 'Pets',
+        kind: 'expense',
+        icon: 'car',
+        color: 'red',
+        parentId: PARENT_ID,
+      }),
+    ).toEqual({ ok: false, code, messageKey });
+  });
+
+  it.each(['', '.', '..'])('does not send a request for the unsafe id %j', async (id) => {
+    const { client, fetch } = clientWith();
+    const expected = { ok: false, code: 'VALIDATION_FAILED', messageKey: 'validationFailed' };
+
+    expect(await client.getCategory(id)).toEqual(expected);
+    expect(await client.updateCategory(id, { name: 'x' })).toEqual(expected);
+    expect(await client.archiveCategory(id)).toEqual(expected);
+    expect(await client.unarchiveCategory(id)).toEqual(expected);
+    expect(await client.deleteCategory(id)).toEqual(expected);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns NETWORK without throwing when the API cannot be reached', async () => {
+    const { client } = clientWith(new TypeError('Failed to fetch'));
+
+    const result = await client.listCategories({});
+
+    expect(result).toEqual({ ok: false, code: 'NETWORK', messageKey: 'network' });
+  });
+
+  it('returns INTERNAL without throwing when the body does not match the schema', async () => {
+    const { client } = clientWith(
+      jsonResponse(200, { ...CATEGORY, icon: 'not-an-icon' }),
+      jsonResponse(200, { items: 'nope' }),
+    );
+
+    expect(await client.getCategory(ID)).toEqual({
+      ok: false,
+      code: 'INTERNAL',
+      messageKey: 'unexpected',
+    });
+    expect(await client.listCategories({})).toEqual({
+      ok: false,
+      code: 'INTERNAL',
+      messageKey: 'unexpected',
+    });
+  });
+
+  type Client = ReturnType<typeof clientWith>['client'];
+  const SESSION_CALLS: [string, (client: Client) => Promise<unknown>][] = [
+    ['listCategories', (client) => client.listCategories({})],
+    [
+      'createCategory',
+      (client) => client.createCategory({ name: 'a', kind: 'expense', icon: 'car', color: 'red' }),
+    ],
+    ['getCategory', (client) => client.getCategory(ID)],
+    ['updateCategory', (client) => client.updateCategory(ID, { name: 'b' })],
+    ['archiveCategory', (client) => client.archiveCategory(ID)],
+    ['unarchiveCategory', (client) => client.unarchiveCategory(ID)],
+    ['deleteCategory', (client) => client.deleteCategory(ID)],
+  ];
+
+  it.each(SESSION_CALLS)('%s refreshes the session once when refused', async (_name, call) => {
+    const { client, fetch } = clientWith(
+      jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+      jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+      jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+    );
+
+    const result = await call(client);
+
+    expect(result).toMatchObject({ ok: false, code: 'UNAUTHENTICATED' });
+    const urls = fetch.mock.calls.map(([url]) => url);
+    expect(urls).toHaveLength(3);
+    expect(urls[2]).toBe(`${BASE_URL}/auth/refresh`);
+    expect(urls[0]).toBe(urls[1]);
+  });
+
+  it('retries the original request after a successful refresh', async () => {
+    const { client, fetch } = clientWith(
+      jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+      jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+      jsonResponse(200, { status: 'refreshed' }),
+      jsonResponse(200, CATEGORY),
+    );
+
+    const result = await client.getCategory(ID);
+
+    expect(result).toEqual({ ok: true, data: CATEGORY });
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 });
 

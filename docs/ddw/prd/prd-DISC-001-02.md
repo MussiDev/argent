@@ -11,7 +11,7 @@
 | Sub-ticket | Title | PRD | Dependencies | Status |
 |---|---|---|---|---|
 | DISC-001-02a | Accounts | prd-DISC-001-02a.md | PRD 01a (users, ownership) | done — on its draft PR, merges when the PR merges; migration 0006's journal `when` is intentionally later than 0007's (0007 is already deployed), do not lower it |
-| DISC-001-02b | Categories | prd-DISC-001-02b.md | PRD 01a (users, ownership); FR-11 needs the interface language from PRD 01 (01d); independent of a | active |
+| DISC-001-02b | Categories | prd-DISC-001-02b.md | PRD 01a (users, ownership); FR-11 needs the interface language from PRD 01 (01d); independent of a | done — on its draft PR, merges when the PR merges; migration 0009's journal `when` is later than every other entry, the later-merging ticket re-chains the snapshot |
 
 ## Suggested implementation order
 a → b
@@ -24,10 +24,12 @@ a → b
   movements exist yet) and no movements table is created; PRD 03 provides the real adapter
   without touching accounts code. AC-10 is tested at the use-case level with a fake port that
   reports movements; its end-to-end test is deferred to PRD 03. The PRD wording is unchanged.
-- FR-11 / AC-14 of 02b (original FR-22, AC-27) depend on the user's interface language at the
-  moment the user is created. The original wording is kept; the human decides where the default
-  categories hook lives.
-- Module layout for categories (own module versus inside `accounts`) is a PLAN decision for 02b.
+- RESOLVED (2026-10-01, human decision Q3): FR-11 / AC-14 of 02b (original FR-22, AC-27) now say
+  default categories follow the user's CURRENT interface language and are shown translated when it
+  changes; a default the user renames becomes theirs and is no longer translated. New in 02b:
+  FR-12 and AC-15 to AC-17.
+- RESOLVED (2026-10-01, human decision Q4): categories get their own module
+  (`apps/api/src/categories/`) and web feature; `categories` joins the module list of AGENTS.md.
 
 ## Original context
 PRD 02 of discovery DISC-001 defined the accounts where a user's money is and the categories that

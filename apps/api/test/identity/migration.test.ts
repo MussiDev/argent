@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_SET_0009 } from '../categories/fixtures/default-set-0009';
 import { migrationsFolder, runMigrations } from '../../src/shared/db/migrate';
 import { ensureTestDatabase, testDatabaseUrl } from '../helpers/test-database';
 
-const ALL_MIGRATIONS = 8;
+const ALL_MIGRATIONS = 9;
 const TABLES_BEFORE_0004 = [
   'auth_attempts',
   'email_outbox',
@@ -24,6 +25,8 @@ const TABLES_AT_0004 = [
 const ALL_TABLES = [
   'accounts',
   'auth_attempts',
+  'categories',
+  'category_defaults_seeded',
   'email_outbox',
   'oauth_states',
   'one_time_tokens',
@@ -34,7 +37,10 @@ const ALL_TABLES = [
   'user_two_factor',
   'users',
 ];
-const TABLES_WITHOUT_ACCOUNTS = ALL_TABLES.filter((name) => name !== 'accounts');
+const CATEGORY_TABLES = ['categories', 'category_defaults_seeded'];
+const TABLES_WITHOUT_ACCOUNTS_AND_CATEGORIES = ALL_TABLES.filter(
+  (name) => name !== 'accounts' && !CATEGORY_TABLES.includes(name),
+);
 
 /** A throwaway database next to the test database, so the migration runs on a truly empty one. */
 const emptyDatabaseUrl = (() => {
@@ -204,6 +210,7 @@ describe('0000_identity migration', () => {
   });
 
   it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
@@ -241,6 +248,7 @@ describe('0001_outbox_hardening migration', () => {
   it('is reverted by its rollback script (after the newer ones), leaving 0000 in place, and re-applies', async () => {
     await client.query('delete from email_outbox');
     // Newest first: drizzle only applies migrations newer than the last one recorded.
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
@@ -325,6 +333,7 @@ describe('0002_credentials_version migration', () => {
   });
 
   it('is reverted by its rollback script (after the newer ones), keeping the data of the older columns, and re-applies', async () => {
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
@@ -384,6 +393,7 @@ describe('0003_outbox_retry migration', () => {
   });
 
   it('is reverted by its rollback script (after the newer ones), restoring the previous index and keeping the rows, and re-applies', async () => {
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
@@ -393,7 +403,7 @@ describe('0003_outbox_retry migration', () => {
     expect(await nextAttemptColumn()).toEqual([]);
     expect(await outboxIndexes()).toEqual([PENDING_BY_SENT_AT]);
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
     const kept = await client.query("select 1 from email_outbox where kind = 'discard'");
     expect(kept.rowCount).toBe(1);
 
@@ -418,12 +428,13 @@ async function countOf(statement: string): Promise<number> {
 
 describe('0004_google_identity migration', () => {
   it('applies on a database at 0003: password_hash nullable, user_identities, oauth_states and the google_start_ip kind', async () => {
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     await client.query(await rollback('0004_google_identity'));
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
 
     await runMigrations(emptyDatabaseUrl);
 
@@ -471,6 +482,7 @@ describe('0004_google_identity migration', () => {
   it('has a rollback that fails while a password-less user exists, changing nothing', async () => {
     expect(await countOf('select count(*) as n from users where password_hash is null')).toBe(1);
 
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
 
@@ -478,7 +490,7 @@ describe('0004_google_identity migration', () => {
     expect(await sqlState(await rollback('0004_google_identity'))).toBe('23502');
 
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
     expect(
       await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
     ).toBe(1);
@@ -493,7 +505,7 @@ describe('0004_google_identity migration', () => {
     await client.query(await rollback('0004_google_identity'));
 
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
     expect(await passwordHashNullable()).toBe('NO');
     expect(
       await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
@@ -543,11 +555,12 @@ function insertOutbox(kind: string): Promise<string | undefined> {
 
 describe('0005_two_factor migration', () => {
   it('applies on a database at 0004: user_two_factor, recovery_codes, sign_in_challenges and the new kinds', async () => {
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
     for (const kind of TWO_FACTOR_ATTEMPT_KINDS) expect(await insertAttempt(kind)).toBe('23514');
     for (const kind of TWO_FACTOR_OUTBOX_KINDS) expect(await insertOutbox(kind)).toBe('23514');
 
@@ -628,13 +641,14 @@ describe('0005_two_factor migration', () => {
     );
     const before = { attempts: await countOf(otherAttempts), outbox: await countOf(otherOutbox) };
 
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
 
     await client.query(await rollback('0005_two_factor'));
 
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
     const attemptKinds = TWO_FACTOR_ATTEMPT_KINDS.map((kind) => `'${kind}'`).join(', ');
     const outboxKinds = TWO_FACTOR_OUTBOX_KINDS.map((kind) => `'${kind}'`).join(', ');
     expect(
@@ -664,9 +678,10 @@ function insertAccount(owner: string, name: string): Promise<string | undefined>
 
 describe('0006_accounts migration', () => {
   it('applies on a database at 0005: the accounts table with its checks, defaults, indexes and immutability trigger', async () => {
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
     expect(await publicTables()).not.toContain('accounts');
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
 
     await runMigrations(emptyDatabaseUrl);
 
@@ -747,10 +762,11 @@ describe('0006_accounts migration', () => {
   });
 
   it('is reverted by its rollback (dropping table, function and trigger), and re-applies', async () => {
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
 
     expect(await publicTables()).not.toContain('accounts');
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
     expect(
       await countOf(
         "select count(*) as n from pg_proc where proname = 'accounts_immutable_fields'",
@@ -780,11 +796,12 @@ async function displayNameColumn(): Promise<ColumnInfo[]> {
 
 describe('0007_profile_display_name migration', () => {
   it('applies on a database at 0005 with existing users, who keep a null display name', async () => {
-    // 0006_accounts has the later journal `when`, so it is the newest for the migrator: roll it back first.
+    // 0009 and then 0006 have the latest journal `when`s, so they are the newest for the migrator: roll them back first.
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0007_profile_display_name'));
     expect(await displayNameColumn()).toEqual([]);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
     await insertUser('before@profile.test');
 
     await runMigrations(emptyDatabaseUrl);
@@ -813,12 +830,13 @@ describe('0007_profile_display_name migration', () => {
   });
 
   it('is reverted by its rollback (dropping the column, keeping the users), and re-applies', async () => {
+    await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0007_profile_display_name'));
 
     expect(await displayNameColumn()).toEqual([]);
-    expect(await publicTables()).toEqual(TABLES_WITHOUT_ACCOUNTS);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await publicTables()).toEqual(TABLES_WITHOUT_ACCOUNTS_AND_CATEGORIES);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
     expect(
       await countOf("select count(*) as n from users where email = 'before@profile.test'"),
     ).toBe(1);
@@ -831,5 +849,258 @@ describe('0007_profile_display_name migration', () => {
     await runMigrations(emptyDatabaseUrl);
     expect(await displayNameColumn()).toHaveLength(1);
     expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+  });
+});
+
+interface CategoryShape {
+  key: string | null;
+  kind: string;
+  parentKey: string | null;
+  icon: string;
+  color: string;
+  name: string | null;
+  archived: boolean;
+}
+
+function byKey(a: { key: string | null }, b: { key: string | null }): number {
+  return (a.key ?? '') < (b.key ?? '') ? -1 : (a.key ?? '') > (b.key ?? '') ? 1 : 0;
+}
+
+async function categoriesOf(owner: string): Promise<CategoryShape[]> {
+  const result = await client.query<CategoryShape>(
+    `select c.default_key as key, c.kind, p.default_key as "parentKey", c.icon, c.color, c.name,
+            c.archived_at is not null as archived
+       from categories c left join categories p on p.id = c.parent_id
+      where c.owner_id = '${owner}'`,
+  );
+  return result.rows.sort(byKey);
+}
+
+const FROZEN_SHAPES: CategoryShape[] = DEFAULT_SET_0009.map((entry) => ({
+  key: entry.key,
+  kind: entry.kind,
+  parentKey: entry.parentKey,
+  icon: entry.icon,
+  color: entry.color,
+  name: null,
+  archived: false,
+})).sort(byKey);
+
+async function userIdOf(email: string): Promise<string> {
+  const result = await client.query<{ id: string }>('select id from users where email = $1', [
+    email,
+  ]);
+  return result.rows[0]?.id ?? '';
+}
+
+/** A digest per table other than the categories ones, to prove the backfill touches nothing else. */
+async function otherTablesDigest(): Promise<string> {
+  const parts: string[] = [];
+  for (const table of ALL_TABLES.filter((name) => !CATEGORY_TABLES.includes(name))) {
+    const result = await client.query<{ digest: string }>(
+      `select coalesce(md5(string_agg(t::text, ',' order by t::text)), '') as digest from "${table}" t`,
+    );
+    parts.push(`${table}:${result.rows[0]?.digest ?? ''}`);
+  }
+  return parts.join('|');
+}
+
+async function backfillStatement(): Promise<string> {
+  const file = await readFile(`${migrationsFolder}/0009_categories.sql`, 'utf8');
+  const statement = file
+    .split('--> statement-breakpoint')
+    .find((part) => part.includes('-- backfill default categories'));
+  if (!statement) throw new Error('0009_categories.sql has no "-- backfill default categories"');
+  return statement;
+}
+
+interface JournalEntry {
+  tag: string;
+  when: number;
+}
+
+async function readJournal(): Promise<JournalEntry[]> {
+  const raw = await readFile(`${migrationsFolder}/meta/_journal.json`, 'utf8');
+  return (JSON.parse(raw) as { entries: JournalEntry[] }).entries;
+}
+
+/** True when `tag` has a `when` greater than every other entry: the order drizzle applies by. */
+function isNewest(entries: readonly JournalEntry[], tag: string): boolean {
+  const mine = entries.find((entry) => entry.tag === tag);
+  if (!mine) return false;
+  return entries.every((entry) => entry.tag === tag || entry.when < mine.when);
+}
+
+describe('0009_categories migration', () => {
+  it('backfills the default set for existing users on a database at 0007 and changes no other row', async () => {
+    await client.query(await rollback('0009_categories'));
+    expect(await publicTables()).toEqual(
+      ALL_TABLES.filter((name) => !CATEGORY_TABLES.includes(name)),
+    );
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    await insertUser('ana@categories.test');
+    await insertUser('bob@categories.test');
+    await insertUser('carla@categories.test');
+    const users = await countOf('select count(*) as n from users');
+    const digest = await otherTablesDigest();
+
+    await runMigrations(emptyDatabaseUrl);
+
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(await publicTables()).toEqual(ALL_TABLES);
+    expect(users).toBeGreaterThanOrEqual(3);
+    expect(await otherTablesDigest()).toBe(digest);
+    expect(FROZEN_SHAPES).toHaveLength(33);
+    const owners = await client.query<{ id: string }>('select id from users');
+    for (const owner of owners.rows) {
+      expect(await categoriesOf(owner.id)).toEqual(FROZEN_SHAPES);
+      expect(
+        await countOf(
+          `select count(*) as n from category_defaults_seeded where owner_id = '${owner.id}'`,
+        ),
+      ).toBe(1);
+    }
+    expect(await countOf('select count(*) as n from categories')).toBe(users * 33);
+    expect(await countOf('select count(*) as n from category_defaults_seeded')).toBe(users);
+  });
+
+  it('creates no duplicate when the backfill runs again, and never gives back a deleted default or reseeds a marked user', async () => {
+    const statement = await backfillStatement();
+    const total = await countOf('select count(*) as n from categories');
+
+    await client.query(statement);
+    expect(await countOf('select count(*) as n from categories')).toBe(total);
+
+    const ana = await userIdOf('ana@categories.test');
+    const bob = await userIdOf('bob@categories.test');
+    const carla = await userIdOf('carla@categories.test');
+    await client.query(
+      `delete from categories where owner_id = '${ana}' and default_key = 'other-income'`,
+    );
+    // children first: the parent foreign key is ON DELETE RESTRICT
+    await client.query(
+      `delete from categories where owner_id = '${bob}' and parent_id is not null`,
+    );
+    await client.query(`delete from categories where owner_id = '${bob}'`);
+
+    await client.query(statement);
+
+    const anaKeys = (await categoriesOf(ana)).map((row) => row.key);
+    expect(anaKeys).toHaveLength(32);
+    expect(anaKeys).not.toContain('other-income');
+    expect(await categoriesOf(bob)).toEqual([]);
+    expect(
+      await countOf(`select count(*) as n from category_defaults_seeded where owner_id = '${bob}'`),
+    ).toBe(1);
+    expect(await categoriesOf(carla)).toEqual(FROZEN_SHAPES);
+
+    // a user created after the migration has no marker: only that user gets the set
+    const dave = await insertUser('dave@categories.test');
+    await client.query(statement);
+    expect(await categoriesOf(dave)).toEqual(FROZEN_SHAPES);
+    expect(await categoriesOf(bob)).toEqual([]);
+    expect((await categoriesOf(ana)).length).toBe(32);
+    await client.query(statement);
+    expect(await categoriesOf(dave)).toEqual(FROZEN_SHAPES);
+  });
+
+  it('cascades on user deletion', async () => {
+    const dave = await userIdOf('dave@categories.test');
+
+    await client.query(`delete from users where id = '${dave}'`);
+
+    expect(await countOf(`select count(*) as n from categories where owner_id = '${dave}'`)).toBe(
+      0,
+    );
+    expect(
+      await countOf(
+        `select count(*) as n from category_defaults_seeded where owner_id = '${dave}'`,
+      ),
+    ).toBe(0);
+  });
+
+  it('has the listed constraints, indexes and guard trigger', async () => {
+    const checks = await client.query<{ conname: string }>(
+      "select conname from pg_constraint where conrelid = 'categories'::regclass and contype = 'c' order by conname",
+    );
+    expect(checks.rows.map((row) => row.conname)).toEqual([
+      'categories_color_length_check',
+      'categories_default_key_length_check',
+      'categories_icon_length_check',
+      'categories_key_or_name_check',
+      'categories_kind_check',
+      'categories_name_length_check',
+    ]);
+    const foreignKeys = await client.query<{ conname: string; def: string }>(
+      "select conname, pg_get_constraintdef(oid) as def from pg_constraint where contype = 'f' and conrelid in ('categories'::regclass, 'category_defaults_seeded'::regclass) order by conname",
+    );
+    expect(foreignKeys.rows.map((row) => row.def)).toEqual([
+      'FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE',
+      'FOREIGN KEY (parent_id, owner_id, kind) REFERENCES categories(id, owner_id, kind) ON DELETE RESTRICT',
+      'FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE',
+    ]);
+    const unique = await client.query<{ def: string }>(
+      "select pg_get_constraintdef(oid) as def from pg_constraint where conrelid = 'categories'::regclass and contype = 'u'",
+    );
+    expect(unique.rows.map((row) => row.def)).toEqual(['UNIQUE (id, owner_id, kind)']);
+
+    expect(await indexDefinition('categories_owner_default_key_unique')).toBe(
+      'CREATE UNIQUE INDEX categories_owner_default_key_unique ON public.categories USING btree (owner_id, default_key) WHERE (default_key IS NOT NULL)',
+    );
+    expect(await indexDefinition('categories_owner_name_unique')).toBe(
+      "CREATE UNIQUE INDEX categories_owner_name_unique ON public.categories USING btree (owner_id, kind, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name)) WHERE (name IS NOT NULL)",
+    );
+    expect(await indexDefinition('categories_owner_kind_parent_idx')).toBe(
+      'CREATE INDEX categories_owner_kind_parent_idx ON public.categories USING btree (owner_id, kind, parent_id)',
+    );
+    expect(await indexDefinition('categories_owner_created_idx')).toBe(
+      'CREATE INDEX categories_owner_created_idx ON public.categories USING btree (owner_id, created_at, id)',
+    );
+    const triggers = await client.query<{ tgname: string }>(
+      "select tgname from pg_trigger where tgrelid = 'categories'::regclass and not tgisinternal",
+    );
+    expect(triggers.rows).toEqual([{ tgname: 'categories_guard_trigger' }]);
+  });
+
+  it('is reverted by its rollback (dropping both tables, the function and the trigger, keeping the users), and re-applies', async () => {
+    const users = await countOf('select count(*) as n from users');
+
+    await client.query(await rollback('0009_categories'));
+
+    expect(await publicTables()).toEqual(
+      ALL_TABLES.filter((name) => !CATEGORY_TABLES.includes(name)),
+    );
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(
+      await countOf("select count(*) as n from pg_proc where proname = 'categories_guard'"),
+    ).toBe(0);
+    expect(await countOf('select count(*) as n from users')).toBe(users);
+
+    await runMigrations(emptyDatabaseUrl);
+
+    expect(await publicTables()).toEqual(ALL_TABLES);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(
+      await countOf("select count(*) as n from pg_proc where proname = 'categories_guard'"),
+    ).toBe(1);
+    expect(await countOf('select count(*) as n from category_defaults_seeded')).toBe(users);
+  });
+
+  it('has the latest journal when of all migrations, and the check fails when the order is reversed', async () => {
+    const entries = await readJournal();
+
+    expect(entries.map((entry) => entry.tag)).toContain('0009_categories');
+    expect(isNewest(entries, '0009_categories')).toBe(true);
+    expect(entries.find((entry) => entry.tag === '0009_categories')?.when).toBeGreaterThan(
+      1790895423195,
+    );
+
+    const whens = entries.map((entry) => entry.when).sort((a, b) => a - b);
+    const reversed = entries.map((entry, index) => ({
+      tag: entry.tag,
+      when: whens[entries.length - 1 - index] ?? 0,
+    }));
+    expect(isNewest(reversed, '0009_categories')).toBe(false);
+    expect(isNewest(entries, 'no-such-migration')).toBe(false);
   });
 });

@@ -107,6 +107,26 @@ describe('portfolio routes', () => {
     ).toEqual([body.id]);
   });
 
+  it('ignores an ownerId of another user in the create body', async () => {
+    const { app, ana, bob, anaId, bobId } = await setup();
+
+    const created = await create(app, ana, { name: 'Mine', ownerId: bobId });
+
+    expect(created.status).toBe(201);
+    const id = (created.body as PortfolioResponse).id;
+    const row = await connection.pool.query<{ owner_id: string }>(
+      'select owner_id from portfolios where id = $1',
+      [id],
+    );
+    expect(row.rows[0]?.owner_id).toBe(anaId);
+    const bobList = await list(app, bob);
+    expect((bobList.body as { portfolios: PortfolioResponse[] }).portfolios).toEqual([]);
+    const anaList = await list(app, ana);
+    expect(
+      (anaList.body as { portfolios: PortfolioResponse[] }).portfolios.map((p) => p.id),
+    ).toEqual([id]);
+  });
+
   it('answers 404 to user B reading or deleting the portfolio of user A, and A keeps it (AC-15)', async () => {
     const { app, ana, bob } = await setup();
     const id = await createdId(app, ana, 'Balanz');

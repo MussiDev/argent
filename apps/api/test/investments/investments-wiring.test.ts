@@ -76,7 +76,9 @@ describe('investments module wiring', () => {
       createApp({
         env: testEnv(),
         logger: createLogger({ level: 'silent' }),
-        routerFactories: [createInvestmentsRoutes({ db: connection.db, logger: createLogger() })],
+        routerFactories: [
+          createInvestmentsRoutes({ db: connection.db, logger: createLogger({ level: 'silent' }) }),
+        ],
       }),
     ).toThrow(/identity/i);
   });

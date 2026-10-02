@@ -11,11 +11,10 @@ import type {
   GetPortfolio,
   ListPortfolios,
 } from '../../application/portfolio-use-cases';
-import type { AccessAction, AccessPolicy, AccessScope } from '../../../shared/access';
-import type { AuthContext } from '../../../shared/http/auth-context';
-import { HttpError } from '../../../shared/http/error-handler';
+import type { AccessPolicy } from '../../../shared/access';
 import { validate } from '../../../shared/http/validate';
 import type { Logger } from '../../../shared/logging/logger';
+import { scopeOf } from './scope';
 import { serializePortfolio } from './serializers';
 
 export interface PortfolioRoutesDependencies {
@@ -25,16 +24,6 @@ export interface PortfolioRoutesDependencies {
   listPortfolios: ListPortfolios;
   getPortfolio: GetPortfolio;
   deletePortfolio: DeletePortfolio;
-}
-
-/** requireSession always sets auth before these routes; failing closed keeps that explicit. */
-export function scopeOf<A extends AccessAction>(
-  policy: AccessPolicy,
-  auth: AuthContext | undefined,
-  action: A,
-): Promise<AccessScope<A>> {
-  if (!auth) throw new HttpError(401, 'UNAUTHENTICATED');
-  return policy.scopeFor(auth, action);
 }
 
 /**

@@ -37,4 +37,6 @@ export interface SessionRepository {
   revoke(id: string, at: Date): Promise<void>;
   revokeFamily(familyId: string, at: Date): Promise<void>;
   revokeAllForUser(userId: string, at: Date): Promise<void>;
+  /** True while some session of the family is unrevoked and within the idle limit at `now`. */
+  isFamilyLive(familyId: string, now: Date): Promise<boolean>;
 }

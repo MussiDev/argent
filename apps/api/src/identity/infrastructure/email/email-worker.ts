@@ -3,6 +3,7 @@ import type { Logger } from '../../../shared/logging/logger';
 import { issueEmailToken } from '../../application/issue-email-token';
 import type { AttemptPurger } from '../../application/ports/attempt-purger';
 import type { Clock } from '../../application/ports/clock';
+import type { DeletionGrantPurger } from '../../application/ports/deletion-grant-repository';
 import type { OAuthStatePurger } from '../../application/ports/oauth-state-purger';
 import type { OneTimeTokenPurpose } from '../../application/ports/one-time-token-repository';
 import type { SignInChallengePurger } from '../../application/ports/sign-in-challenge-purger';
@@ -45,6 +46,7 @@ export interface EmailWorkerDependencies {
   attemptPurger: AttemptPurger;
   oauthStatePurger: OAuthStatePurger;
   signInChallengePurger: SignInChallengePurger;
+  deletionGrantPurger: DeletionGrantPurger;
   clock: Clock;
   logger: Logger;
   webBaseUrl: string;
@@ -176,6 +178,7 @@ export class EmailWorker {
       ['outboxRows', () => this.purgeOutbox(new Date(now - OUTBOX_RETENTION_MS))],
       ['oauthStates', () => this.deps.oauthStatePurger.purgeExpired(new Date(now))],
       ['signInChallenges', () => this.deps.signInChallengePurger.purgeExpired(new Date(now))],
+      ['deletionGrants', () => this.deps.deletionGrantPurger.purgeExpired(new Date(now))],
     ];
     const deleted: Record<string, number> = {};
     // A failed purge must neither stop delivery nor skip the other purges; it is retried at the

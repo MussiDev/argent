@@ -27,6 +27,10 @@ import type { AttemptLimiter } from './application/ports/attempt-limiter';
 import type { AttemptPurger } from './application/ports/attempt-purger';
 import type { BreachedPasswordChecker } from './application/ports/breached-password-checker';
 import type { Clock } from './application/ports/clock';
+import type {
+  DeletionGrantPurger,
+  DeletionGrantRepository,
+} from './application/ports/deletion-grant-repository';
 import type { EmailSender } from './application/ports/email-sender';
 import type { GoogleIdentityProvider } from './application/ports/google-identity-provider';
 import type { OAuthStatePurger } from './application/ports/oauth-state-purger';
@@ -44,8 +48,10 @@ import type { TokenGenerator } from './application/ports/token-generator';
 import type { TotpEngine } from './application/ports/totp';
 import type { TwoFactorRepository } from './application/ports/two-factor-repository';
 import type { UnitOfWork } from './application/ports/unit-of-work';
+import type { UserDeletionRepository } from './application/ports/user-deletion-repository';
 import type { UserIdentityRepository } from './application/ports/user-identity-repository';
 import type { UserRepository } from './application/ports/user-repository';
+import { DrizzleDeletionGrantRepository } from './infrastructure/db/drizzle-deletion-grant-repository';
 import { DrizzleOAuthStateRepository } from './infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from './infrastructure/db/drizzle-one-time-token-repository';
 import { DrizzleProfileRepository } from './infrastructure/db/drizzle-profile-repository';
@@ -54,6 +60,7 @@ import { DrizzleSessionRepository } from './infrastructure/db/drizzle-session-re
 import { DrizzleSignInChallengeRepository } from './infrastructure/db/drizzle-sign-in-challenge-repository';
 import { DrizzleTwoFactorRepository } from './infrastructure/db/drizzle-two-factor-repository';
 import { DrizzleUnitOfWork } from './infrastructure/db/drizzle-unit-of-work';
+import { DrizzleUserDeletionRepository } from './infrastructure/db/drizzle-user-deletion-repository';
 import { DrizzleUserIdentityRepository } from './infrastructure/db/drizzle-user-identity-repository';
 import { DrizzleUserRepository } from './infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from './infrastructure/db/postgres-attempt-limiter';
@@ -97,6 +104,7 @@ export * from './application/ports/attempt-limiter';
 export * from './application/ports/attempt-purger';
 export * from './application/ports/breached-password-checker';
 export * from './application/ports/clock';
+export * from './application/ports/deletion-grant-repository';
 export * from './application/ports/email-sender';
 export * from './application/ports/google-identity-provider';
 export * from './application/ports/oauth-state-purger';
@@ -114,6 +122,7 @@ export * from './application/ports/token-generator';
 export * from './application/ports/totp';
 export * from './application/ports/two-factor-repository';
 export * from './application/ports/unit-of-work';
+export * from './application/ports/user-deletion-repository';
 export * from './application/ports/user-identity-repository';
 export * from './application/ports/user-repository';
 export type { IdentityDb } from './infrastructure/db/schema';
@@ -157,6 +166,9 @@ export interface IdentityInfrastructure {
   recoveryCodes: RecoveryCodeRepository;
   signInChallenges: SignInChallengeRepository;
   signInChallengePurger: SignInChallengePurger;
+  deletionGrants: DeletionGrantRepository;
+  deletionGrantPurger: DeletionGrantPurger;
+  userDeletion: UserDeletionRepository;
   totp: TotpEngine;
   /** Seals TOTP secrets; unavailable (every call throws) when no key is configured. */
   secretBox: SecretBox;
@@ -174,6 +186,7 @@ export function createIdentityInfrastructure({
   const attemptLimiter = new PostgresAttemptLimiter(db, clock);
   const oauthStates = new DrizzleOAuthStateRepository(db);
   const signInChallenges = new DrizzleSignInChallengeRepository(db);
+  const deletionGrants = new DrizzleDeletionGrantRepository(db);
   return {
     clock,
     users: new DrizzleUserRepository(db),
@@ -197,6 +210,9 @@ export function createIdentityInfrastructure({
     recoveryCodes: new DrizzleRecoveryCodeRepository(db),
     signInChallenges,
     signInChallengePurger: signInChallenges,
+    deletionGrants,
+    deletionGrantPurger: deletionGrants,
+    userDeletion: new DrizzleUserDeletionRepository(db),
     totp: new RfcTotpEngine(),
     secretBox: env.TOTP_ENCRYPTION_KEY
       ? new AesGcmSecretBox(env.TOTP_ENCRYPTION_KEY)
@@ -508,8 +524,8 @@ export interface EmailWorkerFactoryDependencies {
 }
 
 /**
- * The outbox worker, with the PostgreSQL attempt, OAuth-state and sign-in challenge purgers and the
- * crypto token generator.
+ * The outbox worker, with the PostgreSQL attempt, OAuth-state, sign-in challenge and deletion grant
+ * purgers and the crypto token generator.
  */
 export function createEmailWorker({
   db,
@@ -526,6 +542,7 @@ export function createEmailWorker({
     attemptPurger: new PostgresAttemptLimiter(db, clock),
     oauthStatePurger: new DrizzleOAuthStateRepository(db),
     signInChallengePurger: new DrizzleSignInChallengeRepository(db),
+    deletionGrantPurger: new DrizzleDeletionGrantRepository(db),
     clock,
     logger,
     webBaseUrl: env.WEB_BASE_URL,

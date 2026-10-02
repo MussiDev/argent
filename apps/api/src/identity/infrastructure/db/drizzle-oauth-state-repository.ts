@@ -11,7 +11,12 @@ export class DrizzleOAuthStateRepository implements OAuthStateRepository, OAuthS
   constructor(private readonly db: IdentityDb) {}
 
   async create(state: NewOAuthState): Promise<void> {
-    await this.db.insert(oauthStates).values(state);
+    await this.db.insert(oauthStates).values({
+      ...state,
+      purpose: state.purpose ?? 'sign_in',
+      userId: state.userId ?? null,
+      sessionFamilyId: state.sessionFamilyId ?? null,
+    });
   }
 
   /** One `delete ... returning`: of two concurrent consumes of one state, only one gets the row. */

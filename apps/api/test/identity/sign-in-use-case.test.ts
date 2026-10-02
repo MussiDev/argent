@@ -95,6 +95,7 @@ function buildSignIn(options: {
     revoke: () => Promise.resolve(),
     revokeFamily: () => Promise.resolve(),
     revokeAllForUser: () => Promise.resolve(),
+    isFamilyLive: () => Promise.resolve(true),
   };
   const accessTokens: AccessTokenIssuer = {
     ttlSeconds: 900,

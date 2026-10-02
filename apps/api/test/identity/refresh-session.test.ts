@@ -82,6 +82,7 @@ function buildRefresh(
       return Promise.resolve();
     },
     revokeAllForUser: unsupported,
+    isFamilyLive: unsupported,
   };
 
   const unitOfWork: UnitOfWork = {

@@ -5,7 +5,7 @@ import { DEFAULT_SET_0009 } from '../categories/fixtures/default-set-0009';
 import { migrationsFolder, runMigrations } from '../../src/shared/db/migrate';
 import { ensureTestDatabase, testDatabaseUrl } from '../helpers/test-database';
 
-const ALL_MIGRATIONS = 9;
+const ALL_MIGRATIONS = 10;
 const TABLES_BEFORE_0004 = [
   'auth_attempts',
   'email_outbox',
@@ -27,6 +27,7 @@ const ALL_TABLES = [
   'auth_attempts',
   'categories',
   'category_defaults_seeded',
+  'deletion_grants',
   'email_outbox',
   'oauth_states',
   'one_time_tokens',
@@ -38,8 +39,11 @@ const ALL_TABLES = [
   'users',
 ];
 const CATEGORY_TABLES = ['categories', 'category_defaults_seeded'];
-const TABLES_WITHOUT_ACCOUNTS_AND_CATEGORIES = ALL_TABLES.filter(
-  (name) => name !== 'accounts' && !CATEGORY_TABLES.includes(name),
+const TABLES_BEFORE_0009 = ALL_TABLES.filter(
+  (name) => !CATEGORY_TABLES.includes(name) && name !== 'deletion_grants',
+);
+const TABLES_WITHOUT_ACCOUNTS_AND_CATEGORIES = TABLES_BEFORE_0009.filter(
+  (name) => name !== 'accounts',
 );
 
 /** A throwaway database next to the test database, so the migration runs on a truly empty one. */
@@ -210,6 +214,7 @@ describe('0000_identity migration', () => {
   });
 
   it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
@@ -248,6 +253,7 @@ describe('0001_outbox_hardening migration', () => {
   it('is reverted by its rollback script (after the newer ones), leaving 0000 in place, and re-applies', async () => {
     await client.query('delete from email_outbox');
     // Newest first: drizzle only applies migrations newer than the last one recorded.
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
@@ -333,6 +339,7 @@ describe('0002_credentials_version migration', () => {
   });
 
   it('is reverted by its rollback script (after the newer ones), keeping the data of the older columns, and re-applies', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
@@ -362,9 +369,10 @@ async function nextAttemptColumn(): Promise<ColumnInfo[]> {
   return result.rows;
 }
 
+/** The two indexes added by 0010 are left out: this helper describes the indexes 0003 owns. */
 async function outboxIndexes(): Promise<string[]> {
   const result = await client.query<{ indexdef: string }>(
-    "select indexdef from pg_indexes where schemaname = 'public' and tablename = 'email_outbox' and indexname <> 'email_outbox_pkey' order by indexname",
+    "select indexdef from pg_indexes where schemaname = 'public' and tablename = 'email_outbox' and indexname not in ('email_outbox_pkey', 'email_outbox_payload_user_id_idx', 'email_outbox_to_email_idx') order by indexname",
   );
   return result.rows.map((row) => row.indexdef);
 }
@@ -393,6 +401,7 @@ describe('0003_outbox_retry migration', () => {
   });
 
   it('is reverted by its rollback script (after the newer ones), restoring the previous index and keeping the rows, and re-applies', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
@@ -403,7 +412,7 @@ describe('0003_outbox_retry migration', () => {
     expect(await nextAttemptColumn()).toEqual([]);
     expect(await outboxIndexes()).toEqual([PENDING_BY_SENT_AT]);
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 7);
     const kept = await client.query("select 1 from email_outbox where kind = 'discard'");
     expect(kept.rowCount).toBe(1);
 
@@ -428,13 +437,14 @@ async function countOf(statement: string): Promise<number> {
 
 describe('0004_google_identity migration', () => {
   it('applies on a database at 0003: password_hash nullable, user_identities, oauth_states and the google_start_ip kind', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     await client.query(await rollback('0004_google_identity'));
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
 
     await runMigrations(emptyDatabaseUrl);
 
@@ -482,6 +492,7 @@ describe('0004_google_identity migration', () => {
   it('has a rollback that fails while a password-less user exists, changing nothing', async () => {
     expect(await countOf('select count(*) as n from users where password_hash is null')).toBe(1);
 
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
@@ -490,7 +501,7 @@ describe('0004_google_identity migration', () => {
     expect(await sqlState(await rollback('0004_google_identity'))).toBe('23502');
 
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
     expect(
       await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
     ).toBe(1);
@@ -505,7 +516,7 @@ describe('0004_google_identity migration', () => {
     await client.query(await rollback('0004_google_identity'));
 
     expect(await publicTables()).toEqual(TABLES_BEFORE_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 6);
     expect(await passwordHashNullable()).toBe('NO');
     expect(
       await countOf("select count(*) as n from auth_attempts where kind = 'google_start_ip'"),
@@ -555,12 +566,13 @@ function insertOutbox(kind: string): Promise<string | undefined> {
 
 describe('0005_two_factor migration', () => {
   it('applies on a database at 0004: user_two_factor, recovery_codes, sign_in_challenges and the new kinds', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0005_two_factor'));
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
     for (const kind of TWO_FACTOR_ATTEMPT_KINDS) expect(await insertAttempt(kind)).toBe('23514');
     for (const kind of TWO_FACTOR_OUTBOX_KINDS) expect(await insertOutbox(kind)).toBe('23514');
 
@@ -641,6 +653,7 @@ describe('0005_two_factor migration', () => {
     );
     const before = { attempts: await countOf(otherAttempts), outbox: await countOf(otherOutbox) };
 
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0007_profile_display_name'));
     await client.query(await rollback('0006_accounts'));
@@ -648,7 +661,7 @@ describe('0005_two_factor migration', () => {
     await client.query(await rollback('0005_two_factor'));
 
     expect(await publicTables()).toEqual(TABLES_AT_0004);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 5);
     const attemptKinds = TWO_FACTOR_ATTEMPT_KINDS.map((kind) => `'${kind}'`).join(', ');
     const outboxKinds = TWO_FACTOR_OUTBOX_KINDS.map((kind) => `'${kind}'`).join(', ');
     expect(
@@ -678,10 +691,11 @@ function insertAccount(owner: string, name: string): Promise<string | undefined>
 
 describe('0006_accounts migration', () => {
   it('applies on a database at 0005: the accounts table with its checks, defaults, indexes and immutability trigger', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
     expect(await publicTables()).not.toContain('accounts');
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
 
     await runMigrations(emptyDatabaseUrl);
 
@@ -762,11 +776,12 @@ describe('0006_accounts migration', () => {
   });
 
   it('is reverted by its rollback (dropping table, function and trigger), and re-applies', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
 
     expect(await publicTables()).not.toContain('accounts');
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
     expect(
       await countOf(
         "select count(*) as n from pg_proc where proname = 'accounts_immutable_fields'",
@@ -796,12 +811,13 @@ async function displayNameColumn(): Promise<ColumnInfo[]> {
 
 describe('0007_profile_display_name migration', () => {
   it('applies on a database at 0005 with existing users, who keep a null display name', async () => {
-    // 0009 and then 0006 have the latest journal `when`s, so they are the newest for the migrator: roll them back first.
+    // 0010, 0009 and then 0006 have the latest journal `when`s, so they are the newest for the migrator: roll them back first.
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0007_profile_display_name'));
     expect(await displayNameColumn()).toEqual([]);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
     await insertUser('before@profile.test');
 
     await runMigrations(emptyDatabaseUrl);
@@ -830,13 +846,14 @@ describe('0007_profile_display_name migration', () => {
   });
 
   it('is reverted by its rollback (dropping the column, keeping the users), and re-applies', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
     await client.query(await rollback('0006_accounts'));
     await client.query(await rollback('0007_profile_display_name'));
 
     expect(await displayNameColumn()).toEqual([]);
     expect(await publicTables()).toEqual(TABLES_WITHOUT_ACCOUNTS_AND_CATEGORIES);
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 3);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 4);
     expect(
       await countOf("select count(*) as n from users where email = 'before@profile.test'"),
     ).toBe(1);
@@ -893,10 +910,10 @@ async function userIdOf(email: string): Promise<string> {
   return result.rows[0]?.id ?? '';
 }
 
-/** A digest per table other than the categories ones, to prove the backfill touches nothing else. */
+/** A digest per table that exists before 0009, to prove the backfill touches nothing else. */
 async function otherTablesDigest(): Promise<string> {
   const parts: string[] = [];
-  for (const table of ALL_TABLES.filter((name) => !CATEGORY_TABLES.includes(name))) {
+  for (const table of TABLES_BEFORE_0009) {
     const result = await client.query<{ digest: string }>(
       `select coalesce(md5(string_agg(t::text, ',' order by t::text)), '') as digest from "${table}" t`,
     );
@@ -914,7 +931,31 @@ async function backfillStatement(): Promise<string> {
   return statement;
 }
 
+async function oauthStateColumns(): Promise<ColumnInfo[]> {
+  const result = await client.query<ColumnInfo>(
+    `select table_name, column_name, data_type, is_nullable, column_default
+       from information_schema.columns
+      where table_schema = 'public' and table_name = 'oauth_states'
+        and column_name in ('purpose', 'user_id', 'session_family_id')
+      order by column_name`,
+  );
+  return result.rows;
+}
+
+function insertState(hash: string, columns = '', values = ''): Promise<string | undefined> {
+  return sqlState(
+    `insert into oauth_states (state_hash, binding_hash, nonce_hash, code_verifier, time_zone, language, expires_at${columns}) values ('${hash}', 'b', 'n', 'v', 'UTC', 'es', now()${values})`,
+  );
+}
+
+function insertGrant(hash: string, userId: string): Promise<string | undefined> {
+  return sqlState(
+    `insert into deletion_grants (token_hash, user_id, session_family_id, credentials_version, expires_at) values ('${hash}', '${userId}', gen_random_uuid(), 0, now())`,
+  );
+}
+
 interface JournalEntry {
+  idx: number;
   tag: string;
   when: number;
 }
@@ -933,11 +974,10 @@ function isNewest(entries: readonly JournalEntry[], tag: string): boolean {
 
 describe('0009_categories migration', () => {
   it('backfills the default set for existing users on a database at 0007 and changes no other row', async () => {
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
-    expect(await publicTables()).toEqual(
-      ALL_TABLES.filter((name) => !CATEGORY_TABLES.includes(name)),
-    );
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await publicTables()).toEqual(TABLES_BEFORE_0009);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
     await insertUser('ana@categories.test');
     await insertUser('bob@categories.test');
     await insertUser('carla@categories.test');
@@ -1065,12 +1105,11 @@ describe('0009_categories migration', () => {
   it('is reverted by its rollback (dropping both tables, the function and the trigger, keeping the users), and re-applies', async () => {
     const users = await countOf('select count(*) as n from users');
 
+    await client.query(await rollback('0010_account_deletion'));
     await client.query(await rollback('0009_categories'));
 
-    expect(await publicTables()).toEqual(
-      ALL_TABLES.filter((name) => !CATEGORY_TABLES.includes(name)),
-    );
-    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await publicTables()).toEqual(TABLES_BEFORE_0009);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
     expect(
       await countOf("select count(*) as n from pg_proc where proname = 'categories_guard'"),
     ).toBe(0);
@@ -1086,8 +1125,8 @@ describe('0009_categories migration', () => {
     expect(await countOf('select count(*) as n from category_defaults_seeded')).toBe(users);
   });
 
-  it('has the latest journal when of all migrations, and the check fails when the order is reversed', async () => {
-    const entries = await readJournal();
+  it('has a later journal when than 0000 to 0007, and the check fails when the order is reversed', async () => {
+    const entries = (await readJournal()).filter((entry) => entry.tag !== '0010_account_deletion');
 
     expect(entries.map((entry) => entry.tag)).toContain('0009_categories');
     expect(isNewest(entries, '0009_categories')).toBe(true);
@@ -1097,10 +1136,150 @@ describe('0009_categories migration', () => {
 
     const whens = entries.map((entry) => entry.when).sort((a, b) => a - b);
     const reversed = entries.map((entry, index) => ({
+      idx: entry.idx,
       tag: entry.tag,
       when: whens[entries.length - 1 - index] ?? 0,
     }));
     expect(isNewest(reversed, '0009_categories')).toBe(false);
     expect(isNewest(entries, 'no-such-migration')).toBe(false);
+  });
+});
+
+const BOUND_COLUMNS = ', purpose, user_id, session_family_id';
+
+describe('0010_account_deletion migration', () => {
+  it('applies on top of the earlier ones with existing OAuth states, which keep the purpose sign_in', async () => {
+    await client.query(await rollback('0010_account_deletion'));
+    expect(await publicTables()).not.toContain('deletion_grants');
+    expect(await oauthStateColumns()).toEqual([]);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    await insertState('legacy');
+
+    await runMigrations(emptyDatabaseUrl);
+
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(await publicTables()).toEqual(ALL_TABLES);
+    expect(await oauthStateColumns()).toEqual([
+      {
+        table_name: 'oauth_states',
+        column_name: 'purpose',
+        data_type: 'text',
+        is_nullable: 'NO',
+        column_default: "'sign_in'::text",
+      },
+      {
+        table_name: 'oauth_states',
+        column_name: 'session_family_id',
+        data_type: 'uuid',
+        is_nullable: 'YES',
+        column_default: null,
+      },
+      {
+        table_name: 'oauth_states',
+        column_name: 'user_id',
+        data_type: 'uuid',
+        is_nullable: 'YES',
+        column_default: null,
+      },
+    ]);
+    expect(
+      await countOf(
+        "select count(*) as n from oauth_states where state_hash = 'legacy' and purpose = 'sign_in' and user_id is null and session_family_id is null",
+      ),
+    ).toBe(1);
+  });
+
+  it('enforces the purpose rules and cascades from the user on oauth_states and deletion_grants', async () => {
+    const ana = await insertUser('ana@deletion.test');
+    const missing = '00000000-0000-4000-8000-000000000000';
+
+    expect(
+      await insertState('d1', BOUND_COLUMNS, `, 'delete_account', '${ana}', gen_random_uuid()`),
+    ).toBeUndefined();
+    expect(await insertState('d2', ', purpose', ", 'delete_account'")).toBe('23514');
+    expect(await insertState('d3', ', purpose, user_id', `, 'delete_account', '${ana}'`)).toBe(
+      '23514',
+    );
+    expect(await insertState('d4', ', purpose, user_id', `, 'sign_in', '${ana}'`)).toBe('23514');
+    expect(await insertState('d5', ', session_family_id', ', gen_random_uuid()')).toBe('23514');
+    expect(await insertState('d6', ', purpose', ", 'other'")).toBe('23514');
+    expect(
+      await insertState('d7', BOUND_COLUMNS, `, 'delete_account', '${missing}', gen_random_uuid()`),
+    ).toBe('23503');
+
+    expect(await insertGrant('g1', ana)).toBeUndefined();
+    expect(await insertGrant('g1', ana)).toBe('23505');
+    expect(await insertGrant('g2', missing)).toBe('23503');
+    expect(
+      await countOf('select count(*) as n from deletion_grants where created_at is not null'),
+    ).toBe(1);
+
+    await client.query(`delete from users where id = '${ana}'`);
+
+    expect(await countOf("select count(*) as n from oauth_states where state_hash = 'd1'")).toBe(0);
+    expect(await countOf('select count(*) as n from deletion_grants')).toBe(0);
+    expect(
+      await countOf("select count(*) as n from oauth_states where state_hash = 'legacy'"),
+    ).toBe(1);
+  });
+
+  it('adds the indexes of the grant table and the two email_outbox lookups', async () => {
+    expect(await indexDefinition('deletion_grants_user_id_idx')).toBe(
+      'CREATE INDEX deletion_grants_user_id_idx ON public.deletion_grants USING btree (user_id)',
+    );
+    expect(await indexDefinition('deletion_grants_expires_at_idx')).toBe(
+      'CREATE INDEX deletion_grants_expires_at_idx ON public.deletion_grants USING btree (expires_at)',
+    );
+    expect(await indexDefinition('email_outbox_payload_user_id_idx')).toMatch(
+      /^CREATE INDEX email_outbox_payload_user_id_idx ON public\.email_outbox USING btree \(\(\(payload ->> 'userId'::text\)\)\)$/,
+    );
+    expect(await indexDefinition('email_outbox_to_email_idx')).toBe(
+      'CREATE INDEX email_outbox_to_email_idx ON public.email_outbox USING btree (to_email) WHERE (to_email IS NOT NULL)',
+    );
+  });
+
+  it('is reverted by its rollback (deleting delete_account states, keeping sign_in ones and the users), and re-applies', async () => {
+    const bob = await insertUser('bob@deletion.test');
+    await insertState('d8', BOUND_COLUMNS, `, 'delete_account', '${bob}', gen_random_uuid()`);
+    await insertGrant('g3', bob);
+
+    await client.query(await rollback('0010_account_deletion'));
+
+    expect(await publicTables()).not.toContain('deletion_grants');
+    expect(await oauthStateColumns()).toEqual([]);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 1);
+    expect(await countOf("select count(*) as n from oauth_states where state_hash = 'd8'")).toBe(0);
+    expect(
+      await countOf("select count(*) as n from oauth_states where state_hash = 'legacy'"),
+    ).toBe(1);
+    expect(await countOf("select count(*) as n from users where email = 'bob@deletion.test'")).toBe(
+      1,
+    );
+    expect(await indexDefinition('email_outbox_payload_user_id_idx')).toBeUndefined();
+    expect(await indexDefinition('email_outbox_to_email_idx')).toBeUndefined();
+    expect(
+      await countOf(
+        "select count(*) as n from pg_constraint where conname like 'oauth_states_%' and conname not in ('oauth_states_pkey', 'oauth_states_language_check')",
+      ),
+    ).toBe(0);
+
+    await runMigrations(emptyDatabaseUrl);
+    expect(await publicTables()).toEqual(ALL_TABLES);
+    expect(await appliedMigrations()).toBe(ALL_MIGRATIONS);
+    expect(await oauthStateColumns()).toHaveLength(3);
+  });
+
+  it('is the newest journal entry, with a `when` greater than every other entry (the migrator applies by `when`)', async () => {
+    const entries = await readJournal();
+    const others = entries.filter((entry) => entry.tag !== '0010_account_deletion');
+
+    expect(entries.find((entry) => entry.tag === '0010_account_deletion')).toMatchObject({
+      idx: 10,
+    });
+    expect(isNewest(entries, '0010_account_deletion')).toBe(true);
+    const newest = entries.find((entry) => entry.tag === '0010_account_deletion');
+    expect(others).toHaveLength(entries.length - 1);
+    for (const entry of others) expect(newest?.when).toBeGreaterThan(entry.when);
+    expect(newest?.when).toBeGreaterThan(1790902441319);
   });
 });

@@ -18,6 +18,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import type { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import { DISPLAY_CURRENCIES, LANGUAGES } from '../../domain/account-defaults';
+import { OAUTH_STATE_PURPOSES } from '../../application/ports/oauth-state-repository';
 import { ATTEMPT_KINDS } from '../../application/ports/attempt-limiter';
 import { OUTBOX_EMAIL_KINDS } from '../../application/ports/email-sender';
 import { ONE_TIME_TOKEN_PURPOSES } from '../../application/ports/one-time-token-repository';
@@ -153,6 +154,12 @@ export const emailOutbox = pgTable(
     index('email_outbox_pending_idx')
       .on(table.createdAt)
       .where(sql`${table.sentAt} is null`),
+    // Account deletion removes a user's rows by user id and by address while holding the user's
+    // lock; without these indexes that cleanup would scan the whole outbox.
+    index('email_outbox_payload_user_id_idx').on(sql`(${table.payload}->>'userId')`),
+    index('email_outbox_to_email_idx')
+      .on(table.toEmail)
+      .where(sql`${table.toEmail} is not null`),
   ],
 );
 
@@ -188,12 +195,46 @@ export const oauthStates = pgTable(
     codeVerifier: text('code_verifier').notNull(),
     timeZone: text('time_zone').notNull(),
     language: text('language', { enum: LANGUAGES }).notNull(),
+    /** What the flow is for; existing rows are sign-in flows. */
+    purpose: text('purpose', { enum: OAUTH_STATE_PURPOSES }).notNull().default('sign_in'),
+    /** Only for `delete_account`: the user who started the re-authentication. */
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    /** Only for `delete_account`; no foreign key because `sessions.family_id` is not unique. */
+    sessionFamilyId: uuid('session_family_id'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     expiresAt: timestamptz('expires_at').notNull(),
   },
   (table) => [
     check('oauth_states_language_check', oneOf(table.language, LANGUAGES)),
+    check('oauth_states_purpose_check', oneOf(table.purpose, OAUTH_STATE_PURPOSES)),
+    check(
+      'oauth_states_delete_account_binding_check',
+      sql`${table.purpose} <> 'delete_account' or (${table.userId} is not null and ${table.sessionFamilyId} is not null)`,
+    ),
+    check(
+      'oauth_states_sign_in_unbound_check',
+      sql`${table.purpose} <> 'sign_in' or (${table.userId} is null and ${table.sessionFamilyId} is null)`,
+    ),
     index('oauth_states_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+export const deletionGrants = pgTable(
+  'deletion_grants',
+  {
+    /** SHA-256 of the token in the grant cookie; the token itself is never stored. */
+    tokenHash: text('token_hash').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sessionFamilyId: uuid('session_family_id').notNull(),
+    credentialsVersion: integer('credentials_version').notNull(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (table) => [
+    index('deletion_grants_user_id_idx').on(table.userId),
+    index('deletion_grants_expires_at_idx').on(table.expiresAt),
   ],
 );
 

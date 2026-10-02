@@ -63,6 +63,9 @@ const STATE: OAuthState = {
   codeVerifier: 'verifier',
   timeZone: 'America/Cordoba',
   language: 'en',
+  purpose: 'sign_in',
+  userId: null,
+  sessionFamilyId: null,
   createdAt: NOW,
   expiresAt: new Date(NOW.getTime() + 10 * 60 * 1000),
 };

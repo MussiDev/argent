@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
+import { SESSION_IDLE_LIMIT_MS } from '../../application/get-current-session';
+import { Unauthenticated } from '../../domain/errors';
 import type {
   NewSession,
   Session,
   SessionRepository,
 } from '../../application/ports/session-repository';
 import { sessions, type IdentityDb } from './schema';
+import { violatedForeignKey } from './unique-violation';
+
+const SESSIONS_USER_FOREIGN_KEY = 'sessions_user_id_users_id_fk';
 
 export class DrizzleSessionRepository implements SessionRepository {
   constructor(private readonly db: IdentityDb) {}
@@ -15,7 +20,13 @@ export class DrizzleSessionRepository implements SessionRepository {
     const [created] = await this.db
       .insert(sessions)
       .values({ id, familyId: familyId ?? id, ...session })
-      .returning();
+      .returning()
+      .catch((error: unknown) => {
+        // The user was deleted between the caller's read and this insert (a refresh or a
+        // verification racing a committed account deletion).
+        if (violatedForeignKey(error) === SESSIONS_USER_FOREIGN_KEY) throw new Unauthenticated();
+        throw error;
+      });
     if (!created) throw new Error('Insert into sessions returned no row');
     return created;
   }
@@ -66,5 +77,22 @@ export class DrizzleSessionRepository implements SessionRepository {
       .update(sessions)
       .set({ revokedAt: at })
       .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+  }
+
+  /** The rule of `isSessionLive`: unrevoked and used within the idle limit. */
+  async isFamilyLive(familyId: string, now: Date): Promise<boolean> {
+    const idleSince = new Date(now.getTime() - SESSION_IDLE_LIMIT_MS);
+    const [live] = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.familyId, familyId),
+          isNull(sessions.revokedAt),
+          gt(sessions.lastUsedAt, idleSince),
+        ),
+      )
+      .limit(1);
+    return live !== undefined;
   }
 }

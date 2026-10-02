@@ -7,3 +7,8 @@ import { violatedConstraint } from '../../../shared/db/pg-errors';
 export function violatedUniqueConstraint(error: unknown): string | undefined {
   return violatedConstraint(error, '23505');
 }
+
+/** The name of the foreign key `error` violated, or undefined for any other error. */
+export function violatedForeignKey(error: unknown): string | undefined {
+  return violatedConstraint(error, '23503');
+}

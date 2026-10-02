@@ -46,9 +46,12 @@ payments — usable offline at the moment of paying.
 - **API (hexagonal):** `apps/api/src/<module>/` with `domain/` (entities, value objects, pure
   rules), `application/` (use cases, ports), `infrastructure/` (Drizzle repositories, HTTP
   routes, external adapters). Domain never imports from infrastructure.
-- **Modules follow the PRDs** (screaming architecture): `identity`, `accounts`, `movements`,
-  `exchange-rates`, `sync`, `groups`, `budgets`, `goals`, `investments`, `recurring`,
+- **Modules follow the PRDs** (screaming architecture): `identity`, `accounts`, `categories`,
+  `movements`, `exchange-rates`, `sync`, `groups`, `budgets`, `goals`, `investments`, `recurring`,
   `credit-cards`, `reports`.
+- **Approved exception to the i18n catalogs:** default category names (Spanish and English) live in
+  `packages/shared/src/categories` because the API enforces name uniqueness across languages; every
+  other string stays in the i18n catalogs.
 - **Frontend:** container/presentational split; presentational components are pure and have no
   data fetching.
 - **UI components:** shadcn/ui components live in `apps/web/src/components/ui/` as owned source

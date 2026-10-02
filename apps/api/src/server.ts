@@ -1,6 +1,6 @@
 import { createAccountRoutes } from './accounts';
 import { createApp } from './app';
-import { seedDefaultCategories } from './categories';
+import { createCategoryRoutes, seedDefaultCategories } from './categories';
 import { parseEnv } from './shared/config/env';
 import { createDatabase } from './shared/db/client';
 import { createLogger } from './shared/logging/logger';
@@ -15,7 +15,7 @@ const app = createApp({
   // The composition root is the only place that knows both modules: new accounts get their default
   // categories in the transaction that creates them.
   identity: { db, onUserCreated: [seedDefaultCategories] },
-  routerFactories: [createAccountRoutes({ db, logger })],
+  routerFactories: [createAccountRoutes({ db, logger }), createCategoryRoutes({ db, logger })],
 });
 
 const server = app.listen(env.PORT, () => {

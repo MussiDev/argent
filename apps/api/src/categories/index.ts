@@ -11,6 +11,10 @@ export * from './application/update-category';
 export * from './application/set-category-archived';
 export * from './application/delete-category';
 export {
+  createCategoryRoutes,
+  type CategoryRoutesOptions,
+} from './infrastructure/http/category-routes';
+export {
   seedDefaultCategories,
   type SeedDatabase,
 } from './infrastructure/db/seed-default-categories';

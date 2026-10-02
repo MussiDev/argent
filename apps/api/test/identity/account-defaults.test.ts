@@ -1,4 +1,4 @@
-import { DISPLAY_CURRENCY_VALUES, LANGUAGE_VALUES } from '@argent/shared';
+import { DISPLAY_CURRENCY_VALUES, LANGUAGE_VALUES } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TIME_ZONE,

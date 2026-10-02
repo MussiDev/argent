@@ -4,7 +4,7 @@ import {
   LANGUAGE_VALUES,
   RATE_TYPES,
   type ProfileResponse,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';

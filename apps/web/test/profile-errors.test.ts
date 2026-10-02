@@ -1,4 +1,4 @@
-import { updateProfileRequestSchema } from '@argent/shared';
+import { updateProfileRequestSchema } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import {
   toProfileFailure,

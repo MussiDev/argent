@@ -1205,19 +1205,19 @@ describe('two-factor notices and secrecy (FR-05)', () => {
       expect.arrayContaining([
         {
           to: 'ana@example.com',
-          subject: 'Se activó la verificación en dos pasos en tu cuenta de Argent',
+          subject: 'Se activó la verificación en dos pasos en tu cuenta de Pesly',
         },
         {
           to: 'ana@example.com',
-          subject: 'Se desactivó la verificación en dos pasos en tu cuenta de Argent',
+          subject: 'Se desactivó la verificación en dos pasos en tu cuenta de Pesly',
         },
         {
           to: 'bob@example.com',
-          subject: 'Two-factor authentication is on for your Argent account',
+          subject: 'Two-factor authentication is on for your Pesly account',
         },
         {
           to: 'bob@example.com',
-          subject: 'Two-factor authentication is off for your Argent account',
+          subject: 'Two-factor authentication is off for your Pesly account',
         },
       ]),
     );

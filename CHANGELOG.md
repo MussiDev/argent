@@ -45,6 +45,10 @@ All notable changes to this project are documented in this file. The format foll
   none until the user sets one.
 - DISC-001-01d Shared integer-only amount formatter that follows the interface language (`1,557.30`
   in English, `1.557,30` in Spanish).
+- FEAT-002 The product is named Pesly everywhere a user sees it: the web title and PWA name, the
+  screens, the recovery codes file and every email, in Spanish and English. The workspace packages
+  are `@pesly/*`, and Railway builds the services by path, so a package rename cannot break a
+  deploy. No user is signed out: cookie names and token claims are unchanged.
 
 ### Fixed
 

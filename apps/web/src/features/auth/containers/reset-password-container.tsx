@@ -1,6 +1,6 @@
 'use client';
 
-import { passwordResetConfirmRequestSchema } from '@argent/shared';
+import { passwordResetConfirmRequestSchema } from '@pesly/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useApiClient } from '@/lib/api-client-provider';
 import { ResetPasswordForm, type ResetPasswordFormValues } from '../components/reset-password-form';

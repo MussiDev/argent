@@ -5,7 +5,7 @@ import {
   resendVerificationResponseSchema,
   verifyEmailRequestSchema,
   verifyEmailResponseSchema,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { Router, type RequestHandler } from 'express';
 import type { Logger } from '../../../shared/logging/logger';
 import { validate } from '../../../shared/http/validate';

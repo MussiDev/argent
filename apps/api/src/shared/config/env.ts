@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Sender for local transports (console, Mailpit) when EMAIL_FROM is unset. */
-const LOCAL_EMAIL_FROM = 'Argent <no-reply@argent.local>';
+const LOCAL_EMAIL_FROM = 'Pesly <no-reply@pesly.local>';
 
 const jwtSecretSchema = z.string().min(32, 'must be at least 32 characters (256 bits)');
 

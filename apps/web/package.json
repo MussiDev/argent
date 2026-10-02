@@ -1,5 +1,5 @@
 {
-  "name": "@argent/web",
+  "name": "@pesly/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "next typegen && tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@argent/shared": "workspace:*",
+    "@pesly/shared": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.48.0",

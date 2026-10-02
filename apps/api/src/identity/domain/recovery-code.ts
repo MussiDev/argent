@@ -1,5 +1,5 @@
 // Recovery codes issued when 2FA is enabled (FR-03); the API contract owns the count.
-export { RECOVERY_CODE_COUNT } from '@argent/shared';
+export { RECOVERY_CODE_COUNT } from '@pesly/shared';
 
 /** Crockford base32: no I, L, O or U, so a code read aloud or retyped is not misread. */
 export const CROCKFORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

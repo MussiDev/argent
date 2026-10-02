@@ -4,7 +4,7 @@ import {
   updateProfileRequestSchema,
   type ProfileResponse,
   type UpdateProfileRequest,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { useLocale, useTranslations } from 'next-intl';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';

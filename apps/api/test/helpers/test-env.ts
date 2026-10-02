@@ -23,7 +23,7 @@ export const productionOverrides: Record<string, string> = {
   WEB_BASE_URL: PRODUCTION_WEB_ORIGIN,
   EMAIL_PROVIDER: 'resend',
   RESEND_API_KEY: 're_test_key',
-  EMAIL_FROM: 'Argent <no-reply@argent.test>',
+  EMAIL_FROM: 'Pesly <no-reply@pesly.test>',
   BREACH_CHECKER: 'hibp',
   TRUST_PROXY: '1',
   GOOGLE_CLIENT_ID: 'argent-test.apps.googleusercontent.com',

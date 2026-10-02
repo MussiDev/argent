@@ -1,4 +1,4 @@
-import { profileResponseSchema, updateProfileRequestSchema } from '@argent/shared';
+import { profileResponseSchema, updateProfileRequestSchema } from '@pesly/shared';
 import { Router, type RequestHandler } from 'express';
 import { validate } from '../../../shared/http/validate';
 import type { Logger } from '../../../shared/logging/logger';

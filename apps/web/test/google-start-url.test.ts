@@ -1,4 +1,4 @@
-import { googleStartQuerySchema } from '@argent/shared';
+import { googleStartQuerySchema } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import { buildGoogleStartUrl } from '../src/features/auth/google-start-url';
 

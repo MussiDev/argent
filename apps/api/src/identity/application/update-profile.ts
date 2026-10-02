@@ -1,4 +1,4 @@
-import type { ProfileResponse, UpdateProfileRequest } from '@argent/shared';
+import type { ProfileResponse, UpdateProfileRequest } from '@pesly/shared';
 import { Email } from '../domain/email';
 import { EmailChangeNotAllowed, InvalidEmail, Unauthenticated } from '../domain/errors';
 import { profileView, type GetProfileDependencies } from './get-profile';

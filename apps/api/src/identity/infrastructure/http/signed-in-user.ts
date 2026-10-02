@@ -1,4 +1,4 @@
-import type { SignedInResponse } from '@argent/shared';
+import type { SignedInResponse } from '@pesly/shared';
 import type { User } from '../../application/ports/user-repository';
 
 /** The user as a sign-in response shows it (`POST /auth/sign-in`, `POST /auth/2fa/verify`). */

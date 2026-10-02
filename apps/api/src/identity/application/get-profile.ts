@@ -1,4 +1,4 @@
-import type { ProfileResponse } from '@argent/shared';
+import type { ProfileResponse } from '@pesly/shared';
 import { Unauthenticated } from '../domain/errors';
 import type { Profile, ProfileRepository } from './ports/profile-repository';
 

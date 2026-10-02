@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AppError } from '@argent/shared';
+import type { AppError } from '@pesly/shared';
 import express from 'express';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';

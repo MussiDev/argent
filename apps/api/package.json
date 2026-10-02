@@ -1,5 +1,5 @@
 {
-  "name": "@argent/api",
+  "name": "@pesly/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@argent/shared": "workspace:*",
+    "@pesly/shared": "workspace:*",
     "@node-rs/argon2": "^2.2.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

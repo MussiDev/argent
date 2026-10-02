@@ -4,7 +4,7 @@ import {
   TwoFactorSetupRequired,
   Unauthenticated,
 } from '../domain/errors';
-import { RECOVERY_CODE_COUNT } from '@argent/shared';
+import { RECOVERY_CODE_COUNT } from '@pesly/shared';
 import { normalizeRecoveryCode } from '../domain/recovery-code';
 import type { Clock } from './ports/clock';
 import type { PasswordHasher } from './ports/password-hasher';

@@ -5,7 +5,7 @@ import {
   LANGUAGE_VALUES,
   RATE_TYPES,
   type ProfileResponse,
-} from '@argent/shared';
+} from '@pesly/shared';
 import { useTranslations } from 'next-intl';
 import type { SubmitEvent } from 'react';
 import { Button } from '@/components/ui/button';

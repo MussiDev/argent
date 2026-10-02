@@ -75,8 +75,14 @@ describe('DrizzleAccountRepository', () => {
     const big = 999_999_999_999_999n; // 10^15 - 1, an odd value close to the bound
     const min = -1_000_000_000_000_000n;
 
-    const created = await accounts.create(scope, data({ openingBalance: big }));
-    const negative = await accounts.create(scope, data({ name: 'Deuda', openingBalance: min }));
+    const created = await accounts.create(
+      scope,
+      data({ openingBalance: big, includeInAvailable: true }),
+    );
+    const negative = await accounts.create(
+      scope,
+      data({ name: 'Deuda', openingBalance: min, includeInAvailable: true }),
+    );
 
     expect(created).toMatchObject({
       name: 'Caja',
@@ -91,8 +97,20 @@ describe('DrizzleAccountRepository', () => {
     expect((await accounts.findById(scope, negative.id))?.openingBalance).toBe(min);
     expect(await accounts.listActive(scope)).toEqual(
       expect.arrayContaining([
-        { id: created.id, currency: 'ARS', openingBalance: big },
-        { id: negative.id, currency: 'ARS', openingBalance: min },
+        {
+          id: created.id,
+          type: 'cash',
+          currency: 'ARS',
+          openingBalance: big,
+          includeInAvailable: true,
+        },
+        {
+          id: negative.id,
+          type: 'cash',
+          currency: 'ARS',
+          openingBalance: min,
+          includeInAvailable: true,
+        },
       ]),
     );
   });
@@ -335,8 +353,8 @@ describe('DrizzleAccountRepository', () => {
     ];
     for (const [index, id] of ids.entries()) {
       await connection.pool.query(
-        `insert into accounts (id, owner_id, name, type, currency, opening_balance, created_at)
-         values ($1, $2, $3, 'cash', 'ARS', 0, '2026-01-01T00:00:00Z')`,
+        `insert into accounts (id, owner_id, name, type, currency, opening_balance, include_in_available, created_at)
+         values ($1,$2, $3, 'cash', 'ARS', 0, true, '2026-01-01T00:00:00Z')`,
         [id, ownerId, `Cuenta ${String(index)}`],
       );
     }
@@ -357,8 +375,8 @@ describe('DrizzleAccountRepository', () => {
     const ana = await writeScope(ownerId);
     const insert = (id: string, createdAt: string) =>
       connection.pool.query(
-        `insert into accounts (id, owner_id, name, type, currency, opening_balance, created_at)
-         values ($1::uuid, $2, $1::text, 'cash', 'ARS', 0, $3)`,
+        `insert into accounts (id, owner_id, name, type, currency, opening_balance, include_in_available, created_at)
+         values ($1::uuid, $2, $1::text, 'cash', 'ARS', 0, true, $3)`,
         [id, ownerId, createdAt],
       );
     const late = 'a0000000-0000-4000-8000-00000000000a';
@@ -423,6 +441,221 @@ describe('DrizzleAccountRepository', () => {
         throw failure;
       }),
     ).toBe('23514');
+  });
+});
+
+describe('DrizzleAccountRepository includeInAvailable', () => {
+  async function rawRow(id: string): Promise<{ include: boolean; updatedAt: Date }> {
+    const result = await connection.pool.query<{ include: boolean; updated_at: Date }>(
+      'select include_in_available as include, updated_at from accounts where id = $1',
+      [id],
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error('account row not found');
+    return { include: row.include, updatedAt: row.updated_at };
+  }
+
+  async function ageUpdatedAt(id: string): Promise<Date> {
+    await connection.pool.query(
+      "update accounts set updated_at = now() - interval '1 hour' where id = $1",
+      [id],
+    );
+    return (await rawRow(id)).updatedAt;
+  }
+
+  it('create persists includeInAvailable and reading returns it, with the type default when omitted (AC-01)', async () => {
+    const scope = await writeScope(await newUserId('ana@example.com'));
+
+    const off = await accounts.create(scope, data({ name: 'Off', includeInAvailable: false }));
+    const on = await accounts.create(scope, data({ name: 'On', includeInAvailable: true }));
+    const card = await accounts.create(
+      scope,
+      data({ name: 'Visa', type: 'credit_card', includeInAvailable: false }),
+    );
+    const defaulted = await accounts.create(scope, data({ name: 'Def', type: 'bank_account' }));
+    const defaultedSavings = await accounts.create(scope, data({ name: 'Sav', type: 'savings' }));
+    const defaultedCard = await accounts.create(scope, data({ name: 'Mc', type: 'credit_card' }));
+
+    expect(off.includeInAvailable).toBe(false);
+    expect(on.includeInAvailable).toBe(true);
+    expect((await accounts.findById(scope, off.id))?.includeInAvailable).toBe(false);
+    expect((await accounts.findById(scope, on.id))?.includeInAvailable).toBe(true);
+    expect((await rawRow(on.id)).include).toBe(true);
+    expect(card.includeInAvailable).toBe(false);
+    expect(defaulted.includeInAvailable).toBe(true);
+    expect(defaultedSavings.includeInAvailable).toBe(false);
+    expect(defaultedCard.includeInAvailable).toBe(false);
+    const listed = await accounts.list(scope, { archived: false, limit: 50, offset: 0 });
+    expect(listed.items.find((a) => a.id === off.id)?.includeInAvailable).toBe(false);
+  });
+
+  it('setIncludeInAvailable on an active non-card account changes only the setting and updated_at (AC-07)', async () => {
+    const scope = await writeScope(await newUserId('ana@example.com'));
+    const created = await accounts.create(scope, data({ includeInAvailable: true }));
+    const before = await ageUpdatedAt(created.id);
+
+    const result = await accounts.setIncludeInAvailable(scope, created.id, false);
+
+    expect(result).toEqual({
+      status: 'updated',
+      account: { ...created, includeInAvailable: false },
+    });
+    const after = await rawRow(created.id);
+    expect(after.include).toBe(false);
+    expect(after.updatedAt.getTime()).toBeGreaterThan(before.getTime());
+    expect(await accounts.findById(scope, created.id)).toEqual({
+      ...created,
+      includeInAvailable: false,
+    });
+    const back = await accounts.setIncludeInAvailable(scope, created.id, true);
+    expect(back).toEqual({ status: 'updated', account: created });
+    expect((await rawRow(created.id)).include).toBe(true);
+  });
+
+  it('setIncludeInAvailable on a credit card returns credit_card and leaves the row unchanged, archived or not (AC-11)', async () => {
+    const scope = await writeScope(await newUserId('ana@example.com'));
+    const card = await accounts.create(
+      scope,
+      data({ name: 'Visa', type: 'credit_card', includeInAvailable: false }),
+    );
+    const archivedCard = await accounts.create(
+      scope,
+      data({ name: 'Vieja', type: 'credit_card', includeInAvailable: false }),
+    );
+    await accounts.setArchived(scope, archivedCard.id, true);
+    const beforeCard = await ageUpdatedAt(card.id);
+    const beforeArchived = await ageUpdatedAt(archivedCard.id);
+
+    expect(await accounts.setIncludeInAvailable(scope, card.id, true)).toEqual({
+      status: 'credit_card',
+    });
+    expect(await accounts.setIncludeInAvailable(scope, archivedCard.id, true)).toEqual({
+      status: 'credit_card',
+    });
+
+    expect(await rawRow(card.id)).toEqual({ include: false, updatedAt: beforeCard });
+    expect(await rawRow(archivedCard.id)).toEqual({ include: false, updatedAt: beforeArchived });
+  });
+
+  it('setIncludeInAvailable on an archived account returns archived and leaves the row unchanged (AC-12)', async () => {
+    const scope = await writeScope(await newUserId('ana@example.com'));
+    const created = await accounts.create(scope, data({ includeInAvailable: true }));
+    await accounts.setArchived(scope, created.id, true);
+    const before = await ageUpdatedAt(created.id);
+
+    expect(await accounts.setIncludeInAvailable(scope, created.id, false)).toEqual({
+      status: 'archived',
+    });
+
+    expect(await rawRow(created.id)).toEqual({ include: true, updatedAt: before });
+  });
+
+  it("setIncludeInAvailable on another owner's or a missing account returns not_found and changes nothing (AC-22, NFR-04)", async () => {
+    const ana = await writeScope(await newUserId('ana@example.com'));
+    const bob = await writeScope(await newUserId('bob@example.com'));
+    const mine = await accounts.create(ana, data({ includeInAvailable: true }));
+    const before = await ageUpdatedAt(mine.id);
+
+    expect(await accounts.setIncludeInAvailable(bob, mine.id, false)).toEqual({
+      status: 'not_found',
+    });
+    expect(
+      await accounts.setIncludeInAvailable(ana, '00000000-0000-4000-8000-000000000000', false),
+    ).toEqual({ status: 'not_found' });
+
+    expect(await rawRow(mine.id)).toEqual({ include: true, updatedAt: before });
+    // Positive control: the owner reaches the same row, so not_found above came from the scope.
+    expect(await accounts.setIncludeInAvailable(ana, mine.id, false)).toMatchObject({
+      status: 'updated',
+    });
+  });
+
+  it('listActive returns type and setting for active accounts only, scoped to the owner (NFR-04)', async () => {
+    const ana = await writeScope(await newUserId('ana@example.com'));
+    const bob = await writeScope(await newUserId('bob@example.com'));
+    const cash = await accounts.create(ana, data({ name: 'Caja', includeInAvailable: true }));
+    const savings = await accounts.create(
+      ana,
+      data({ name: 'Ahorro', type: 'savings', currency: 'USD', includeInAvailable: false }),
+    );
+    const card = await accounts.create(
+      ana,
+      data({ name: 'Visa', type: 'credit_card', includeInAvailable: false }),
+    );
+    const gone = await accounts.create(ana, data({ name: 'Vieja', includeInAvailable: true }));
+    await accounts.setArchived(ana, gone.id, true);
+    await accounts.create(bob, data({ name: 'Ajena', includeInAvailable: true }));
+
+    expect(await accounts.listActive(ana)).toEqual([
+      { id: cash.id, type: 'cash', currency: 'ARS', openingBalance: 0n, includeInAvailable: true },
+      {
+        id: savings.id,
+        type: 'savings',
+        currency: 'USD',
+        openingBalance: 0n,
+        includeInAvailable: false,
+      },
+      {
+        id: card.id,
+        type: 'credit_card',
+        currency: 'ARS',
+        openingBalance: 0n,
+        includeInAvailable: false,
+      },
+    ]);
+  });
+
+  it('setting the value an account already has writes nothing and leaves updated_at untouched (AC-07)', async () => {
+    const scope = await writeScope(await newUserId('ana@example.com'));
+    const included = await accounts.create(scope, data({ name: 'On', includeInAvailable: true }));
+    const excluded = await accounts.create(scope, data({ name: 'Off', includeInAvailable: false }));
+    const beforeOn = await ageUpdatedAt(included.id);
+    const beforeOff = await ageUpdatedAt(excluded.id);
+
+    expect(await accounts.setIncludeInAvailable(scope, included.id, true)).toEqual({
+      status: 'updated',
+      account: included,
+    });
+    expect(await accounts.setIncludeInAvailable(scope, excluded.id, false)).toEqual({
+      status: 'updated',
+      account: excluded,
+    });
+
+    expect(await rawRow(included.id)).toEqual({ include: true, updatedAt: beforeOn });
+    expect(await rawRow(excluded.id)).toEqual({ include: false, updatedAt: beforeOff });
+  });
+
+  it('an archive racing the setting change never leaves an archived account updated (row lock)', async () => {
+    const scope = await writeScope(await newUserId('ana@example.com'));
+    const created = await accounts.create(scope, data({ includeInAvailable: true }));
+    const before = await ageUpdatedAt(created.id);
+    const archiver = await connection.pool.connect();
+    try {
+      await archiver.query('begin');
+      await archiver.query('select 1 from accounts where id = $1 for update', [created.id]);
+
+      const pending = accounts.setIncludeInAvailable(scope, created.id, false);
+      const state = await Promise.race([
+        pending.then(() => {
+          return 'settled';
+        }),
+        new Promise<string>((resolve) =>
+          setTimeout(() => {
+            resolve('blocked');
+          }, 400),
+        ),
+      ]);
+      expect(state).toBe('blocked');
+
+      await archiver.query('update accounts set archived_at = now() where id = $1', [created.id]);
+      await archiver.query('commit');
+
+      expect(await pending).toEqual({ status: 'archived' });
+      expect(await rawRow(created.id)).toEqual({ include: true, updatedAt: before });
+    } finally {
+      await archiver.query('rollback').catch(() => undefined);
+      archiver.release();
+    }
   });
 });
 

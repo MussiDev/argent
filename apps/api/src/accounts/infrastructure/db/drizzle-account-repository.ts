@@ -1,9 +1,11 @@
+import { defaultIncludeInAvailable } from '@pesly/shared';
 import { and, asc, count, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type {
   AccountRepository,
   ActiveAccount,
   CreateAccountData,
   ListAccountsOptions,
+  SetIncludeInAvailableResult,
 } from '../../application/ports/account-repository';
 import type { Account } from '../../domain/account';
 import { AccountHasMovements, AccountNameTaken } from '../../domain/errors';
@@ -21,6 +23,7 @@ const columns = {
   type: accounts.type,
   currency: accounts.currency,
   openingBalance: accounts.openingBalance,
+  includeInAvailable: accounts.includeInAvailable,
   archivedAt: accounts.archivedAt,
   createdAt: accounts.createdAt,
 };
@@ -43,7 +46,12 @@ export class DrizzleAccountRepository implements AccountRepository {
     try {
       const [row] = await this.db
         .insert(accounts)
-        .values({ ...data, ownerId: scope.userId })
+        .values({
+          ...data,
+          // The column has no default: a value must always reach the insert.
+          includeInAvailable: data.includeInAvailable ?? defaultIncludeInAvailable(data.type),
+          ownerId: scope.userId,
+        })
         .returning(columns);
       if (!row) throw new Error('Inserting an account returned no row');
       return row;
@@ -80,8 +88,10 @@ export class DrizzleAccountRepository implements AccountRepository {
     return this.db
       .select({
         id: accounts.id,
+        type: accounts.type,
         currency: accounts.currency,
         openingBalance: accounts.openingBalance,
+        includeInAvailable: accounts.includeInAvailable,
       })
       .from(accounts)
       .where(and(inScope(scope), isNull(accounts.archivedAt)))
@@ -125,6 +135,34 @@ export class DrizzleAccountRepository implements AccountRepository {
       .where(scopedRow(scope, id))
       .returning(columns);
     return row ?? null;
+  }
+
+  async setIncludeInAvailable(
+    scope: AccessScope<'write'>,
+    id: string,
+    value: boolean,
+  ): Promise<SetIncludeInAvailableResult> {
+    // The locked read classifies and decides the write, so a concurrent archive is either seen
+    // here or waits for this transaction; an archived account is never updated.
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .select(columns)
+        .from(accounts)
+        .where(scopedRow(scope, id))
+        .limit(1)
+        .for('update');
+      if (!row) return { status: 'not_found' };
+      if (row.type === 'credit_card') return { status: 'credit_card' };
+      if (row.archivedAt !== null) return { status: 'archived' };
+      if (row.includeInAvailable === value) return { status: 'updated', account: row };
+      const [updated] = await tx
+        .update(accounts)
+        .set({ includeInAvailable: value, updatedAt: sql`now()` })
+        .where(scopedRow(scope, id))
+        .returning(columns);
+      if (!updated) throw new Error('Updating a locked account returned no row');
+      return { status: 'updated', account: updated };
+    });
   }
 
   async delete(scope: AccessScope<'write'>, id: string): Promise<boolean> {

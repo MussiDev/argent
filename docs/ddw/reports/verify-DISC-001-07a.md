@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Module | `apps/api/src/investments`, `packages/shared/src/investments`, `apps/web/src/features/investments`, migration `0008_investments` |
+| Module | `apps/api/src/investments`, `packages/shared/src/investments`, `apps/web/src/features/investments`, migration `0013_investments` |
 | Line coverage | 97.18% |
 | Branch coverage | 92.67% |
 | Function coverage | 95.15% |
@@ -48,7 +48,7 @@ benchmark; coverage is from the CODE-phase run.
 - ✅ Block 1 — shared contracts, decimal helpers, valuation: every task done, every Required test present and passing
 - ✅ Block 2 — domain rules and ports, architecture boundary probes: every task done
 - ✅ Block 3 — use cases and portfolio view: every task done
-- ✅ Block 4 — migration `0008_investments` (journal idx 8, `when` 1790962588595, greater than 1790895423195), repositories, unit of work, concurrency: every task done
+- ✅ Block 4 — migration `0013_investments` (journal idx 13, `when` 1790962588595, greater than 1790895423195), repositories, unit of work, concurrency: every task done
 - ✅ Block 5 — portfolio routes, module wiring, error middleware `fields`: every task done
 - ✅ Block 6 — holding routes: every task done
 - ✅ Block 7 — web API client and formatting helpers: every task done
@@ -67,7 +67,7 @@ Failing before implementation, per block (assertion or error that broke):
 - Block 1: 39/41 failed (`TypeError: totalsByCurrency is not a function`, same for `holdingValue`, `gainOrLoss`, `isPriceStale`); round 2: 12/12 changed tests failed (`holdingIdParams { holdingId } only: expected false to be true`, `expected 1111…100000000n to be null`, `expected function to throw an error` for invalid scales and non-positive cost).
 - Block 2: 14/14 failed (`Cannot find module '../../src/investments/domain/errors'`); round 2: `expected [ 'body.totalCost' ] to deeply equal [ 'body.valuationCurrency' ]`, plus TS2345 and TS2578 typecheck errors for the reshaped merge input and the at-least-one-field constructor.
 - Block 3: 34/34 failed (`Cannot find module '../../src/investments/application/portfolio-view'`, same for the two use-case modules); round 2: `expected [ 'c-id', 'a-id', 'b-id' ] to deeply equal [ 'a-id', 'b-id', 'c-id' ]`, `expected [] to include 'holdings.listByPortfolio'`.
-- Block 4: migration test `ENOENT … 0008_investments.down.sql` and `relation "portfolios" does not exist`; repository and concurrency files failed to load (module not found); round 2 used mutant checks (`.for('update')` removed → `expected true to be false`; constraint name altered → diff).
+- Block 4: migration test `ENOENT … 0013_investments.down.sql` and `relation "portfolios" does not exist`; repository and concurrency files failed to load (module not found); round 2 used mutant checks (`.for('update')` removed → `expected true to be false`; constraint name altered → diff).
 - Block 5: 13/15 failed (`Cannot find module '../../src/investments'`; `expected { code: 'VALIDATION_FAILED' } to deeply equal { code: 'VALIDATION_FAILED', fields: ['body.currency'] }`).
 - Block 6: 21/22 failed (`expected 404 to be 201`, `expected 404 to be 400`: the routes did not exist).
 - Block 7: 13 failed plus 2 files not loading (`TypeError: client.listPortfolios is not a function`, `Cannot find module …/decimal-input`, `…/format-amount`); round 2: `parseQuantityInput('1.000','es')` returned `{ ok: true, value: '100000000' }`.
@@ -125,6 +125,6 @@ Suites on the final tree: full run 143 files, 1899 passed, 0 failed, 0 skipped; 
 
 ## Closeout rebase
 
-Before the PR the branch was rebased onto `origin/main` (02b categories, 01f account deletion, FEAT-003 and 03a exchange rates: migrations 0009 to 0012). Migration `0008_investments` was regenerated on top of main's latest snapshot: journal `idx` 8, `when` 1790962588595 (greater than every `when` on main, including 0012's 1790945403578), snapshot file `0013_snapshot.json` so that `drizzle-kit generate` reports no changes. `portfolios` and `holdings` are registered in the user-erasure guard (cascade). The full suite on the rebased tree: 177 files, 2852 passed, 0 failed; e2e 71/71; eslint, prettier and typecheck clean.
+Before the PR the branch was rebased onto `origin/main` (02b categories, 01f account deletion, FEAT-003 and 03a exchange rates: migrations 0009 to 0012). Migration `0013_investments` was regenerated on top of main's latest snapshot: journal `idx` 13, `when` 1790962588595 (greater than every `when` on main, including 0012's 1790945403578), snapshot `0013_snapshot.json`; it was planned as `0008` and renumbered to `0013` at merge time because 0009 to 0012 merged first. `drizzle-kit generate` reports no changes and `drizzle-kit check` is clean. `portfolios` and `holdings` are registered in the user-erasure guard (cascade). The full suite on the rebased tree: 177 files, 2852 passed, 0 failed; e2e 71/71; eslint, prettier and typecheck clean.
 
 Result: PASSED

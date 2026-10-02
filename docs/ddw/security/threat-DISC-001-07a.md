@@ -13,7 +13,7 @@
 | `packages/shared/src/investments/contracts.ts` + `valuation.ts` + `decimal.ts` | Block 1 |
 | `apps/api/src/investments/domain/holding.ts` (`mergeHoldings`, `applyHoldingEdit`) | Block 2 |
 | `apps/api/src/investments/application/holding-use-cases.ts` + `portfolio-use-cases.ts` | Block 3 |
-| `apps/api/src/investments/infrastructure/db/schema.ts` (`portfolios`, `holdings`) + `apps/api/drizzle/0008_investments.sql` | Block 4 |
+| `apps/api/src/investments/infrastructure/db/schema.ts` (`portfolios`, `holdings`) + `apps/api/drizzle/0013_investments.sql` | Block 4 |
 | `apps/api/src/investments/infrastructure/db/drizzle-portfolio-repository.ts` + `drizzle-holding-repository.ts` + `drizzle-unit-of-work.ts` | Block 4 |
 | `apps/api/src/investments/infrastructure/http/portfolio-routes.ts` (`GET`/`POST`/`DELETE /investments/portfolios`) | Block 5 |
 | `apps/api/src/shared/http/error-handler.ts` (adds `fields` to the body of an `AppError` that carries them) | Block 5 |
@@ -52,7 +52,7 @@
 - **Denial of Service:** list reads are two indexed statements; there is no per-user cap on portfolios or holdings (R-12).
 - **Elevation of Privilege:** writes require `AccessScope<'write'>` in their signatures, so a read scope cannot update or delete; this is a compile-time guarantee (R-01).
 
-### `apps/api/src/investments/infrastructure/db/schema.ts` (`portfolios`, `holdings`) + `apps/api/drizzle/0008_investments.sql`
+### `apps/api/src/investments/infrastructure/db/schema.ts` (`portfolios`, `holdings`) + `apps/api/drizzle/0013_investments.sql`
 - **Spoofing:** not applicable to storage.
 - **Tampering:** a composite foreign key `(portfolio_id, owner_id)` makes it impossible to store a holding under a portfolio of another owner; check constraints bound quantity, cost, price and currency and enforce crypto in USD even if application code is bypassed (R-01, R-05).
 - **Repudiation:** `created_at` is recorded on both tables; `priced_at` and `price_source` record when and how the latest price was set.

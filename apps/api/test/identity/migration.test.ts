@@ -51,7 +51,7 @@ const EXCHANGE_RATE_TABLES = [
   'exchange_rate_sync',
   'exchange_rates',
 ];
-/** 0008_investments has the greatest journal `when`, so it is always rolled back first. */
+/** 0013_investments has the greatest journal `when`, so it is always rolled back first. */
 const TABLES_WITHOUT_EXCHANGE_RATES = ALL_TABLES.filter(
   (name) => !EXCHANGE_RATE_TABLES.includes(name) && !INVESTMENT_TABLES.includes(name),
 );
@@ -234,7 +234,7 @@ describe('0000_identity migration', () => {
   });
 
   it('is reverted by the rollback scripts (newest first), after which it can be applied again', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -276,7 +276,7 @@ describe('0001_outbox_hardening migration', () => {
   it('is reverted by its rollback script (after the newer ones), leaving 0000 in place, and re-applies', async () => {
     await client.query('delete from email_outbox');
     // Newest first: drizzle only applies migrations newer than the last one recorded.
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -365,7 +365,7 @@ describe('0002_credentials_version migration', () => {
   });
 
   it('is reverted by its rollback script (after the newer ones), keeping the data of the older columns, and re-applies', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -430,7 +430,7 @@ describe('0003_outbox_retry migration', () => {
   });
 
   it('is reverted by its rollback script (after the newer ones), restoring the previous index and keeping the rows, and re-applies', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -469,7 +469,7 @@ async function countOf(statement: string): Promise<number> {
 
 describe('0004_google_identity migration', () => {
   it('applies on a database at 0003: password_hash nullable, user_identities, oauth_states and the google_start_ip kind', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -527,7 +527,7 @@ describe('0004_google_identity migration', () => {
   it('has a rollback that fails while a password-less user exists, changing nothing', async () => {
     expect(await countOf('select count(*) as n from users where password_hash is null')).toBe(1);
 
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
 
@@ -608,7 +608,7 @@ function insertOutbox(kind: string): Promise<string | undefined> {
 
 describe('0005_two_factor migration', () => {
   it('applies on a database at 0004: user_two_factor, recovery_codes, sign_in_challenges and the new kinds', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -698,7 +698,7 @@ describe('0005_two_factor migration', () => {
     );
     const before = { attempts: await countOf(otherAttempts), outbox: await countOf(otherOutbox) };
 
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
 
@@ -742,7 +742,7 @@ function insertAccount(owner: string, name: string): Promise<string | undefined>
 
 describe('0006_accounts migration', () => {
   it('applies on a database at 0005: the accounts table with its checks, defaults, indexes and immutability trigger', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -830,7 +830,7 @@ describe('0006_accounts migration', () => {
   });
 
   it('is reverted by its rollback (dropping table, function and trigger), and re-applies', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -868,8 +868,8 @@ async function displayNameColumn(): Promise<ColumnInfo[]> {
 
 describe('0007_profile_display_name migration', () => {
   it('applies on a database at 0005 with existing users, who keep a null display name', async () => {
-    // 0008, 0012, 0011, 0010, 0009 and then 0006 have the latest journal `when`s, so they are the newest for the migrator: roll them back first.
-    await client.query(await rollback('0008_investments'));
+    // 0013, 0012, 0011, 0010, 0009 and then 0006 have the latest journal `when`s, so they are the newest for the migrator: roll them back first.
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -906,7 +906,7 @@ describe('0007_profile_display_name migration', () => {
   });
 
   it('is reverted by its rollback (dropping the column, keeping the users), and re-applies', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -1028,7 +1028,7 @@ async function readJournal(): Promise<JournalEntry[]> {
   return (JSON.parse(raw) as { entries: JournalEntry[] }).entries;
 }
 
-const INVESTMENTS_TAG = '0008_investments';
+const INVESTMENTS_TAG = '0013_investments';
 
 /**
  * True when `tag` exists and has a `when` greater than every entry in `entries` listed as its
@@ -1048,7 +1048,7 @@ function isAfterPredecessors(
 
 describe('0009_categories migration', () => {
   it('backfills the default set for existing users on a database at 0007 and changes no other row', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -1182,7 +1182,7 @@ describe('0009_categories migration', () => {
   it('is reverted by its rollback (dropping both tables, the function and the trigger, keeping the users), and re-applies', async () => {
     const users = await countOf('select count(*) as n from users');
 
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
 
@@ -1240,7 +1240,7 @@ const BOUND_COLUMNS = ', purpose, user_id, session_family_id';
 
 describe('0010_account_deletion migration', () => {
   it('applies on top of the earlier ones with existing OAuth states, which keep the purpose sign_in', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
     await client.query(await rollback('0010_account_deletion'));
@@ -1337,7 +1337,7 @@ describe('0010_account_deletion migration', () => {
     await insertState('d8', BOUND_COLUMNS, `, 'delete_account', '${bob}', gen_random_uuid()`);
     await insertGrant('g3', bob);
 
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback('0011_account_include_in_available'));
 
@@ -1437,7 +1437,7 @@ describe('0011_account_include_in_available migration', () => {
 
   it('backfills accounts of every type created before it with the type default (validates AC-21, FR-11)', async () => {
     owner = await insertUser('ana@available.test');
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback(ROLLBACK_0011));
     expect(await includeColumn()).toEqual([]);
@@ -1518,7 +1518,7 @@ describe('0011_account_include_in_available migration', () => {
   });
 
   it('leaves no column and no changed row when the statements run in one transaction and the last one fails (error path, validates NFR-03)', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback(ROLLBACK_0011));
     expect(await includeColumn()).toEqual([]);
@@ -1555,7 +1555,7 @@ describe('0011_account_include_in_available migration', () => {
       `update accounts set include_in_available = true where owner_id = '${owner}' and name = 'legacy-savings'`,
     );
 
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     await client.query(await rollback(ROLLBACK_0011));
 
@@ -1574,7 +1574,7 @@ describe('0011_account_include_in_available migration', () => {
 
 describe('0012_exchange_rates migration', () => {
   it('applies on a database at 0007: the three tables with their checks, defaults and index', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
     expect(await publicTables()).toEqual(TABLES_WITHOUT_EXCHANGE_RATES);
     expect(await appliedMigrations()).toBe(ALL_MIGRATIONS - 2);
@@ -1627,7 +1627,7 @@ describe('0012_exchange_rates migration', () => {
   });
 
   it('is reverted by its rollback (dropping the three tables, keeping the rest), and re-applies', async () => {
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     await client.query(await rollback('0012_exchange_rates'));
 
     expect(await publicTables()).toEqual(TABLES_WITHOUT_EXCHANGE_RATES);
@@ -1654,7 +1654,7 @@ describe('0012_exchange_rates migration', () => {
   });
 });
 
-describe('0008_investments migration journal order', () => {
+describe('0013_investments migration journal order', () => {
   it('has one entry whose `when` is greater than that of every migration it was rebased onto', async () => {
     const entries = await readJournal();
     const own = entries.find((entry) => entry.tag === INVESTMENTS_TAG);
@@ -1673,7 +1673,7 @@ describe('0008_investments migration journal order', () => {
       '0012_exchange_rates',
     ];
 
-    expect(own?.idx).toBe(8);
+    expect(own?.idx).toBe(13);
     expect(entries.filter((entry) => entry.tag === INVESTMENTS_TAG)).toHaveLength(1);
     for (const tag of predecessors) {
       expect(

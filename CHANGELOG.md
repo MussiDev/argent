@@ -115,7 +115,7 @@ All notable changes to this project are documented in this file. The format foll
   as "price needed" and left out of totals) and prices older than 7 days are computed on read.
   Changing a holding's currency clears its price and its total cost must be entered again.
 - DISC-001-07a Investments screen in Spanish and English and the `investments` REST routes (every row
-  is scoped to its owner and answers 404 otherwise). Migration 0008 adds the `portfolios` and
+  is scoped to its owner and answers 404 otherwise). Migration 0013 adds the `portfolios` and
   `holdings` tables; its rollback script is destructive. Deferred to DISC-001-07b and 07c:
   automatic crypto prices, daily value snapshots and the Balanz CSV import.
 

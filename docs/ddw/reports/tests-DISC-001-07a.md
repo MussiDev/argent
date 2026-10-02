@@ -34,8 +34,8 @@ Other suites on the same tree:
   connections, cold), and the whole perf suite passed 7/7 when it was run once.
 - No test calls Google, CoinGecko, a broker or any other real external service.
 
-Migration `0008_investments`: journal `idx` 8, journal `when` 1790962588595, which is greater than
-the `when` of `0006_accounts` (1790895423195) and of `0007_profile_display_name` (1790891329764).
+Migration `0013_investments`: journal `idx` 13, journal `when` 1790962588595, which is greater than
+every other `when` in the journal, including `0012_exchange_rates` (1790945403578).
 
 ## Failures
 (none)

@@ -125,11 +125,11 @@ async function appliedMigrations(): Promise<number> {
   return countOf('select count(*) as n from drizzle.__drizzle_migrations');
 }
 
-describe('0008_investments migration', () => {
+describe('0013_investments migration', () => {
   it('applies on a database that already holds the earlier migrations and their data', async () => {
     await runMigrations(migrationDatabaseUrl);
     const earlierCount = (await appliedMigrations()) - 1;
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
     expect(await publicTables()).toEqual(EARLIER_TABLES);
     expect(await appliedMigrations()).toBe(earlierCount);
     await insertUser('before@investments.test');
@@ -286,7 +286,7 @@ describe('0008_investments migration', () => {
   it('is reverted by its rollback script, dropping both tables and keeping earlier data, and re-applies', async () => {
     const earlierCount = (await appliedMigrations()) - 1;
 
-    await client.query(await rollback('0008_investments'));
+    await client.query(await rollback('0013_investments'));
 
     expect(await publicTables()).toEqual(EARLIER_TABLES);
     expect(await appliedMigrations()).toBe(earlierCount);

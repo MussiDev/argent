@@ -406,6 +406,8 @@ describe('DELETE /accounts/:id', () => {
   });
 });
 
+const INT64_MAX = 9_223_372_036_854_775_807n;
+
 describe('GET /accounts balances, totals and paging', () => {
   it('balance equals the opening balance with the default adapter (AC-11)', async () => {
     const plain = await setup();
@@ -447,20 +449,65 @@ describe('GET /accounts balances, totals and paging', () => {
     expect((await list(s, '?archived=true')).total).toBe(1);
   });
 
-  it('answers 200 with the exact ARS total for 9,300 accounts at 10^15 (AC-22, NFR-06)', async () => {
+  it('answers 200 with exact available, net worth and debt totals for 9,300 accounts at 10^15 (AC-17, NFR-01)', async () => {
     const s = await setup();
+    // 9,300 ARS accounts at the opening balance bound: 4,000 included cash, 3,000 savings left
+    // out of Available, 2,300 credit cards. Only net worth passes the signed 64-bit maximum here;
+    // the two cases below push Available and Debt past it.
     await connection.pool.query(
       `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available)
-       select $1, 'Big ' || n, 'cash', 'ARS', 1000000000000000, true
+       select $1, 'Big ' || n,
+              case when n <= 4000 then 'cash' when n <= 7000 then 'savings' else 'credit_card' end,
+              'ARS', 1000000000000000, n <= 4000
          from generate_series(1, $2::int) as n`,
       [s.anaId, 9300],
     );
     const response = await get(s.app, '/accounts?limit=2', s.ana);
     expect(response.status).toBe(200);
     const body = response.body as ListBody;
+    expect(body.availableTotals).toEqual({ ARS: '4000000000000000000', USD: '0' });
     expect(body.netWorthTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.debtTotals).toEqual({ ARS: '2300000000000000000', USD: '0' });
+    expect(BigInt(body.netWorthTotals.ARS)).toBeGreaterThan(INT64_MAX);
+    expect(body.creditCardCount).toBe(2300);
     expect(body.total).toBe(9300);
-    expect(BigInt(body.netWorthTotals.ARS)).toBe(9_300_000_000_000_000_000n);
+  }, 60_000);
+
+  it('lists an Available and Net worth above the int64 maximum for 9,300 included cash accounts at 10^15 (AC-17, NFR-01)', async () => {
+    const s = await setup();
+    await connection.pool.query(
+      `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available)
+       select $1, 'Cash ' || n, 'cash', 'ARS', 1000000000000000, true
+         from generate_series(1, $2::int) as n`,
+      [s.anaId, 9300],
+    );
+    const response = await get(s.app, '/accounts?limit=2', s.ana);
+    expect(response.status).toBe(200);
+    const body = response.body as ListBody;
+    expect(body.availableTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.netWorthTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.debtTotals).toEqual({ ARS: '0', USD: '0' });
+    expect(BigInt(body.availableTotals.ARS)).toBeGreaterThan(INT64_MAX);
+    expect(BigInt(body.netWorthTotals.ARS)).toBeGreaterThan(INT64_MAX);
+  }, 60_000);
+
+  it('lists a Debt and Net worth above the int64 maximum for 9,300 credit cards at 10^15 (AC-17, NFR-01)', async () => {
+    const s = await setup();
+    await connection.pool.query(
+      `insert into accounts (owner_id, name, type, currency, opening_balance, include_in_available)
+       select $1, 'Card ' || n, 'credit_card', 'ARS', 1000000000000000, false
+         from generate_series(1, $2::int) as n`,
+      [s.anaId, 9300],
+    );
+    const response = await get(s.app, '/accounts?limit=2', s.ana);
+    expect(response.status).toBe(200);
+    const body = response.body as ListBody;
+    expect(body.availableTotals).toEqual({ ARS: '0', USD: '0' });
+    expect(body.netWorthTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.debtTotals).toEqual({ ARS: '9300000000000000000', USD: '0' });
+    expect(body.creditCardCount).toBe(9300);
+    expect(BigInt(body.debtTotals.ARS)).toBeGreaterThan(INT64_MAX);
+    expect(BigInt(body.netWorthTotals.ARS)).toBeGreaterThan(INT64_MAX);
   }, 60_000);
 
   it('accepts limit 100 and rejects 101 (NFR-03)', async () => {

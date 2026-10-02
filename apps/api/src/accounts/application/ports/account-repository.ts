@@ -7,13 +7,24 @@ export interface CreateAccountData {
   type: AccountType;
   currency: AccountCurrency;
   openingBalance: bigint;
+  /** Omitted means the type default; a credit card is always stored as false. */
+  includeInAvailable?: boolean;
 }
 
 export interface ActiveAccount {
   id: string;
+  type: AccountType;
   currency: AccountCurrency;
   openingBalance: bigint;
+  includeInAvailable: boolean;
 }
+
+/** Outcome of changing the setting, classified by the same read that decides the write. */
+export type SetIncludeInAvailableResult =
+  | { status: 'updated'; account: Account }
+  | { status: 'not_found' }
+  | { status: 'archived' }
+  | { status: 'credit_card' };
 
 export interface ListAccountsOptions {
   archived: boolean;
@@ -39,6 +50,16 @@ export interface AccountRepository {
   rename(scope: AccessScope<'write'>, id: string, name: string): Promise<Account | null>;
   /** Idempotent: setting the state an account already has returns it unchanged. */
   setArchived(scope: AccessScope<'write'>, id: string, archived: boolean): Promise<Account | null>;
+  /**
+   * Classifies before writing: `not_found` (nothing in scope), `credit_card` (checked first, even
+   * when archived), `archived`, else `updated`. Writing the value the account already has changes
+   * nothing, not even `updated_at`.
+   */
+  setIncludeInAvailable(
+    scope: AccessScope<'write'>,
+    id: string,
+    value: boolean,
+  ): Promise<SetIncludeInAvailableResult>;
   /** `false` when nothing in scope matched. */
   delete(scope: AccessScope<'write'>, id: string): Promise<boolean>;
 }

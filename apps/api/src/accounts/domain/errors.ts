@@ -13,3 +13,19 @@ export class AccountHasMovements extends AppError {
     super('ACCOUNT_HAS_MOVEMENTS');
   }
 }
+
+/** A credit card is never part of the available total, so its setting cannot be changed. */
+export class CreditCardSettingLocked extends AppError {
+  constructor() {
+    super('VALIDATION_FAILED', 'credit card accounts cannot be included in the available total', [
+      'body.includeInAvailable',
+    ]);
+  }
+}
+
+/** An archived account's setting is frozen until it is unarchived. */
+export class AccountArchived extends AppError {
+  constructor() {
+    super('ACCOUNT_ARCHIVED');
+  }
+}

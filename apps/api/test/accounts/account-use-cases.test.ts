@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MINOR_UNITS_MAX, sumMinorUnits } from '@pesly/shared';
 import {
   AccountHasMovements,
+  AccountArchived,
   AccountNameTaken,
   CreateAccount,
+  CreditCardSettingLocked,
   DeleteAccount,
   GetAccount,
   ListAccounts,
   RenameAccount,
   SetAccountArchived,
+  SetIncludeInAvailable,
 } from '../../src/accounts';
 import { balanceOf } from '../../src/accounts/domain/account';
 import { ResourceNotFound } from '../../src/shared/access';
@@ -30,6 +33,7 @@ let listAccounts: ListAccounts;
 let renameAccount: RenameAccount;
 let setArchived: SetAccountArchived;
 let deleteAccount: DeleteAccount;
+let setIncluded: SetIncludeInAvailable;
 
 const defaultList = { archived: false, limit: 50, offset: 0 };
 
@@ -43,6 +47,7 @@ beforeEach(() => {
   renameAccount = new RenameAccount(deps);
   setArchived = new SetAccountArchived(deps);
   deleteAccount = new DeleteAccount(deps);
+  setIncluded = new SetIncludeInAvailable(deps);
 });
 
 async function create(
@@ -254,7 +259,7 @@ describe('list totals (AC-12)', () => {
     expect(page2.items).toHaveLength(2);
     expect(page1.total).toBe(4);
     for (const page of [page1, page2]) {
-      expect(page.totals).toEqual({ ARS: sumMinorUnits([60n, 201n, 300n]), USD: 75n });
+      expect(page.netWorthTotals).toEqual({ ARS: sumMinorUnits([60n, 201n, 300n]), USD: 75n });
     }
   });
 
@@ -264,15 +269,22 @@ describe('list totals (AC-12)', () => {
       accounts.seed(ALICE, { name: `Big ${i}`, openingBalance: limit });
     }
     const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
-    expect(list.totals.ARS).toBe(9_300_000_000_000_000_000n);
-    expect(list.totals.ARS > MINOR_UNITS_MAX).toBe(true);
-    expect(list.totals.USD).toBe(0n);
+    expect(list.netWorthTotals.ARS).toBe(9_300_000_000_000_000_000n);
+    expect(list.netWorthTotals.ARS > MINOR_UNITS_MAX).toBe(true);
+    expect(list.netWorthTotals.USD).toBe(0n);
     expect(list.total).toBe(9300);
   });
 
   it('reports zero for every currency when there are no active accounts', async () => {
     const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
-    expect(list).toEqual({ items: [], total: 0, totals: { ARS: 0n, USD: 0n } });
+    expect(list).toEqual({
+      items: [],
+      total: 0,
+      availableTotals: { ARS: 0n, USD: 0n },
+      netWorthTotals: { ARS: 0n, USD: 0n },
+      debtTotals: { ARS: 0n, USD: 0n },
+      creditCardCount: 0,
+    });
   });
 
   it('keeps totals on the active accounts when listing archived ones', async () => {
@@ -284,7 +296,7 @@ describe('list totals (AC-12)', () => {
       archived: true,
     });
     expect(list.items.map((item) => item.balance)).toEqual([99n]);
-    expect(list.totals).toEqual({ ARS: 10n, USD: 0n });
+    expect(list.netWorthTotals).toEqual({ ARS: 10n, USD: 0n });
   });
 
   it('rejects a limit or offset outside the documented range', async () => {
@@ -308,7 +320,7 @@ describe('isolation', () => {
     const theirs = await create(BOB, 'Theirs', 7n);
     const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
     expect(list.items.map((item) => item.name)).toEqual(['Mine']);
-    expect(list.totals.ARS).toBe(5n);
+    expect(list.netWorthTotals.ARS).toBe(5n);
     // The port never sees an id the scoped repository did not return.
     expect(movements.sumCalls.flat()).not.toContain(theirs.id);
   });
@@ -378,5 +390,261 @@ describe('chunking (NFR-02)', () => {
     await listAccounts.execute(await readScopeFor(ALICE), { ...defaultList, archived: true });
     expect(movements.sumCalls).toHaveLength(1);
     expect(movements.sumCalls[0]).toHaveLength(2);
+  });
+});
+
+type SeedType = 'cash' | 'bank_account' | 'digital_wallet' | 'savings' | 'credit_card';
+
+async function createTyped(
+  userId: string,
+  name: string,
+  type: SeedType,
+  extra: { includeInAvailable?: boolean; openingBalance?: bigint } = {},
+) {
+  return createAccount.execute(await writeScopeFor(userId), {
+    name,
+    type,
+    currency: 'ARS',
+    openingBalance: extra.openingBalance ?? 0n,
+    ...(extra.includeInAvailable === undefined
+      ? {}
+      : { includeInAvailable: extra.includeInAvailable }),
+  });
+}
+
+describe('create include-in-available', () => {
+  it('stores the type default when no setting is given: true for cash, bank, wallet, false for savings (AC-03, AC-04)', async () => {
+    const flags: Record<string, boolean> = {};
+    for (const type of ['cash', 'bank_account', 'digital_wallet', 'savings'] as const) {
+      const account = await createTyped(ALICE, `A ${type}`, type);
+      flags[type] = account.includeInAvailable;
+      expect(accounts.rows.get(account.id)?.account.includeInAvailable).toBe(
+        account.includeInAvailable,
+      );
+    }
+    expect(flags).toEqual({
+      cash: true,
+      bank_account: true,
+      digital_wallet: true,
+      savings: false,
+    });
+  });
+
+  it('stores an explicit value for a non-card type instead of the default (AC-05)', async () => {
+    const off = await createTyped(ALICE, 'Cash off', 'cash', { includeInAvailable: false });
+    const on = await createTyped(ALICE, 'Savings on', 'savings', { includeInAvailable: true });
+    expect(off.includeInAvailable).toBe(false);
+    expect(on.includeInAvailable).toBe(true);
+  });
+
+  it('stores false for a credit card with and without a setting (AC-09)', async () => {
+    const plain = await createTyped(ALICE, 'Card', 'credit_card');
+    const forced = await createTyped(ALICE, 'Card 2', 'credit_card', { includeInAvailable: true });
+    expect(plain.includeInAvailable).toBe(false);
+    expect(forced.includeInAvailable).toBe(false);
+    expect(accounts.rows.get(forced.id)?.account.includeInAvailable).toBe(false);
+  });
+});
+
+describe('set include-in-available', () => {
+  it('persists the value and leaves name, type, currency and balance unchanged (AC-07)', async () => {
+    const account = await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 500n });
+    movements.sums.set(account.id, 20n);
+    const result = await setIncluded.execute(await writeScopeFor(ALICE), account.id, false);
+    expect(result).toMatchObject({
+      id: account.id,
+      name: 'Cash',
+      type: 'cash',
+      currency: 'ARS',
+      openingBalance: 500n,
+      balance: 520n,
+      includeInAvailable: false,
+    });
+    expect(accounts.rows.get(account.id)?.account.includeInAvailable).toBe(false);
+    const again = await setIncluded.execute(await writeScopeFor(ALICE), account.id, true);
+    expect(again.includeInAvailable).toBe(true);
+  });
+
+  it('raises CreditCardSettingLocked declaring body.includeInAvailable and leaves the card unchanged (AC-11)', async () => {
+    const card = await createTyped(ALICE, 'Visa', 'credit_card');
+    const error = await setIncluded
+      .execute(await writeScopeFor(ALICE), card.id, true)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CreditCardSettingLocked);
+    expect(error).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      fields: ['body.includeInAvailable'],
+    });
+    expect(accounts.rows.get(card.id)?.account.includeInAvailable).toBe(false);
+  });
+
+  it('checks the card rule before the archived rule (AC-11)', async () => {
+    const card = await createTyped(ALICE, 'Visa', 'credit_card');
+    await setArchived.execute(await writeScopeFor(ALICE), card.id, true);
+    await expect(
+      setIncluded.execute(await writeScopeFor(ALICE), card.id, false),
+    ).rejects.toBeInstanceOf(CreditCardSettingLocked);
+  });
+
+  it('raises AccountArchived (409) on an archived account and succeeds once unarchived (AC-12, AC-13)', async () => {
+    const account = await createTyped(ALICE, 'Cash', 'cash');
+    const write = await writeScopeFor(ALICE);
+    await setArchived.execute(write, account.id, true);
+    const error = await setIncluded.execute(write, account.id, false).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AccountArchived);
+    expect(error).toMatchObject({ code: 'ACCOUNT_ARCHIVED' });
+    expect(accounts.rows.get(account.id)?.account.includeInAvailable).toBe(true);
+
+    await setArchived.execute(write, account.id, false);
+    await expect(setIncluded.execute(write, account.id, false)).resolves.toMatchObject({
+      includeInAvailable: false,
+    });
+  });
+
+  it("raises not found for another user's account, identical to a missing id (AC-22)", async () => {
+    const theirs = await createTyped(BOB, 'Theirs', 'cash');
+    const write = await writeScopeFor(ALICE);
+    await expect(setIncluded.execute(write, theirs.id, false)).rejects.toBeInstanceOf(
+      ResourceNotFound,
+    );
+    await expect(
+      setIncluded.execute(write, '33333333-3333-4333-8333-333333333333', false),
+    ).rejects.toBeInstanceOf(ResourceNotFound);
+    expect(accounts.rows.get(theirs.id)?.account.includeInAvailable).toBe(true);
+  });
+});
+
+describe('list available, net worth and debt totals', () => {
+  it('availableTotals sums the included active balances and does not subtract card balances (AC-14)', async () => {
+    const cash = await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 1000n });
+    const bank = await createTyped(ALICE, 'Bank', 'bank_account', { openingBalance: 500n });
+    await createTyped(ALICE, 'Savings', 'savings', { openingBalance: 7000n });
+    const card = await createTyped(ALICE, 'Visa', 'credit_card');
+    movements.sums.set(cash.id, -100n);
+    movements.sums.set(bank.id, 50n);
+    movements.sums.set(card.id, -3000n);
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.availableTotals).toEqual({ ARS: 1450n, USD: 0n });
+  });
+
+  it('availableTotals is 0 for a currency with no included account (AC-15)', async () => {
+    await createAccount.execute(await writeScopeFor(ALICE), {
+      name: 'Dollars',
+      type: 'savings',
+      currency: 'USD',
+      openingBalance: 900n,
+    });
+    await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 10n, includeInAvailable: false });
+    await createTyped(ALICE, 'Wallet', 'digital_wallet', { openingBalance: 3n });
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.availableTotals).toEqual({ ARS: 3n, USD: 0n });
+    expect(list.netWorthTotals).toEqual({ ARS: 13n, USD: 900n });
+  });
+
+  it('netWorthTotals sums all active balances, cards included (AC-16)', async () => {
+    await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 1000n });
+    await createTyped(ALICE, 'Savings', 'savings', { openingBalance: 200n });
+    const card = await createTyped(ALICE, 'Visa', 'credit_card');
+    movements.sums.set(card.id, -300n);
+    const old = await createTyped(ALICE, 'Old', 'cash', { openingBalance: 99999n });
+    await setArchived.execute(await writeScopeFor(ALICE), old.id, true);
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.netWorthTotals).toEqual({ ARS: 900n, USD: 0n });
+  });
+
+  it('debtTotals sums the active card balances per currency (AC-19)', async () => {
+    const visa = await createTyped(ALICE, 'Visa', 'credit_card');
+    const usdCard = await createAccount.execute(await writeScopeFor(ALICE), {
+      name: 'Amex',
+      type: 'credit_card',
+      currency: 'USD',
+      openingBalance: 0n,
+    });
+    await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 5000n });
+    movements.sums.set(visa.id, -1200n);
+    movements.sums.set(usdCard.id, -80n);
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.debtTotals).toEqual({ ARS: -1200n, USD: -80n });
+  });
+
+  it('keeps all three totals exact above the signed 64-bit maximum (AC-17)', async () => {
+    const big = 10n ** 15n;
+    for (let i = 0; i < 9300; i += 1) {
+      accounts.seed(ALICE, { name: `Big ${i}`, openingBalance: big, includeInAvailable: true });
+    }
+    for (let i = 0; i < 9300; i += 1) {
+      accounts.seed(ALICE, { name: `Card ${i}`, type: 'credit_card', openingBalance: big });
+    }
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.availableTotals.ARS).toBe(9_300_000_000_000_000_000n);
+    expect(list.availableTotals.ARS > MINOR_UNITS_MAX).toBe(true);
+    expect(list.debtTotals.ARS).toBe(9_300_000_000_000_000_000n);
+    expect(list.netWorthTotals.ARS).toBe(18_600_000_000_000_000_000n);
+  });
+
+  it('has zero debt, zero cards and no card in the list when the user has none (AC-20)', async () => {
+    await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 10n });
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.debtTotals).toEqual({ ARS: 0n, USD: 0n });
+    expect(list.creditCardCount).toBe(0);
+    expect(list.availableTotals).toEqual({ ARS: 10n, USD: 0n });
+    expect(list.items.some((item) => item.type === 'credit_card')).toBe(false);
+  });
+
+  it('creditCardCount counts active cards across all pages and ignores archived cards (AC-19)', async () => {
+    await createTyped(ALICE, 'Cash', 'cash');
+    await createTyped(ALICE, 'Visa', 'credit_card');
+    await createTyped(ALICE, 'Master', 'credit_card');
+    const gone = await createTyped(ALICE, 'Old card', 'credit_card');
+    await setArchived.execute(await writeScopeFor(ALICE), gone.id, true);
+    const list = await listAccounts.execute(await readScopeFor(ALICE), {
+      archived: false,
+      limit: 1,
+      offset: 0,
+    });
+    expect(list.items).toHaveLength(1);
+    expect(list.creditCardCount).toBe(2);
+  });
+
+  it('fails with the port error and returns no totals when the movements port fails (error path)', async () => {
+    await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 1n });
+    const failure = new Error('movements unavailable');
+    movements.failure = failure;
+    const result = await listAccounts
+      .execute(await readScopeFor(ALICE), defaultList)
+      .catch((e: unknown) => e);
+    expect(result).toBe(failure);
+  });
+});
+
+describe('include-in-available audit gaps', () => {
+  it('setting the same value twice is idempotent and leaves the account unchanged (AC-07)', async () => {
+    const account = await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 40n });
+    const write = await writeScopeFor(ALICE);
+    const first = await setIncluded.execute(write, account.id, false);
+    const stored = accounts.rows.get(account.id)?.account;
+    const second = await setIncluded.execute(write, account.id, false);
+    expect(first.includeInAvailable).toBe(false);
+    expect(second).toEqual(first);
+    expect(accounts.rows.get(account.id)?.account).toBe(stored);
+  });
+
+  it('availableTotals ignores an archived included account (AC-14)', async () => {
+    await createTyped(ALICE, 'Cash', 'cash', { openingBalance: 100n });
+    const old = await createTyped(ALICE, 'Old', 'cash', { openingBalance: 5000n });
+    await setArchived.execute(await writeScopeFor(ALICE), old.id, true);
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.availableTotals).toEqual({ ARS: 100n, USD: 0n });
+  });
+
+  it('all totals and the card count are scoped to the caller (AC-22)', async () => {
+    await createTyped(ALICE, 'Mine', 'cash', { openingBalance: 10n });
+    await createTyped(BOB, 'Theirs cash', 'cash', { openingBalance: 700n });
+    await createTyped(BOB, 'Theirs card', 'credit_card', { openingBalance: 900n });
+    const list = await listAccounts.execute(await readScopeFor(ALICE), defaultList);
+    expect(list.availableTotals).toEqual({ ARS: 10n, USD: 0n });
+    expect(list.netWorthTotals).toEqual({ ARS: 10n, USD: 0n });
+    expect(list.debtTotals).toEqual({ ARS: 0n, USD: 0n });
+    expect(list.creditCardCount).toBe(0);
   });
 });

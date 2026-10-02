@@ -129,6 +129,7 @@
     "categoryInUse": "Esta categoría está en uso, por eso no se puede eliminar. Archívala en su lugar.",
     "categoryNestingTooDeep": "Las subcategorías no pueden tener subcategorías.",
     "categoryParentKindMismatch": "Una subcategoría debe ser del mismo tipo que su categoría principal.",
+    "accountArchived": "Esta cuenta está archivada, por eso no se puede cambiar esta opción. Desarchívala primero.",
     "totpCodeFormat": "Ingresa los 6 dígitos del código.",
     "secondFactorCodeFormat": "Ingresa un código de 6 dígitos o un código de recuperación."
   },
@@ -139,7 +140,15 @@
       "title": "Nueva cuenta",
       "description": "Agrega un lugar donde guardas tu dinero."
     },
+    "headline": {
+      "available": "Disponible",
+      "netWorth": "Patrimonio neto"
+    },
+    "debt": {
+      "title": "Deudas"
+    },
     "fields": {
+      "includeInAvailable": "Incluir en disponible",
       "name": "Nombre",
       "type": "Tipo",
       "currency": "Moneda",

@@ -110,6 +110,25 @@ describe('categories catalog (DISC-001-02b)', () => {
   });
 });
 
+describe('available balance labels (FEAT-003 AC-23, NFR-05)', () => {
+  it.each([
+    ['es', 'accounts.headline.available', 'Disponible'],
+    ['es', 'accounts.headline.netWorth', 'Patrimonio neto'],
+    ['es', 'accounts.debt.title', 'Deudas'],
+    ['es', 'accounts.fields.includeInAvailable', 'Incluir en disponible'],
+    ['en', 'accounts.headline.available', 'Available'],
+    ['en', 'accounts.headline.netWorth', 'Net worth'],
+    ['en', 'accounts.debt.title', 'Debt'],
+    ['en', 'accounts.fields.includeInAvailable', 'Include in available'],
+  ])('holds the exact wording in %s for %s', (locale, key, wording) => {
+    expect(readString(loadCatalog(locale), key)).toBe(wording);
+  });
+
+  it.each(LOCALES)('has a non-empty accountArchived error in %s', (locale) => {
+    expect(readString(loadCatalog(locale), 'errors.accountArchived')?.length).toBeGreaterThan(0);
+  });
+});
+
 describe('product name in the web catalogs (FEAT-002)', () => {
   it.each(LOCALES)('titles the app "Pesly" in %s', (locale) => {
     const catalog = loadCatalog(locale);

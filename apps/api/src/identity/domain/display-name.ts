@@ -1,4 +1,4 @@
-import { DISPLAY_NAME_MAX_CODE_POINTS } from '@argent/shared';
+import { DISPLAY_NAME_MAX_CODE_POINTS } from '@pesly/shared';
 
 /** The Google claim is untrusted: any string is reduced to a valid display name or null. */
 export function displayNameFromGoogleClaim(name: string | null): string | null {

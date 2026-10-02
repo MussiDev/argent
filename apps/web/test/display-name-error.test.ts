@@ -1,4 +1,4 @@
-import { registerRequestSchema } from '@argent/shared';
+import { registerRequestSchema } from '@pesly/shared';
 import { describe, expect, it } from 'vitest';
 import { toValidationErrors } from '../src/features/auth/form-errors';
 import { displayNameErrorKind } from '../src/lib/display-name-error';

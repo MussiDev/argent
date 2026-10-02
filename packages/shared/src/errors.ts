@@ -26,6 +26,10 @@ export const ERROR_CODES = [
   'CATEGORY_PARENT_KIND_MISMATCH',
   'REAUTHENTICATION_REQUIRED',
   'ACCOUNT_ARCHIVED',
+  'MOVEMENT_DATE_IN_FUTURE',
+  'RATE_REQUIRED',
+  'MOVEMENT_CATEGORY_KIND_MISMATCH',
+  'CATEGORY_ARCHIVED',
   'INTERNAL',
 ] as const;
 
@@ -55,5 +59,26 @@ export class AppError extends Error {
     this.name = new.target.name;
     this.code = code;
     this.fields = fields;
+  }
+}
+
+/**
+ * An error whose HTTP answer carries a `Retry-After` header. The error handler reads
+ * `retryAfterSeconds` from any instance, so the header is not tied to one error code.
+ */
+export class RetryableError extends AppError {
+  readonly retryAfterSeconds: number;
+
+  constructor(
+    code: ErrorCode,
+    retryAfterSeconds: number,
+    message: string = code,
+    fields?: string[],
+  ) {
+    if (!Number.isInteger(retryAfterSeconds) || retryAfterSeconds < 1) {
+      throw new RangeError('retryAfterSeconds must be a positive integer');
+    }
+    super(code, message, fields);
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }

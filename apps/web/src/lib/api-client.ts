@@ -93,7 +93,11 @@ export type ApiErrorKey =
   | 'categoryNestingTooDeep'
   | 'categoryParentKindMismatch'
   | 'reauthenticationRequired'
-  | 'accountArchived';
+  | 'accountArchived'
+  | 'movementDateInFuture'
+  | 'rateRequired'
+  | 'movementCategoryKindMismatch'
+  | 'categoryArchived';
 
 /** `NETWORK`: the request never got an HTTP answer (offline, DNS, CORS, aborted). */
 export type ApiFailureCode = ErrorCode | 'NETWORK';
@@ -136,6 +140,10 @@ const MESSAGE_KEY_BY_CODE: Record<ApiFailureCode, ApiErrorKey> = {
   CATEGORY_PARENT_KIND_MISMATCH: 'categoryParentKindMismatch',
   REAUTHENTICATION_REQUIRED: 'reauthenticationRequired',
   ACCOUNT_ARCHIVED: 'accountArchived',
+  MOVEMENT_DATE_IN_FUTURE: 'movementDateInFuture',
+  RATE_REQUIRED: 'rateRequired',
+  MOVEMENT_CATEGORY_KIND_MISMATCH: 'movementCategoryKindMismatch',
+  CATEGORY_ARCHIVED: 'categoryArchived',
 };
 
 /** `null` when the id is not a plain path segment: '.' and '..' survive encoding and would be normalized. */

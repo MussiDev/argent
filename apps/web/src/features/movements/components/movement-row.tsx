@@ -16,6 +16,9 @@ export interface MovementRowProps {
 /** ISO 4217's "no currency" code: it formats the amount with a neutral sign. */
 const UNKNOWN_CURRENCY = 'XXX';
 
+/** Only USD-account rows show the frozen rate; ARS rows keep it stored but hide it. */
+const USD_CURRENCY = 'USD';
+
 const DEFAULT_TIME_ZONE = 'America/Argentina/Buenos_Aires';
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -71,9 +74,11 @@ export function MovementRow({
         <time dateTime={movement.occurredAt}>{when}</time>
       </p>
       {movement.note === null ? null : <p className="text-sm">{movement.note}</p>}
-      <p className="text-xs text-muted-foreground">
-        {t('rate', { rate: formatRate(BigInt(movement.rate), locale) })}
-      </p>
+      {currency === USD_CURRENCY ? (
+        <p className="text-xs text-muted-foreground">
+          {t('rate', { rate: formatRate(BigInt(movement.rate), locale) })}
+        </p>
+      ) : null}
     </li>
   );
 }

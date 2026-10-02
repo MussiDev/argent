@@ -300,7 +300,7 @@ The lookup and adapter tests pass against the migrated test database and the por
 - Auth: `requireSession` then `requireVerifiedEmail` on the `/movements` prefix; the owner always comes from the session.
 
 **Logic**
-The factory takes `{ db, logger, writeLimit? }` (default 60, so that the performance test can raise it), builds the repository, the lookups, the limiter and the use cases with the `OwnerOrGroupMemberAccessPolicy` and `DenyAllGroupMembershipReader` as the accounts routes do, with write scope for create (through `RecordManualMovement`) and read scope for list and get. Audit log lines carry the request id, user id and movement id only, never the amount, note or rate.
+The factory takes `{ db, logger, writeLimit?, clock? }` (`writeLimit` defaults to 60 so that the performance test can raise it; `clock` defaults to the system clock and lets the limiter-window tests fix the time), builds the repository, the lookups, the limiter and the use cases with the `OwnerOrGroupMemberAccessPolicy` and `DenyAllGroupMembershipReader` as the accounts routes do, with write scope for create (through `RecordManualMovement`) and read scope for list and get. Audit log lines carry the request id, user id and movement id only, never the amount, note or rate.
 `server.ts` passes `movements: createAccountMovements(db)` to `createAccountRoutes` and `usage: createCategoryUsage(db)` to `createCategoryRoutes`. The presenter is the only place where bigint becomes a string and an instant becomes an ISO 8601 UTC string.
 
 **Input validation**
@@ -409,11 +409,11 @@ The integration tests pass and the performance tests meet their thresholds on th
 **Files**
 - `apps/web/src/lib/api-client.ts` (modified) — `createMovement`, `listMovements`, `getLatestRates`, new error keys, the mapping of the four new codes, and an optional `retryAfterSeconds` on a failure read from the `Retry-After` header.
 - `apps/web/src/features/movements/containers/create-movement-container.tsx` (new).
-- `apps/web/src/features/movements/components/movement-form.tsx`, `rate-field.tsx` (new).
+- `apps/web/src/features/movements/components/movement-form.tsx`, `rate-field.tsx`, `movement-field.tsx` (label, hint and error wrapper), `movement-saved.tsx` (the post-save view with the frozen rate and a link to the list) (new).
 - `apps/web/src/features/movements/movement-form-errors.ts`, `format-rate.ts` (new).
 - `apps/web/src/app/[locale]/(app)/movements/new/page.tsx` (new).
 - `apps/web/messages/es.json`, `apps/web/messages/en.json` (modified) — the `movements` namespace for the entry screen and the new error messages (including messages for the four new codes and an archived-account message that does not reuse the existing account-archived wording).
-- `apps/web/test/movements-components.test.tsx`, `movements-containers.test.tsx`, `api-client.test.ts`, `i18n-catalogs.test.ts`, `routes.test.tsx` (new or modified).
+- `apps/web/test/movements-components.test.tsx`, `movements-containers.test.tsx`, `api-client-movements.test.ts` (new, the client calls of this ticket), `i18n-catalogs.test.ts`, `routes.test.tsx` (new or modified).
 
 **Logic**
 The entry screen loads the active accounts, the non-archived categories of the chosen type (paging each list by 100), the profile preferences (default rate type, time zone) and the latest rates. The type switch (expense or income) filters the category picker. The date and time default to now in the user's time zone
@@ -458,7 +458,7 @@ Web tests pass, `pnpm typecheck` and `pnpm lint` pass, the Spanish and English c
 
 **Logic**
 The list screen loads the first page of movements and the accounts and categories needed to name them: both the active and the archived accounts and categories (`archived=false` and `archived=true`, paging each by 100 until the total is reached), because a movement may sit on an archived account or category. It shows the date and time (formatted in the user's time zone from the instant),
-the category (default categories through `categoryLabel`) and account names, the amount with the account's currency and the rate used; "show more" loads the next page of at most 100. The navigation link has an icon and an `app.nav` label in both catalogs.
+the category (default categories through `categoryLabel`) and account names, the amount with the account's currency and, only on the rows of USD-account movements, the frozen rate (rows of ARS-account movements hide it; the rate stays stored and is shown in the post-save view); "show more" loads the next page of at most 100. The navigation link has an icon and an `app.nav` label in both catalogs.
 
 **Input validation**
 The only input is the page offset sent by the "show more" control, which the container derives from the number of items already shown and the total.
@@ -468,7 +468,7 @@ The only input is the page offset sent by the "show more" control, which the con
 - A movement whose account or category is missing from the loaded sets shows a neutral placeholder name instead of failing.
 
 **Required tests**
-- [ ] the list shows movements newest first with names, amounts, currencies and rates, and a movement on an archived account and one on an archived category show their names — validates AC-01, AC-04, AC-14
+- [ ] the list shows movements newest first with names, amounts and currencies, shows the frozen rate on USD-account rows and not on ARS-account rows, and a movement on an archived account and one on an archived category show their names — validates AC-01, AC-04, AC-14
 - [ ] "show more" loads the next page of at most 100 and stops when the total is reached — validates AC-14
 - [ ] a 401 redirects to sign in and a server error shows the generic message with retry and keeps the rows (error path) — validates AC-14
 - [ ] a movement with an unknown account id shows a placeholder and does not fail (error path) — validates AC-14
@@ -510,6 +510,12 @@ The end-to-end flow fills the entry screen with valid values, with an amount of 
 
 **Completion criterion**
 `pnpm test`, `pnpm lint`, `pnpm typecheck` and `pnpm e2e` pass; the migration count and journal checks include 0014.
+
+## Decisions recorded during CODE
+
+- 2026-10-02, human decision D1 (relayed by the orchestrator): the missing idempotency key on movement creation is ACCEPTED as a known limitation of this ticket (a lost response followed by a retry can create a duplicate). No code change. Follow-up owned by the PRD 04 offline sync ticket, whose offline queue needs client-generated idempotency anyway.
+- 2026-10-02, human decision D2: the movements LIST shows the frozen rate only on rows of USD-account movements. ARS-account movements still store the frozen rate and keep showing it in the post-save view; the list row hides it. This changes display only: no requirement, acceptance criterion or API field changes (Block 9).
+- Wording corrected during CODE: the `createMovementRoutes` options include `clock?` (Block 5) and the Block 8 file list names the extra files that were built.
 
 ## Final verification
 - FR-01 to FR-05 and FR-08, FR-09: an expense and an income can be saved with a frozen rate and source and listed newest first, through the API and the web screens; no stored rate forces a manual one.

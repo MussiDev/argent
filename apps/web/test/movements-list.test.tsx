@@ -132,8 +132,11 @@ const plain = (text: string) => text.replace(/\s+/g, ' ');
 
 const rows = () => screen.getAllByRole('listitem');
 
+const rateLine = (rate: bigint, locale: 'es' | 'en') =>
+  (locale === 'es' ? es : en).movements.list.rate.replace('{rate}', formatRate(rate, locale));
+
 describe('MovementsContainer', () => {
-  it('lists movements newest first with names, amounts, currencies and rates, including archived ones (AC-01, AC-04, AC-14)', async () => {
+  it('lists movements newest first with names, amounts and currencies, the frozen rate only on the USD row, including archived ones (AC-01, AC-04, AC-14)', async () => {
     const newest = movement({ id: uuid(502), note: 'Almuerzo' });
     const older = movement({
       id: uuid(501),
@@ -154,11 +157,9 @@ describe('MovementsContainer', () => {
     expect(within(first).getByText('Comida')).toBeDefined();
     expect(within(first).getByText('Caja')).toBeDefined();
     expect(within(first).getByText(plain(formatMoney(-150050n, 'ARS', 'es')))).toBeDefined();
-    expect(
-      within(first).getByText(
-        es.movements.list.rate.replace('{rate}', formatRate(12505000n, 'es')),
-      ),
-    ).toBeDefined();
+    // An ARS-account row hides the frozen rate: it stays stored, the list does not show it.
+    expect(within(first).queryByText(rateLine(12505000n, 'es'))).toBeNull();
+    expect(within(first).queryByText(/Cotizaci/)).toBeNull();
     expect(within(first).getByText(/12:30/)).toBeDefined();
     expect(within(first).queryByText(/15:30/)).toBeNull();
 
@@ -166,6 +167,8 @@ describe('MovementsContainer', () => {
     expect(within(second).getByText('Vieja')).toBeDefined();
     expect(within(second).getByText('Dolares viejos')).toBeDefined();
     expect(within(second).getByText(`+${plain(formatMoney(20000n, 'USD', 'es'))}`)).toBeDefined();
+    // A USD-account row shows the rate that was frozen on the movement.
+    expect(within(second).getByText(rateLine(9000000n, 'es'))).toBeDefined();
     // 02:00 UTC is still the previous day in Buenos Aires (23:00).
     expect(within(second).getByText(/23:00/)).toBeDefined();
 
@@ -181,13 +184,15 @@ describe('MovementsContainer', () => {
   });
 
   it('formats in the active locale', async () => {
-    stubApi(routes({ [FIRST_PAGE]: movementPage([movement()]) }));
+    const usd = movement({ id: uuid(503), accountId: DOLARES_ID, categoryId: VIEJA_ID });
+    stubApi(routes({ [FIRST_PAGE]: movementPage([movement(), usd]) }));
     renderApp(<MovementsContainer />, { locale: 'en' });
 
     expect(await screen.findByText(plain(formatMoney(-150050n, 'ARS', 'en')))).toBeDefined();
+    // Only the USD row carries the rate line, in the English wording.
     expect(
-      screen.getByText(en.movements.list.rate.replace('{rate}', formatRate(12505000n, 'en'))),
-    ).toBeDefined();
+      screen.getAllByText(en.movements.list.rate.replace('{rate}', formatRate(12505000n, 'en'))),
+    ).toHaveLength(1);
   });
 
   it('shows the empty state with a link to the entry screen', async () => {

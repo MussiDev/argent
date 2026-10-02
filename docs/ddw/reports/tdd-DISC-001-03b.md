@@ -173,3 +173,16 @@ Files: `apps/web/e2e/movements.spec.ts` (5 flows: main, no stored rate, rate age
 Review: verifier PASS, auditor no blockers. Fixed after review: `withAgedRates` now sets `fetched_at = now() - hours` (absolute) instead of subtracting from the existing value, which could have rendered 6 hours instead of 5; the "fresh rates show no message" assertion now matches any hour count. Re-run green: age and archived flows. Advisories left: the scanners are regex based (known gaps: `'a//b'` strings hiding a line, `parseInt`, path aliases), the response guard ignores `/auth/` statuses, `API_URL` duplicated from the Playwright config, 105 per-file scan cases.
 
 Port check before each e2e run: 3000, 4000 and 4100 were free.
+
+## Decision D2 (after CODE closeout) — the list hides the frozen rate on ARS-account rows
+
+Human decision of 2026-10-02: the movements list shows the frozen rate only on USD-account rows; ARS-account movements still store it and keep showing it in the post-save view. Display only, no API change.
+
+| Test | Red result (before the change to `movement-row.tsx`) |
+|---|---|
+| `apps/web/test/movements-list.test.tsx` › lists movements newest first with names, amounts and currencies, the frozen rate only on the USD row | `AssertionError: expected <p …(1)></p> to be null` (the ARS row still showed the rate line) |
+| `apps/web/test/movements-list.test.tsx` › formats in the active locale (one ARS and one USD movement) | `expected [ <p …(1)></p>, <p …(1)></p> ] to have a length of 1 but got 2` |
+
+A first draft of the "no rate wording" assertion used the wrong word (`Tasa|Rate`, the catalog says `Cotización`); it was corrected before the red run quoted above. After the change: `movements-list.test.tsx` and `routes.test.tsx` 33 of 33 pass; the movements e2e was updated (the ARS list rows now assert that no rate wording appears, the stored rate is still asserted in the database) and passes 5 of 5 (ports 3000, 4000, 4100 free, Mailpit up); typecheck, eslint and prettier clean. Test counts are unchanged (two tests changed, none added): the 3325-test run in `docs/ddw/reports/tests-DISC-001-03b.md` stays accurate.
+
+Decision D1 (no idempotency key, accepted as a known limitation, follow-up owned by the PRD 04 offline sync ticket) needs no code or test.

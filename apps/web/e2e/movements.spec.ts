@@ -184,19 +184,16 @@ test('records an expense and an income, lists them newest first, shows the balan
   expect(stored[1]?.rate).toBe('15005000');
 
   await page.goto('/es/movements');
-  const rows = page.getByRole('listitem').filter({ hasText: t.list.rate.split('{')[0] ?? '' });
+  const rows = page.getByRole('listitem').filter({ hasText: ACCOUNT_NAME });
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText(`+${money(25_050n)}`);
   await expect(rows.nth(0)).toContainText(INCOME_CATEGORY);
   await expect(rows.nth(0)).toContainText(ACCOUNT_NAME);
-  await expect(rows.nth(0)).toContainText(
-    t.list.rate.replace('{rate}', formatRate(15_005_000n, 'es')),
-  );
   await expect(rows.nth(1)).toContainText(money(-10_000n));
   await expect(rows.nth(1)).toContainText(EXPENSE_CATEGORY);
-  await expect(rows.nth(1)).toContainText(
-    t.list.rate.replace('{rate}', formatRate(BigInt(stored[0]?.rate ?? '0'), 'es')),
-  );
+  // The account is in pesos: the frozen rate stays stored (checked above) and the row hides it.
+  const rateWording = t.list.rate.split('{')[0] ?? '';
+  await expect(page.getByText(rateWording)).toHaveCount(0);
 
   // 1.000,00 - 100,00 + 250,50.
   await page.goto('/es/accounts');

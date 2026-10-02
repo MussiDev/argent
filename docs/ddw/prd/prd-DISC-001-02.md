@@ -24,10 +24,12 @@ a → b
   movements exist yet) and no movements table is created; PRD 03 provides the real adapter
   without touching accounts code. AC-10 is tested at the use-case level with a fake port that
   reports movements; its end-to-end test is deferred to PRD 03. The PRD wording is unchanged.
-- FR-11 / AC-14 of 02b (original FR-22, AC-27) depend on the user's interface language at the
-  moment the user is created. The original wording is kept; the human decides where the default
-  categories hook lives.
-- Module layout for categories (own module versus inside `accounts`) is a PLAN decision for 02b.
+- RESOLVED (2026-10-01, human decision Q3): FR-11 / AC-14 of 02b (original FR-22, AC-27) now say
+  default categories follow the user's CURRENT interface language and are shown translated when it
+  changes; a default the user renames becomes theirs and is no longer translated. New in 02b:
+  FR-12 and AC-15 to AC-17.
+- RESOLVED (2026-10-01, human decision Q4): categories get their own module
+  (`apps/api/src/categories/`) and web feature; `categories` joins the module list of AGENTS.md.
 
 ## Original context
 PRD 02 of discovery DISC-001 defined the accounts where a user's money is and the categories that

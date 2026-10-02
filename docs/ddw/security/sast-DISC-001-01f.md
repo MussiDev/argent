@@ -47,6 +47,10 @@
 | I-3 | Info | `apps/api/src/identity/application/complete-deletion-reauth.ts:60` | A Google-created account with neither a password nor a linked Google identity cannot re-authenticate and ends in `REAUTHENTICATION_REQUIRED` | Accepted: decision O-2, recorded in the spec |
 | I-4 | Info | `apps/web/e2e/support/fake-google.ts:1` | The e2e fake runs in a separate process, so `prompt=login` is asserted on the authorization query the browser received, not on a fake-side request log | Accepted: the adapter side is covered by `apps/api/test/identity/google-oidc-identity-provider.test.ts` |
 
+## Corrective round after the first VERIFY
+
+Decision O-2 required a set-a-password hint on the web screen. The change is web-only: a catalog text and a locale-aware link to `/forgot-password` in `apps/web/src/features/profile/components/delete-user-google.tsx:1`, rendered as React text nodes; no new input, request, storage or dependency, so no category verdict changes.
+
 ## Summary
 
 Total: 17 categories clean, 0 vulnerabilities open (0 critical, 0 high, 0 medium); 4 Info documented.

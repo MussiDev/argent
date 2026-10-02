@@ -1,12 +1,15 @@
 'use client';
 
-import { CircleAlert } from 'lucide-react';
+import { CircleAlert, Info } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Link } from '@/i18n/navigation';
 import { FormAlert } from '@/features/auth/components/form-alert';
 import type { ErrorMessageKey } from '@/features/auth/form-errors';
+
+const linkClass = 'text-primary underline-offset-4 hover:underline';
 
 export interface DeleteUserGoogleProps {
   pending: boolean;
@@ -20,6 +23,9 @@ export interface DeleteUserGoogleProps {
 /** The first step for an account without a password: confirm with Google before deleting. */
 export function DeleteUserGoogle({ pending, failed, error, onStart }: DeleteUserGoogleProps) {
   const t = useTranslations('deleteUser');
+  // An account with no password and no Google identity lands here and cannot tell itself apart
+  // from a Google one, so the hint is always present and louder once the confirmation failed.
+  const prominentHint = failed || error === 'reauthenticationRequired';
   return (
     <Card>
       <CardHeader>
@@ -35,9 +41,29 @@ export function DeleteUserGoogle({ pending, failed, error, onStart }: DeleteUser
           </Alert>
         ) : null}
         <FormAlert error={error} />
+        {prominentHint ? (
+          <Alert role="note">
+            <Info aria-hidden />
+            <AlertTitle>{t('setPassword.title')}</AlertTitle>
+            <AlertDescription>
+              <p>{t('setPassword.body')}</p>
+              <Link href="/forgot-password" className={linkClass}>
+                {t('setPassword.link')}
+              </Link>
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <Button type="button" variant="outline" disabled={pending} onClick={onStart}>
           {pending ? t('google.pending') : t('google.continue')}
         </Button>
+        {prominentHint ? null : (
+          <p className="text-sm text-muted-foreground">
+            {t('setPassword.note')}{' '}
+            <Link href="/forgot-password" className={linkClass}>
+              {t('setPassword.link')}
+            </Link>
+          </p>
+        )}
       </CardContent>
     </Card>
   );

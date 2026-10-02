@@ -49,6 +49,16 @@ const SCREENS: [string, ReactElement][] = [
     />,
   ],
   [
+    'Google step (reauthentication required, prominent hint)',
+    <DeleteUserGoogle
+      key="google-required"
+      pending={false}
+      failed={false}
+      error="reauthenticationRequired"
+      onStart={noop}
+    />,
+  ],
+  [
     'Google step (pending)',
     <DeleteUserGoogle key="google-pending" pending failed={false} onStart={noop} />,
   ],
@@ -98,6 +108,9 @@ describe('delete-account catalogs (FR-01)', () => {
       expect(read(es.deleteUser)).toBeTruthy();
     }
     expect(en.deleteUser.submit).not.toBe(es.deleteUser.submit);
+    for (const key of ['title', 'body', 'note', 'link'] as const) {
+      expect(en.deleteUser.setPassword[key]).not.toBe(es.deleteUser.setPassword[key]);
+    }
   });
 });
 

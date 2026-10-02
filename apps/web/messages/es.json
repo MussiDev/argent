@@ -411,6 +411,12 @@
       "pending": "Yendo a Google…",
       "confirmed": "Google confirmó que eres tú. Termina en los próximos 5 minutos.",
       "failed": "No pudimos confirmarlo con Google. Inténtalo de nuevo."
+    },
+    "setPassword": {
+      "title": "¿No tienes contraseña y Google no puede confirmar tu identidad?",
+      "body": "Si tu cuenta no tiene contraseña y Google no puede confirmar que eres tú, primero define una contraseña con el flujo de recuperación de contraseña y después vuelve a eliminar tu cuenta.",
+      "note": "¿Sin contraseña y Google no puede confirmarte? Define primero una contraseña.",
+      "link": "Definir una contraseña con la recuperación"
     }
   }
 }

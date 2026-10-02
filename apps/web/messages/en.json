@@ -411,6 +411,12 @@
       "pending": "Going to Google…",
       "confirmed": "Google confirmed it is you. Finish within 5 minutes.",
       "failed": "We could not confirm it with Google. Try again."
+    },
+    "setPassword": {
+      "title": "No password and Google cannot confirm you?",
+      "body": "If your account has no password and Google cannot confirm it is you, set a password first with the forgot-password flow, then come back to delete your account.",
+      "note": "No password and Google cannot confirm you? Set a password first.",
+      "link": "Set a password with forgot password"
     }
   }
 }

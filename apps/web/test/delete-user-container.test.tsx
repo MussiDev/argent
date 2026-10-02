@@ -42,6 +42,8 @@ function openAt(search: string) {
 const passwordField = () => screen.getByLabelText<HTMLInputElement>(es.deleteUser.password);
 const codeField = () => screen.getByLabelText<HTMLInputElement>(es.deleteUser.code);
 const submit = () => screen.getByRole('button', { name: es.deleteUser.submit });
+const hintTitle = () => screen.queryByText(es.deleteUser.setPassword.title);
+const hintLink = () => screen.queryByRole('link', { name: es.deleteUser.setPassword.link });
 const googleStep = () => screen.getByRole('button', { name: es.deleteUser.google.continue });
 
 async function loadedPasswordForm() {
@@ -371,5 +373,67 @@ describe('DeleteUserContainer, Google path', () => {
     ).toBeDefined();
     expect(screen.queryByText(es.deleteUser.google.failed)).toBeNull();
     expect(screen.queryByRole('button', { name: es.deleteUser.submit })).toBeNull();
+  });
+
+  it('always shows a short set-a-password note with the forgot-password link under the Google step (O-2)', async () => {
+    openAt('');
+    stubApi({ 'GET /profile': profile({ deletionReauth: 'google' }) });
+    renderApp(<DeleteUserContainer />);
+
+    await screen.findByRole('button', { name: es.deleteUser.google.continue });
+    expect(screen.getByText(es.deleteUser.setPassword.note)).toBeDefined();
+    expect(hintLink()?.getAttribute('href')).toBe('/es/forgot-password');
+    expect(hintTitle()).toBeNull();
+  });
+
+  it('with ?reauth=failed shows the prominent hint with the failure message (O-2)', async () => {
+    openAt('?reauth=failed');
+    stubApi({ 'GET /profile': profile({ deletionReauth: 'google' }) });
+    renderApp(<DeleteUserContainer />);
+
+    expect(await screen.findByText(es.deleteUser.google.failed)).toBeDefined();
+    expect(hintTitle()).not.toBeNull();
+    expect(screen.getByText(es.deleteUser.setPassword.body)).toBeDefined();
+    expect(hintLink()?.getAttribute('href')).toBe('/es/forgot-password');
+    expect(screen.queryByText(es.deleteUser.setPassword.note)).toBeNull();
+  });
+
+  it('when the delete answers REAUTHENTICATION_REQUIRED shows the prominent hint (O-2)', async () => {
+    openAt('?reauth=ready');
+    stubApi({
+      'GET /profile': profile({ deletionReauth: 'google' }),
+      'POST /profile/delete': failure(401, 'REAUTHENTICATION_REQUIRED'),
+    });
+    renderApp(<DeleteUserContainer />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: es.deleteUser.submit }));
+
+    expect(await screen.findByText(es.errors.reauthenticationRequired)).toBeDefined();
+    expect(hintTitle()).not.toBeNull();
+    expect(hintLink()?.getAttribute('href')).toBe('/es/forgot-password');
+  });
+
+  it('does not show the hint on the confirmed final form (O-2)', async () => {
+    openAt('?reauth=ready');
+    stubApi({ 'GET /profile': profile({ deletionReauth: 'google' }) });
+    renderApp(<DeleteUserContainer />);
+
+    await screen.findByRole('button', { name: es.deleteUser.submit });
+    expect(hintTitle()).toBeNull();
+    expect(hintLink()).toBeNull();
+  });
+});
+
+describe('DeleteUserContainer, password path never shows the set-password hint (O-2)', () => {
+  it.each(['', '?reauth=failed', '?reauth=ready'])('with %j', async (search) => {
+    openAt(search);
+    stubApi({ 'GET /profile': profile({}) });
+    renderApp(<DeleteUserContainer />);
+
+    await loadedPasswordForm();
+    expect(hintTitle()).toBeNull();
+    expect(hintLink()).toBeNull();
+    expect(screen.queryByText(es.deleteUser.setPassword.note)).toBeNull();
   });
 });

@@ -279,7 +279,7 @@ describe('POST /profile/delete for an account with a password and a Google link 
   });
 });
 
-describe('POST /profile/delete for an account without a password (placeholder until Block 4)', () => {
+describe('POST /profile/delete for an account without a password (no password and no linked Google identity)', () => {
   it('answers 401 REAUTHENTICATION_REQUIRED and keeps the account (sad path)', async () => {
     const { userId, cookies } = await signedIn();
     await connection.pool.query('update users set password_hash = null where id = $1', [userId]);

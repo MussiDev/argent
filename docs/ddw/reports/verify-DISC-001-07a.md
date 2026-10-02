@@ -48,7 +48,7 @@ benchmark; coverage is from the CODE-phase run.
 - ✅ Block 1 — shared contracts, decimal helpers, valuation: every task done, every Required test present and passing
 - ✅ Block 2 — domain rules and ports, architecture boundary probes: every task done
 - ✅ Block 3 — use cases and portfolio view: every task done
-- ✅ Block 4 — migration `0008_investments` (journal idx 8, `when` 1790957246095, greater than 1790895423195), repositories, unit of work, concurrency: every task done
+- ✅ Block 4 — migration `0008_investments` (journal idx 8, `when` 1790962588595, greater than 1790895423195), repositories, unit of work, concurrency: every task done
 - ✅ Block 5 — portfolio routes, module wiring, error middleware `fields`: every task done
 - ✅ Block 6 — holding routes: every task done
 - ✅ Block 7 — web API client and formatting helpers: every task done
@@ -125,6 +125,6 @@ Suites on the final tree: full run 143 files, 1899 passed, 0 failed, 0 skipped; 
 
 ## Closeout rebase
 
-Before the PR the branch was rebased onto `origin/main` (02b categories, migration 0009). Migration `0008_investments` was regenerated on top of main's latest snapshot: journal `idx` 8, `when` 1790957246095 (greater than every `when` on main, including 0009's 1790902441319), snapshot file `0010_snapshot.json` so that `drizzle-kit generate` reports no changes. The full suite on the rebased tree: 151 files, 2273 passed, 0 failed; e2e 65/65; eslint, prettier and typecheck clean.
+Before the PR the branch was rebased onto `origin/main` (02b categories, 01f account deletion, FEAT-003 and 03a exchange rates: migrations 0009 to 0012). Migration `0008_investments` was regenerated on top of main's latest snapshot: journal `idx` 8, `when` 1790962588595 (greater than every `when` on main, including 0012's 1790945403578), snapshot file `0013_snapshot.json` so that `drizzle-kit generate` reports no changes. `portfolios` and `holdings` are registered in the user-erasure guard (cascade). The full suite on the rebased tree: 177 files, 2852 passed, 0 failed; e2e 71/71; eslint, prettier and typecheck clean.
 
 Result: PASSED

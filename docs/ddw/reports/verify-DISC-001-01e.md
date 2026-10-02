@@ -67,3 +67,21 @@ for an invalid name on a new and an existing email.
 - ⚠️ SAST Info items I-1 (a NUL name gets the "too long" message on the client), I-2 (positional parameters of `toValidationErrors`) and I-3 (the fake always lists `profile` in the scope it reports) remain accepted.
 
 Result: PASSED
+
+## Round 2 — after rebasing onto the Pesly rename (FEAT-002)
+
+After PR #12 (the rename of the packages to `@pesly/*`) merged, the branch was rebased onto main
+without conflicts. Two files of this ticket imported `@argent/shared` (`display-name.ts` and
+`display-name-error.test.ts`); the commit `chore(identity): import the shared package under its
+Pesly name` renamed those two imports, a mechanical change with no behavior change.
+
+Re-run after the rebase and the rename: `pnpm install --frozen-lockfile` (already up to date),
+`pnpm typecheck` clean, `pnpm exec eslint .` clean, `pnpm exec prettier --check --end-of-line auto .`
+clean, `pnpm test:coverage` on `argent_01e_test`: 1148 passed, 0 failed, 0 skipped in 106 files, with
+96.69% line, 92.82% branch and 93.50% function coverage repo-wide (the same coverage as in round 1,
+the extra tests come from main), `pnpm exec playwright test` on `argent_01e_e2e`: 50 of 50 passed,
+`pnpm audit --prod --audit-level high`: no known vulnerabilities. The acceptance criteria, spec
+blocks and coverage of the files this ticket changed are those of round 1 above; nothing of the
+ticket's behavior changed.
+
+Result: PASSED

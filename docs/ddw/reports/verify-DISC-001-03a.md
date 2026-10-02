@@ -18,6 +18,8 @@ account of those runs.
 | Coverage floor | 80% lines, branches and functions (AGENTS.md, "Testing") |
 | Lint | `pnpm exec eslint .` — clean, 0 findings; `pnpm --filter @pesly/api typecheck` and `pnpm typecheck` — clean; `pnpm exec prettier --check --end-of-line auto` on the changed files — clean |
 
+The failing-first (TDD) evidence per block is in `docs/ddw/reports/tdd-DISC-001-03a.md`; it says explicitly where only a headline result exists.
+
 Adding `env.ts` the aggregate is 97.92% lines, 94.57% branches and 91.76% functions; adding `worker.ts`
 (a process entry covered by e2e, 0% in unit coverage) it is 92.48%, 93.55% and 88.64%. All stay above the floor.
 

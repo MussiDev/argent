@@ -47,3 +47,26 @@ export async function signInWithGoogle(
   await reachGoogleConsent(page, identity, options);
   await page.locator(`#${options.choice ?? 'continue'}`).click();
 }
+
+/**
+ * From the delete-account screen of a signed-in user without a password: clicks "Continue with
+ * Google to confirm", signs in on the fake Google page as `identity` and stops on its consent
+ * page. Returns the query of the authorization request the fake Google server received, which is
+ * the URL the browser was sent to, so a test can assert `prompt` and `max_age`.
+ */
+export async function reachGoogleReauthentication(
+  page: Page,
+  identity: FakeGoogleIdentity,
+  { locale = 'es' }: { locale?: 'es' | 'en' } = {},
+): Promise<Record<string, string>> {
+  await page.goto(`/${locale}/settings/delete-account`);
+  await page.getByRole('button', { name: catalogs[locale].deleteUser.google.continue }).click();
+  await page.waitForURL(
+    (url) => url.origin === FAKE_GOOGLE_ORIGIN && url.pathname === '/authorize',
+  );
+  const authorizationRequest = Object.fromEntries(new URL(page.url()).searchParams);
+  await page.locator('input[name=login_hint]').fill(fakeGoogleLoginHint(identity));
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.locator('#continue')).toBeVisible();
+  return authorizationRequest;
+}

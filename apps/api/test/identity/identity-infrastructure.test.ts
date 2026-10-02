@@ -7,6 +7,7 @@ import {
   type TransactionalRepositories,
   type UserCreatedHook,
 } from '../../src/identity';
+import { DrizzleDeletionGrantRepository } from '../../src/identity/infrastructure/db/drizzle-deletion-grant-repository';
 import { DrizzleOAuthStateRepository } from '../../src/identity/infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleOneTimeTokenRepository } from '../../src/identity/infrastructure/db/drizzle-one-time-token-repository';
 import { DrizzleProfileRepository } from '../../src/identity/infrastructure/db/drizzle-profile-repository';
@@ -15,6 +16,7 @@ import { DrizzleSessionRepository } from '../../src/identity/infrastructure/db/d
 import { DrizzleSignInChallengeRepository } from '../../src/identity/infrastructure/db/drizzle-sign-in-challenge-repository';
 import { DrizzleTwoFactorRepository } from '../../src/identity/infrastructure/db/drizzle-two-factor-repository';
 import { DrizzleUnitOfWork } from '../../src/identity/infrastructure/db/drizzle-unit-of-work';
+import { DrizzleUserDeletionRepository } from '../../src/identity/infrastructure/db/drizzle-user-deletion-repository';
 import { DrizzleUserIdentityRepository } from '../../src/identity/infrastructure/db/drizzle-user-identity-repository';
 import { DrizzleUserRepository } from '../../src/identity/infrastructure/db/drizzle-user-repository';
 import { PostgresAttemptLimiter } from '../../src/identity/infrastructure/db/postgres-attempt-limiter';
@@ -59,6 +61,9 @@ describe('createIdentityInfrastructure', () => {
     expect(identity.identities).toBeInstanceOf(DrizzleUserIdentityRepository);
     expect(identity.oauthStates).toBeInstanceOf(DrizzleOAuthStateRepository);
     expect(identity.oauthStatePurger).toBeInstanceOf(DrizzleOAuthStateRepository);
+    expect(identity.deletionGrants).toBeInstanceOf(DrizzleDeletionGrantRepository);
+    expect(identity.deletionGrantPurger).toBeInstanceOf(DrizzleDeletionGrantRepository);
+    expect(identity.userDeletion).toBeInstanceOf(DrizzleUserDeletionRepository);
     expect(identity.attemptLimiter).toBeInstanceOf(PostgresAttemptLimiter);
     expect(identity.passwordHasher).toBeInstanceOf(Argon2idPasswordHasher);
     expect(identity.tokenGenerator).toBeInstanceOf(CryptoTokenGenerator);

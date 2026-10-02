@@ -21,7 +21,11 @@ const PREFERENCES: ProfileResponse['preferences'] = {
 };
 
 function profile(
-  overrides: { displayName?: string | null; twoFactorEnabled?: boolean } = {},
+  overrides: {
+    displayName?: string | null;
+    twoFactorEnabled?: boolean;
+    deletionReauth?: 'password' | 'google';
+  } = {},
   preferences: Partial<ProfileResponse['preferences']> = {},
 ) {
   return {
@@ -30,6 +34,7 @@ function profile(
       displayName: 'Ana',
       email: 'ana@example.com',
       twoFactorEnabled: false,
+      deletionReauth: 'password',
       ...overrides,
       preferences: { ...PREFERENCES, ...preferences },
     },
@@ -52,6 +57,16 @@ async function loaded() {
 }
 
 describe('ProfileContainer', () => {
+  it('links to the delete-account screen (FR-01)', async () => {
+    stubApi({ 'GET /profile': profile() });
+    renderApp(<ProfileContainer />);
+    await loaded();
+
+    const link = screen.getByRole('link', { name: es.profile.deleteAccount.link });
+    expect(link.getAttribute('href')).toBe('/es/settings/delete-account');
+    expect(screen.getByText(es.profile.deleteAccount.description)).toBeDefined();
+  });
+
   it('loads the profile once and shows its data (AC-01)', async () => {
     const { calls } = stubApi({ 'GET /profile': profile() });
     renderApp(<ProfileContainer />);

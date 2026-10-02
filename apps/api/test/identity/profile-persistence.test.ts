@@ -52,6 +52,7 @@ describe('DrizzleProfileRepository.findByUserId', () => {
       userId,
       email: 'ana@example.com',
       displayName: null,
+      hasPassword: true,
       defaultRateType: 'mep',
       displayCurrency: 'ARS',
       timeZone: 'America/Cordoba',
@@ -59,6 +60,14 @@ describe('DrizzleProfileRepository.findByUserId', () => {
     });
     expect(JSON.stringify(profile)).not.toContain('secret-hash');
     expect(profile).not.toHaveProperty('passwordHash');
+  });
+
+  it('reports hasPassword false for an account without a password hash, from both read and update', async () => {
+    const userId = await createUser();
+    await connection.pool.query('update users set password_hash = null where id = $1', [userId]);
+
+    expect((await profiles.findByUserId(userId))?.hasPassword).toBe(false);
+    expect((await profiles.update(userId, { displayName: 'Ana' }))?.hasPassword).toBe(false);
   });
 
   it('resolves null for an unknown user id (sad path)', async () => {
@@ -76,6 +85,7 @@ describe('DrizzleProfileRepository.update', () => {
       userId,
       email: 'ana@example.com',
       displayName: 'Ana Pérez',
+      hasPassword: true,
       defaultRateType: 'mep',
       displayCurrency: 'ARS',
       timeZone: 'America/Cordoba',

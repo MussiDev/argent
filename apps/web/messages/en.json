@@ -123,6 +123,7 @@
     "twoFactorNotEnabled": "Two-step verification is already off.",
     "twoFactorSetupRequired": "The setup changed in another session. Start again.",
     "accountNameTaken": "You already have an account with that name.",
+    "reauthenticationRequired": "Your confirmation expired. Start again.",
     "accountHasMovements": "This account has movements, so it cannot be deleted. Archive it instead.",
     "categoryNameTaken": "You already have a category with that name.",
     "categoryInUse": "This category is in use, so it cannot be deleted. Archive it instead.",
@@ -379,6 +380,11 @@
       "ARS": "Argentine peso (ARS)",
       "USD": "US dollar (USD)"
     },
+    "deleteAccount": {
+      "title": "Delete account",
+      "description": "Permanently remove your account and all its data.",
+      "link": "Delete my account"
+    },
     "languages": {
       "es": "Español",
       "en": "English"
@@ -387,6 +393,30 @@
       "displayNameRequired": "Enter a display name.",
       "displayNameTooLong": "The display name can be at most 50 characters long.",
       "timeZoneInvalid": "Choose a time zone from the list."
+    }
+  },
+  "deleteUser": {
+    "title": "Delete account",
+    "warningTitle": "This cannot be undone",
+    "description": "Deleting your account removes it and everything in it.",
+    "warning": "We will permanently delete your account, your accounts and every movement. There is no way to recover them.",
+    "password": "Password",
+    "code": "Verification code",
+    "codeHint": "A 6-digit code from your authenticator app, or an unused recovery code.",
+    "submit": "Delete my account permanently",
+    "pending": "Deleting…",
+    "google": {
+      "description": "Your account has no password. Confirm it is you by signing in with Google again.",
+      "continue": "Continue with Google to confirm",
+      "pending": "Going to Google…",
+      "confirmed": "Google confirmed it is you. Finish within 5 minutes.",
+      "failed": "We could not confirm it with Google. Try again."
+    },
+    "setPassword": {
+      "title": "No password and Google cannot confirm you?",
+      "body": "If your account has no password and Google cannot confirm it is you, set a password first with the forgot-password flow, then come back to delete your account.",
+      "note": "No password and Google cannot confirm you? Set a password first.",
+      "link": "Set a password with forgot password"
     }
   }
 }

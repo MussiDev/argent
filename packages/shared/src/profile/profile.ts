@@ -52,6 +52,8 @@ export const profileResponseSchema = z.object({
   displayName: z.string().nullable(),
   email: z.string(),
   twoFactorEnabled: z.boolean(),
+  // How the account proves itself to delete: with a password, or by signing in again with Google.
+  deletionReauth: z.enum(['password', 'google']),
   preferences: z.object({
     defaultRateType: rateTypeSchema,
     displayCurrency: z.enum(DISPLAY_CURRENCY_VALUES),

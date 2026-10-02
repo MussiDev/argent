@@ -166,6 +166,31 @@ describe('logger redaction of OAuth secrets (SAST I-2)', () => {
   });
 });
 
+describe('logger redaction of account-deletion secrets (AC-01)', () => {
+  const DELETION_KEYS = ['secondFactorCode', 'grantToken', 'grant', 'authorizationUrl'];
+
+  it('removes every deletion key at the top level, one level and two levels deep', () => {
+    const lines: string[] = [];
+    const logger = createLogger({
+      level: 'info',
+      destination: { write: (line: string) => lines.push(line) },
+    });
+    const secrets = (where: string) =>
+      Object.fromEntries(DELETION_KEYS.map((key) => [key, `deletion-${where}-${key}-secret`]));
+
+    logger.info(secrets('top'), 'top level');
+    logger.info({ body: secrets('one') }, 'one level');
+    logger.info({ req: { body: secrets('two') } }, 'two levels');
+
+    expect(lines).toHaveLength(3);
+    expect(lines.join('\n')).not.toMatch(/deletion-\w+-\w+-secret/);
+    const entry = JSON.parse(lines[0] ?? '{}') as Record<string, unknown>;
+    for (const key of DELETION_KEYS) {
+      expect(entry[key]).toBe('[REDACTED]');
+    }
+  });
+});
+
 describe('logger error serialization (NFR-01)', () => {
   function pgUniqueViolation(): Error {
     return Object.assign(

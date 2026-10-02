@@ -65,10 +65,19 @@ function provider(overrides: Partial<GoogleOidcOptions> = {}): GoogleOidcIdentit
 }
 
 /** Runs the browser half of the flow against the fake server and returns what the callback gets. */
-async function approve(google_: GoogleIdentityProvider, identity: FakeGoogleIdentity) {
+async function approve(
+  google_: GoogleIdentityProvider,
+  identity: FakeGoogleIdentity,
+  { reauthenticate = false }: { reauthenticate?: boolean } = {},
+) {
   const nonce = tokens.generate();
   const codeVerifier = tokens.generate();
-  const url = google_.authorizationUrl({ state: tokens.generate(), nonce, codeVerifier });
+  const url = google_.authorizationUrl({
+    state: tokens.generate(),
+    nonce,
+    codeVerifier,
+    ...(reauthenticate ? { reauthenticate } : {}),
+  });
   const { continueUrl } = await google.consent(url, identity);
   const code = new URL(continueUrl).searchParams.get('code') ?? '';
   return { code, codeVerifier, expectedNonceHash: tokens.hash(nonce) };
@@ -94,6 +103,7 @@ describe('GoogleOidcIdentityProvider.exchangeCode', () => {
       emailVerified: true,
       hostedDomain: null,
       name: null,
+      authTime: null,
     });
   });
 
@@ -139,8 +149,34 @@ describe('GoogleOidcIdentityProvider.exchangeCode', () => {
       emailVerified: false,
       hostedDomain: 'empresa.com.ar',
       name: null,
+      authTime: null,
     });
   });
+
+  it('maps auth_time to GoogleClaims.authTime when Google sends it and to null otherwise (NFR-04)', async () => {
+    const google_ = provider();
+    const before = Math.floor(Date.now() / 1000);
+
+    const reauthenticated = await google_.exchangeCode(
+      await approve(google_, GMAIL_USER, { reauthenticate: true }),
+    );
+    const signedIn = await google_.exchangeCode(await approve(google_, GMAIL_USER));
+
+    expect(reauthenticated.authTime).toBeGreaterThanOrEqual(before);
+    expect(reauthenticated.authTime).toBeLessThanOrEqual(before + 60);
+    expect(signedIn.authTime).toBeNull();
+  });
+
+  it.each([['soon'], [true], [null], [{}]])(
+    'reads an auth_time that is not a number (%j) as null, without failing the exchange (NFR-04)',
+    async (value) => {
+      const google_ = provider();
+      const exchange = await approve(google_, GMAIL_USER, { reauthenticate: true });
+      google.setTokenOptions({ claimOverrides: { auth_time: value } });
+
+      await expect(google_.exchangeCode(exchange)).resolves.toMatchObject({ authTime: null });
+    },
+  );
 
   it('rejects an ID token signed with another key (NFR-02)', async () => {
     const google_ = provider();
@@ -515,6 +551,47 @@ describe('GoogleOidcIdentityProvider.authorizationUrl', () => {
       code_challenge_method: 'S256',
       prompt: 'select_account',
     });
+  });
+
+  it('asks for a fresh login with prompt=login and max_age=0 only when re-authenticating (NFR-04)', () => {
+    const url = new URL(
+      provider().authorizationUrl({
+        state: 'the-state',
+        nonce: 'the-nonce',
+        codeVerifier: 'the-verifier',
+        reauthenticate: true,
+      }),
+    );
+
+    expect(url.searchParams.get('prompt')).toBe('login');
+    expect(url.searchParams.get('max_age')).toBe('0');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      client_id: google.clientId,
+      redirect_uri: REDIRECT_URI,
+      response_type: 'code',
+      scope: 'openid email profile',
+      state: 'the-state',
+      nonce: 'the-nonce',
+      code_challenge: createHash('sha256').update('the-verifier').digest('base64url'),
+      code_challenge_method: 'S256',
+      prompt: 'login',
+      max_age: '0',
+    });
+  });
+
+  it('keeps select_account and sends no max_age for sign-in, also with reauthenticate false (NFR-04)', () => {
+    for (const reauthenticate of [undefined, false]) {
+      const url = new URL(
+        provider().authorizationUrl({
+          state: 's',
+          nonce: 'n',
+          codeVerifier: 'v',
+          ...(reauthenticate === undefined ? {} : { reauthenticate }),
+        }),
+      );
+      expect(url.searchParams.get('prompt')).toBe('select_account');
+      expect(url.searchParams.has('max_age')).toBe(false);
+    }
   });
 
   it("points at Google's authorization endpoint when configured with it", () => {

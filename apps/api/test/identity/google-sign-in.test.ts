@@ -353,7 +353,11 @@ describe('GET /auth/google/callback', () => {
     expect(await displayNameOf('ana@gmail.com')).toBe('Ana Gómez');
     const profile = await profileOf(harness, response);
     expect(profile.status).toBe(200);
-    expect(profile.body).toMatchObject({ displayName: 'Ana Gómez', email: 'ana@gmail.com' });
+    expect(profile.body).toMatchObject({
+      displayName: 'Ana Gómez',
+      email: 'ana@gmail.com',
+      deletionReauth: 'google',
+    });
   });
 
   it.each([
@@ -374,7 +378,10 @@ describe('GET /auth/google/callback', () => {
       expect(response.status).toBe(302);
       expect(response.headers.location).toBe(`${LINK_BASE_URL}/en`);
       expect(await displayNameOf('ana@gmail.com')).toBeNull();
-      expect((await profileOf(harness, response)).body).toMatchObject({ displayName: null });
+      expect((await profileOf(harness, response)).body).toMatchObject({
+        displayName: null,
+        deletionReauth: 'google',
+      });
     },
   );
 

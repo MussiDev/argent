@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { CompleteDeletionReauth } from '../../src/identity/application/complete-deletion-reauth';
 import { CompleteGoogleSignIn } from '../../src/identity/application/complete-google-sign-in';
 import { CreateSignInChallenge } from '../../src/identity/application/create-sign-in-challenge';
 import { GetCurrentSession } from '../../src/identity/application/get-current-session';
@@ -16,6 +17,7 @@ import type { UserRepository } from '../../src/identity/application/ports/user-r
 import { StartSession } from '../../src/identity/application/start-session';
 import { Email } from '../../src/identity/domain/email';
 import { DuplicateEmail, IdentityAlreadyLinked } from '../../src/identity/domain/errors';
+import { DrizzleDeletionGrantRepository } from '../../src/identity/infrastructure/db/drizzle-deletion-grant-repository';
 import { DrizzleSessionRepository } from '../../src/identity/infrastructure/db/drizzle-session-repository';
 import { DrizzleSignInChallengeRepository } from '../../src/identity/infrastructure/db/drizzle-sign-in-challenge-repository';
 import { DrizzleUnitOfWork } from '../../src/identity/infrastructure/db/drizzle-unit-of-work';
@@ -55,6 +57,7 @@ const CLAIMS: GoogleClaims = {
   emailVerified: true,
   hostedDomain: null,
   name: null,
+  authTime: null,
 };
 const STATE: OAuthState = {
   stateHash: 'state-hash',
@@ -63,6 +66,9 @@ const STATE: OAuthState = {
   codeVerifier: 'verifier',
   timeZone: 'America/Cordoba',
   language: 'en',
+  purpose: 'sign_in',
+  userId: null,
+  sessionFamilyId: null,
   createdAt: NOW,
   expiresAt: new Date(NOW.getTime() + 10 * 60 * 1000),
 };
@@ -98,6 +104,13 @@ function completeWith(unitOfWork: UnitOfWork, claims: GoogleClaims = CLAIMS): Co
     }),
     createSignInChallenge: new CreateSignInChallenge({
       signInChallenges: new DrizzleSignInChallengeRepository(connection.db),
+      tokenGenerator,
+      clock,
+    }),
+    completeDeletionReauth: new CompleteDeletionReauth({
+      identities: new DrizzleUserIdentityRepository(connection.db),
+      sessions: new DrizzleSessionRepository(connection.db),
+      deletionGrants: new DrizzleDeletionGrantRepository(connection.db),
       tokenGenerator,
       clock,
     }),
@@ -268,7 +281,12 @@ describe('concurrent Google callbacks', () => {
 
     const result = await completeWith(failingInsert, named).execute(INPUT);
 
-    expect(result).toEqual({ outcome: 'failed', reason: 'conflict', language: 'en' });
+    expect(result).toEqual({
+      outcome: 'failed',
+      reason: 'conflict',
+      language: 'en',
+      purpose: 'sign_in',
+    });
     expect(created).toEqual(['Race Runner', 'Race Runner']);
     expect(await count('users')).toBe(0);
   });
@@ -309,6 +327,7 @@ describe('concurrent Google callbacks', () => {
       outcome: 'failed',
       reason: 'another_identity_linked',
       language: 'en',
+      purpose: 'sign_in',
     });
     expect(await count('users')).toBe(1);
     expect(await count('user_identities')).toBe(1);
@@ -326,7 +345,12 @@ describe('concurrent Google callbacks', () => {
     const result = await completeWith(alwaysConflicting).execute(INPUT);
 
     expect(runs).toBe(2);
-    expect(result).toEqual({ outcome: 'failed', reason: 'conflict', language: 'en' });
+    expect(result).toEqual({
+      outcome: 'failed',
+      reason: 'conflict',
+      language: 'en',
+      purpose: 'sign_in',
+    });
   });
 
   it('lets an unexpected database fault through instead of turning it into a failure redirect', async () => {
@@ -362,6 +386,7 @@ describe('concurrent Google callbacks', () => {
       emailVerified: true,
       hostedDomain: null,
       name: null,
+      authTime: null,
     }).execute(INPUT);
 
     expect(await count('user_identities')).toBe(0);

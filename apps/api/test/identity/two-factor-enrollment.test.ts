@@ -3,6 +3,7 @@ import express, { type Express, type RequestHandler } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createIdentityInfrastructure, type IdentityInfrastructure } from '../../src/identity';
+import { CompleteDeletionReauth } from '../../src/identity/application/complete-deletion-reauth';
 import { CompleteGoogleSignIn } from '../../src/identity/application/complete-google-sign-in';
 import { CreateSignInChallenge } from '../../src/identity/application/create-sign-in-challenge';
 import { DisableTwoFactor } from '../../src/identity/application/disable-two-factor';
@@ -538,6 +539,9 @@ describe('POST /auth/2fa/setup and /auth/2fa/enable (AC-01, AC-02)', () => {
             codeVerifier: 'verifier',
             timeZone: 'UTC',
             language: 'en',
+            purpose: 'sign_in',
+            userId: null,
+            sessionFamilyId: null,
             createdAt: now,
             expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
           }),
@@ -551,6 +555,7 @@ describe('POST /auth/2fa/setup and /auth/2fa/enable (AC-01, AC-02)', () => {
             emailVerified: true,
             hostedDomain: null,
             name: null,
+            authTime: null,
           }),
       },
       tokenGenerator: infrastructure.tokenGenerator,
@@ -558,6 +563,13 @@ describe('POST /auth/2fa/setup and /auth/2fa/enable (AC-01, AC-02)', () => {
       startSession,
       createSignInChallenge: new CreateSignInChallenge({
         signInChallenges: infrastructure.signInChallenges,
+        tokenGenerator: infrastructure.tokenGenerator,
+        clock: harness.clock,
+      }),
+      completeDeletionReauth: new CompleteDeletionReauth({
+        identities: infrastructure.identities,
+        sessions: infrastructure.sessions,
+        deletionGrants: infrastructure.deletionGrants,
         tokenGenerator: infrastructure.tokenGenerator,
         clock: harness.clock,
       }),

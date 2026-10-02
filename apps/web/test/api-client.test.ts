@@ -346,6 +346,7 @@ describe('api client: two-factor authentication', () => {
     [409, 'TWO_FACTOR_SETUP_REQUIRED', 'twoFactorSetupRequired'],
     [503, 'TWO_FACTOR_UNAVAILABLE', 'retryLater'],
     [429, 'RATE_LIMITED', 'retryLater'],
+    [401, 'REAUTHENTICATION_REQUIRED', 'reauthenticationRequired'],
   ] as const)('maps %i %s to the message key %s', async (status, code, messageKey) => {
     const { client } = clientWith(jsonResponse(status, { code }));
 
@@ -441,6 +442,7 @@ describe('api client: two-factor authentication', () => {
     displayName: null,
     email: 'ana@example.com',
     twoFactorEnabled: false,
+    deletionReauth: 'password',
     preferences: {
       defaultRateType: 'blue',
       displayCurrency: 'ARS',
@@ -501,6 +503,93 @@ describe('api client: two-factor authentication', () => {
       ok: false,
       code: 'VALIDATION_FAILED',
       messageKey: 'validationFailed',
+    });
+  });
+
+  describe('account deletion (DISC-001-01f FR-01)', () => {
+    it('deletes the account with POST /profile/delete, the cookies, the CSRF header and a 204', async () => {
+      const { client, fetch } = clientWith(new Response(null, { status: 204 }));
+
+      const result = await client.deleteMyAccount({ password: 'pw', secondFactorCode: '123456' });
+
+      expect(result).toEqual({ ok: true, data: undefined });
+      const { url, init } = requestAt(fetch, 0);
+      expect(url).toBe(`${BASE_URL}/profile/delete`);
+      expect(init.method).toBe('POST');
+      expect(init.credentials).toBe('include');
+      const headers = new Headers(init.headers);
+      expect(headers.get('X-Requested-With')).toBe('argent');
+      expect(headers.get('Content-Type')).toBe('application/json');
+      expect(JSON.parse(init.body as string)).toEqual({
+        password: 'pw',
+        secondFactorCode: '123456',
+      });
+    });
+
+    it('starts the Google re-authentication with POST and an empty body', async () => {
+      const authorizationUrl = 'https://accounts.google.test/authorize?state=x';
+      const { client, fetch } = clientWith(jsonResponse(200, { authorizationUrl }));
+
+      const result = await client.startDeletionReauth();
+
+      expect(result).toEqual({ ok: true, data: { authorizationUrl } });
+      const { url, init } = requestAt(fetch, 0);
+      expect(url).toBe(`${BASE_URL}/profile/delete/google/start`);
+      expect(init.method).toBe('POST');
+      expect(init.credentials).toBe('include');
+      expect(new Headers(init.headers).get('X-Requested-With')).toBe('argent');
+      expect(JSON.parse(init.body as string)).toEqual({});
+    });
+
+    it.each([
+      [401, 'REAUTHENTICATION_REQUIRED', 'reauthenticationRequired'],
+      [401, 'INVALID_CREDENTIALS', 'invalidCredentials'],
+      [400, 'TOTP_INVALID', 'codeInvalid'],
+      [429, 'RATE_LIMITED', 'retryLater'],
+    ] as const)('maps %i %s of the deletion to %s (sad path)', async (status, code, messageKey) => {
+      const { client, fetch } = clientWith(jsonResponse(status, { code }));
+
+      const result = await client.deleteMyAccount({ password: 'pw' });
+
+      expect(result).toEqual({ ok: false, code, messageKey });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('maps a start body that does not parse to INTERNAL (sad path)', async () => {
+      const { client } = clientWith(jsonResponse(200, { authorizationUrl: 42 }));
+
+      const result = await client.startDeletionReauth();
+
+      expect(result).toEqual({ ok: false, code: 'INTERNAL', messageKey: 'unexpected' });
+    });
+
+    it('refreshes the session once when the access token is refused', async () => {
+      const { client, fetch } = clientWith(
+        jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+        jsonResponse(401, { code: 'UNAUTHENTICATED' }),
+        jsonResponse(200, { status: 'refreshed' }),
+        new Response(null, { status: 204 }),
+      );
+
+      const result = await client.deleteMyAccount({ password: 'pw' });
+
+      expect(result).toEqual({ ok: true, data: undefined });
+      expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+        `${BASE_URL}/profile/delete`,
+        `${BASE_URL}/profile/delete`,
+        `${BASE_URL}/auth/refresh`,
+        `${BASE_URL}/profile/delete`,
+      ]);
+    });
+
+    it('returns NETWORK when the API cannot be reached (sad path)', async () => {
+      const { client } = clientWith(new TypeError('Failed to fetch'));
+
+      expect(await client.deleteMyAccount({ password: 'pw' })).toMatchObject({
+        ok: false,
+        code: 'NETWORK',
+        messageKey: 'network',
+      });
     });
   });
 

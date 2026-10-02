@@ -9,6 +9,7 @@ import { GOOGLE_CALLBACK_PATH } from '../security/google-oidc-identity-provider'
 import {
   OAUTH_BINDING_COOKIE,
   OAUTH_BINDING_COOKIE_OPTIONS,
+  setDeletionGrantCookie,
   setSessionCookies,
   setSignInChallengeCookie,
 } from './session-cookies';
@@ -35,6 +36,8 @@ export function createGoogleRoutes({
   const router = Router();
   const base = webBaseUrl.replace(/\/+$/, '');
   const failureUrl = (language: Language) => `${base}/${language}/sign-in?error=google_failed`;
+  const deletionScreen = (language: Language, reauth: 'ready' | 'failed') =>
+    `${base}/${language}/settings/delete-account?reauth=${reauth}`;
 
   router.get(
     '/auth/google/start',
@@ -66,8 +69,27 @@ export function createGoogleRoutes({
           binding: cookies[OAUTH_BINDING_COOKIE],
         });
         if (result.outcome === 'failed') {
+          // Only a consumed delete_account state is sent back to the delete-account screen (A-11).
+          if (result.purpose === 'delete_account') {
+            logger.warn(
+              { requestId, ip, reason: result.reason },
+              'deletion re-authentication failed',
+            );
+            res.redirect(deletionScreen(result.language ?? DEFAULT_LANGUAGE, 'failed'));
+            return;
+          }
           logger.warn({ requestId, ip, reason: result.reason }, 'google sign-in failed');
           res.redirect(failureUrl(result.language ?? DEFAULT_LANGUAGE));
+          return;
+        }
+        if (result.outcome === 'deletion_grant_issued') {
+          logger.info(
+            { requestId, ip, userId: result.userId },
+            'deletion re-authentication grant issued',
+          );
+          // The grant travels in its cookie, never in the URL (A-6).
+          setDeletionGrantCookie(res, result.token);
+          res.redirect(deletionScreen(result.language, 'ready'));
           return;
         }
         if (result.outcome === 'second_factor_required') {

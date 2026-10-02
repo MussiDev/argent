@@ -9,6 +9,7 @@ import { trustedHeaders } from './test-env';
 
 export const ACCESS_COOKIE = '__Host-argent_at';
 export const REFRESH_COOKIE = '__Secure-argent_rt';
+export const DELETION_GRANT_COOKIE = '__Secure-argent_del';
 
 export interface ParsedCookie {
   name: string;
@@ -144,4 +145,40 @@ export async function seedUser(
   });
   if (verified) await users.markEmailVerified(user.id, new Date());
   return user.id;
+}
+
+/** `Cookie` header value that carries a deletion grant next to the session cookies. */
+export function cookieHeaderWithGrant(
+  cookies: Partial<SessionCookies>,
+  grantToken: string,
+): string {
+  const pairs = [
+    cookieHeader(cookies),
+    `${DELETION_GRANT_COOKIE}=${encodeURIComponent(grantToken)}`,
+  ];
+  return pairs.filter((pair) => pair !== '').join('; ');
+}
+
+export interface DeleteAccountOptions {
+  body?: unknown;
+  /** A grant token sent in its cookie, as the browser does after Google re-authentication. */
+  grantToken?: string;
+  ip?: string;
+}
+
+/** `POST /profile/delete` as a browser sends it. */
+export function deleteAccount(
+  app: Express,
+  cookies: Partial<SessionCookies>,
+  { body = {}, grantToken, ip }: DeleteAccountOptions = {},
+) {
+  const call = request(app)
+    .post('/profile/delete')
+    .set(trustedHeaders)
+    .set(
+      'Cookie',
+      grantToken === undefined ? cookieHeader(cookies) : cookieHeaderWithGrant(cookies, grantToken),
+    );
+  if (ip) call.set('X-Forwarded-For', ip);
+  return call.send(body as object);
 }

@@ -225,12 +225,28 @@ describe('DrizzleUserIdentityRepository', () => {
 });
 
 describe('DrizzleOAuthStateRepository', () => {
+  it('stores a delete_account state with its user and session family and returns them when consumed, once', async () => {
+    const userId = (await users.create(newUser('ana@example.com'))).id;
+    const sessionFamilyId = '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b';
+    await oauthStates.create(newState({ purpose: 'delete_account', userId, sessionFamilyId }));
+
+    const consumed = await oauthStates.consume('state-hash', 'binding-hash', NOW);
+
+    expect(consumed).toMatchObject({ purpose: 'delete_account', userId, sessionFamilyId });
+    expect(await oauthStates.consume('state-hash', 'binding-hash', NOW)).toBeNull();
+  });
+
   it('consume returns the state once; a second consume returns null (sad path)', async () => {
     await oauthStates.create(newState());
 
     const consumed = await oauthStates.consume('state-hash', 'binding-hash', NOW);
 
-    expect(consumed).toMatchObject(newState());
+    expect(consumed).toMatchObject({
+      ...newState(),
+      purpose: 'sign_in',
+      userId: null,
+      sessionFamilyId: null,
+    });
     expect(consumed?.createdAt).toBeInstanceOf(Date);
     expect(await oauthStates.consume('state-hash', 'binding-hash', NOW)).toBeNull();
   });

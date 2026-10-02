@@ -30,6 +30,12 @@ const SECRET_KEYS = [
   'secret',
   'otpauthUri',
   'recoveryCodes',
+  // Account deletion (DISC-001-01f): the second-factor code, the re-authentication grant and the
+  // Google URL that carries the state, nonce and code challenge.
+  'secondFactorCode',
+  'grantToken',
+  'grant',
+  'authorizationUrl',
 ];
 
 /**

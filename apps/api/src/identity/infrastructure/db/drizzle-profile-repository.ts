@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type {
   Profile,
   ProfileChanges,
@@ -11,6 +11,8 @@ const PROFILE_COLUMNS = {
   userId: users.id,
   email: users.email,
   displayName: users.displayName,
+  // Only whether a hash exists: the hash never leaves the repository.
+  hasPassword: sql<boolean>`${users.passwordHash} is not null`,
   defaultRateType: users.defaultRateType,
   displayCurrency: users.displayCurrency,
   timeZone: users.timeZone,

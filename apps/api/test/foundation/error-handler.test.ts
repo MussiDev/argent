@@ -1,8 +1,9 @@
-import { AppError } from '@pesly/shared';
+import { AppError, ERROR_CODES } from '@pesly/shared';
 import { Router } from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app';
+import { ReauthenticationRequired } from '../../src/identity/domain/errors';
 import { createLogger } from '../../src/shared/logging/logger';
 import type { Env } from '../../src/shared/config/env';
 import { productionEnv, testEnv } from '../helpers/test-env';
@@ -37,6 +38,10 @@ function buildApp(env: Env, lines: string[] = []) {
   });
   router.get('/category-kind', () => {
     throw new AppError('CATEGORY_PARENT_KIND_MISMATCH');
+  });
+
+  router.get('/reauth', () => {
+    throw new ReauthenticationRequired();
   });
   const logger = createLogger({
     level: 'info',
@@ -104,6 +109,14 @@ describe('error handler', () => {
 
     expect(response.status).toBe(status);
     expect(response.body).toEqual({ code });
+  });
+
+  it('maps REAUTHENTICATION_REQUIRED to 401 with only its code (AC-09)', async () => {
+    expect(ERROR_CODES).toContain('REAUTHENTICATION_REQUIRED');
+    const response = await request(buildApp(testEnv())).get('/reauth');
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ code: 'REAUTHENTICATION_REQUIRED' });
   });
 
   it('answers unknown routes with 404 NOT_FOUND', async () => {

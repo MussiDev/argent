@@ -64,6 +64,13 @@
       "when": 1790902441319,
       "tag": "0009_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790943164350,
+      "tag": "0010_account_deletion",
+      "breakpoints": true
     }
   ]
 }

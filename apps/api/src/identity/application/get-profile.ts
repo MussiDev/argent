@@ -17,6 +17,7 @@ export function profileView(profile: Profile, twoFactorEnabled: boolean): Profil
     displayName: profile.displayName,
     email: profile.email,
     twoFactorEnabled,
+    deletionReauth: profile.hasPassword ? 'password' : 'google',
     preferences: {
       defaultRateType: profile.defaultRateType,
       displayCurrency: profile.displayCurrency,

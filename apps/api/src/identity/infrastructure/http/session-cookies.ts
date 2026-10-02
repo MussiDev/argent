@@ -2,6 +2,7 @@ import type { CookieOptions } from 'express';
 import type { ResponseFacade } from '../../../shared/http/validate';
 import { SESSION_IDLE_LIMIT_MS } from '../../application/get-current-session';
 import { SIGN_IN_CHALLENGE_TTL_MS } from '../../application/create-sign-in-challenge';
+import { DELETION_GRANT_TTL_MS } from '../../application/delete-user';
 import type { SessionTokens } from '../../application/start-session';
 
 /** `__Host-`: the browser enforces Secure, Path=/ and no Domain, so it stays host-only (NFR-11). */
@@ -47,6 +48,28 @@ export function setSignInChallengeCookie<TBody>(res: ResponseFacade<TBody>, toke
 
 export function clearSignInChallengeCookie<TBody>(res: ResponseFacade<TBody>): void {
   res.clearCookie(SIGN_IN_CHALLENGE_COOKIE, SIGN_IN_CHALLENGE_COOKIE_OPTIONS);
+}
+
+/**
+ * Carries the single-use grant a Google re-authentication earned for deleting the account.
+ * `Strict` (the web app is its only sender) and sent only to `/profile/delete`, where it is read.
+ */
+export const DELETION_GRANT_COOKIE = '__Secure-argent_del';
+export const DELETION_GRANT_COOKIE_OPTIONS: CookieOptions = {
+  ...BASE_OPTIONS,
+  path: '/profile/delete',
+};
+
+/** Lives as long as the grant it carries. */
+export function setDeletionGrantCookie<TBody>(res: ResponseFacade<TBody>, token: string): void {
+  res.cookie(DELETION_GRANT_COOKIE, token, {
+    ...DELETION_GRANT_COOKIE_OPTIONS,
+    maxAge: DELETION_GRANT_TTL_MS,
+  });
+}
+
+export function clearDeletionGrantCookie<TBody>(res: ResponseFacade<TBody>): void {
+  res.clearCookie(DELETION_GRANT_COOKIE, DELETION_GRANT_COOKIE_OPTIONS);
 }
 
 export function setSessionCookies<TBody>(res: ResponseFacade<TBody>, tokens: SessionTokens): void {

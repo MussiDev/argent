@@ -20,6 +20,7 @@ const ALL_TABLES = [
   'auth_attempts',
   'categories',
   'category_defaults_seeded',
+  'deletion_grants',
   'email_outbox',
   'oauth_states',
   'one_time_tokens',

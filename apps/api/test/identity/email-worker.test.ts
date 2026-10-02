@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEmailWorker } from '../../src/identity';
 import type { AttemptPurger } from '../../src/identity/application/ports/attempt-purger';
 import { Email } from '../../src/identity/domain/email';
+import { DrizzleDeletionGrantRepository } from '../../src/identity/infrastructure/db/drizzle-deletion-grant-repository';
 import { DrizzleOAuthStateRepository } from '../../src/identity/infrastructure/db/drizzle-oauth-state-repository';
 import { DrizzleSignInChallengeRepository } from '../../src/identity/infrastructure/db/drizzle-sign-in-challenge-repository';
 import { DrizzleUserRepository } from '../../src/identity/infrastructure/db/drizzle-user-repository';
@@ -185,6 +186,7 @@ describe('EmailWorker', () => {
       attemptPurger: purger,
       oauthStatePurger: { purgeExpired: () => Promise.resolve(0) },
       signInChallengePurger: { purgeExpired: () => Promise.resolve(0) },
+      deletionGrantPurger: { purgeExpired: () => Promise.resolve(0) },
       clock,
       logger: silent,
       webBaseUrl: LINK_BASE_URL,
@@ -281,9 +283,44 @@ describe('EmailWorker', () => {
     expect(left.rows.map((row) => row.token_hash)).toEqual(['live']);
   });
 
+  it('purges expired deletion_grants rows and keeps live ones', async () => {
+    const clock = new MutableClock(new Date('2026-10-02T12:00:00.000Z'));
+    const grants = new DrizzleDeletionGrantRepository(connection.db);
+    const at = (minutes: number) => new Date(clock.now().getTime() + minutes * 60 * 1000);
+    for (const [tokenHash, expiresAt] of [
+      ['expired', at(-1)],
+      ['expiring-now', at(0)],
+      ['live', at(1)],
+    ] as const) {
+      const userId = await createUser(`${tokenHash}@example.com`);
+      await grants.replace({
+        tokenHash,
+        userId,
+        sessionFamilyId: '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b',
+        credentialsVersion: 0,
+        expiresAt,
+      });
+    }
+    const worker = createEmailWorker({
+      db: connection.db,
+      env: { WEB_BASE_URL: LINK_BASE_URL },
+      logger: silent,
+      transport: new CapturingTransport(),
+      clock,
+    });
+
+    await worker.runOnce();
+
+    const left = await connection.pool.query<{ token_hash: string }>(
+      'select token_hash from deletion_grants order by token_hash',
+    );
+    expect(left.rows.map((row) => row.token_hash)).toEqual(['live']);
+  });
+
   it('runs every purge even when an earlier one fails, and logs each failure', async () => {
     const clock = new MutableClock(new Date('2026-09-30T12:00:00.000Z'));
     const purged: string[] = [];
+    const purgedGrants: string[] = [];
     const lines: string[] = [];
     const logger = createLogger({
       level: 'debug',
@@ -301,6 +338,12 @@ describe('EmailWorker', () => {
           return Promise.resolve(0);
         },
       },
+      deletionGrantPurger: {
+        purgeExpired: (now) => {
+          purgedGrants.push(now.toISOString());
+          return Promise.resolve(0);
+        },
+      },
       clock,
       logger,
       webBaseUrl: LINK_BASE_URL,
@@ -309,6 +352,7 @@ describe('EmailWorker', () => {
     await worker.runOnce();
 
     expect(purged).toEqual(['2026-09-30T12:00:00.000Z']);
+    expect(purgedGrants).toEqual(['2026-09-30T12:00:00.000Z']);
     const failures = logEntries(lines).filter((entry) => entry.msg === 'retention purge failed');
     expect(failures.map((entry) => entry.purge)).toEqual(['attempts', 'oauthStates']);
   });

@@ -352,7 +352,11 @@ describe('POST /auth/register', () => {
       .set('Cookie', cookieHeader(sessionFrom(signedIn)));
 
     expect(profile.status).toBe(200);
-    expect(profile.body).toMatchObject({ displayName: 'Ana Pérez', email: 'ana@example.com' });
+    expect(profile.body).toMatchObject({
+      displayName: 'Ana Pérez',
+      email: 'ana@example.com',
+      deletionReauth: 'password',
+    });
   });
 
   it('answers an existing email exactly as a new one and keeps its display name (AC-09, NFR-02)', async () => {

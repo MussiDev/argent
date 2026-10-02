@@ -5,7 +5,7 @@
 | Ticket | DISC-001-03b |
 | Tracker | none |
 | Date | 2026-10-02 |
-| PRD loops | 1 |
+| PRD loops | 2 |
 | Loops since last human decision | 0 |
 
 ## Context and Problem
@@ -33,7 +33,8 @@ maps every original ID to its new one.
   it to the other currency, and the source of that rate (automatic with its rate type, or
   manual).
 - FR-04: The system must prefill the rate of a new expense or income with the latest stored sell
-  price of the user's default rate type (PRD 01, FR-10).
+  price of the user's default rate type (PRD 01, FR-10), and must leave the rate empty and require a
+  manual rate when no rate has ever been stored.
 - FR-05: The system must allow a user to replace the prefilled rate with a manual rate before
   saving the movement.
 - FR-06: The system must keep the rate stored on a movement unchanged when market rates are
@@ -48,6 +49,10 @@ maps every original ID to its new one.
 - FR-11: The system must show the age of the stored rate on the entry form when it is older than
   2 hours.
 - FR-12: The system must refuse to delete an account or a category that has movements.
+- FR-13: The system must delete all of a user's movements, before the user, when the user is
+  deleted (PRD 01, account deletion), in the same transaction as the deletion.
+- FR-14: The system must include movements in the Available and Net worth totals of the account
+  list (DISC-001-02a FR-10 and FEAT-003).
 
 ## Non-Functional Requirements
 - NFR-01: Amounts must be stored as 64-bit integers in minor units (1 unit = 0.01 ARS or 0.01
@@ -104,6 +109,19 @@ maps every original ID to its new one.
 - AC-19 (FR-12): IF a user deletes a category that is used by at least one movement, THEN THE
   system SHALL reject the deletion and offer to archive it instead.
 
+- AC-20 (FR-04): WHEN a user opens the form of a new expense or income and no rate has ever been
+  stored, THE system SHALL show the rate empty and require a manual rate.
+- AC-21 (FR-04): IF a user saves an expense or income with no stored rate and no manual rate, THEN
+  THE system SHALL reject it and store nothing.
+- AC-22 (FR-13): WHEN a user who has movements, accounts and categories deletes their account, THE
+  system SHALL delete the user's movements before the user, and no row of that user SHALL remain
+  in the movements, accounts or categories tables.
+- AC-23 (FR-13): IF deleting the movements of a user fails, THEN THE system SHALL roll back the
+  whole deletion and keep the user, their accounts and their movements.
+- AC-24 (FR-14): WHEN an expense of 100.00 is saved on an included account with a balance of
+  500.00, THE system SHALL show Available and Net worth totals that are 100.00 lower than before
+  the expense.
+
 ## Out of Scope
 - Transfers and currency exchanges (DISC-001-03c).
 - Tags and filters on the list (DISC-001-03d).
@@ -125,17 +143,19 @@ maps every original ID to its new one.
 - **Balance slows down as movements grow** → NFR-06 sets the budget and the perf test of
   DISC-001-02a is re-run against the real adapter.
 - **Deleting a user conflicts with the restricting keys that protect accounts and categories** →
-  decided in this ticket's PLAN (see the parent index, pending decisions); it must not break the
-  erasure guard of DISC-001-01f.
-- **No stored rate exists yet** → undefined in the original text; listed as a pending decision
-  in the parent index and resolved before this ticket's spec.
+  decided (2026-10-02): the keys stay ON DELETE RESTRICT and user deletion erases the user's
+  movements first through an ordered erasure step (FR-13), with the policy value of the
+  DISC-001-01f erasure guard.
+- **No stored rate exists yet** → decided (2026-10-02): the form requires a manual rate (FR-04,
+  AC-20, AC-21).
 
 ## Dependencies
 - DISC-001-03a (Exchange Rates, Store and Sync) — the stored rates to prefill (FR-04, FR-11).
 - PRD 01 (Identity & Access) — user default rate type (FR-04), user time zone (FR-09) and access
   control (FR-10, NFR-07).
 - PRD 02 (Accounts & Categories) — accounts, currencies and expense and income categories
-  (FR-01, FR-02, FR-07, FR-12): DISC-001-02a (merged) and DISC-001-02b (must be merged first).
+  (FR-01, FR-02, FR-07, FR-12, FR-14): DISC-001-02a, DISC-001-02b and FEAT-003 (all merged).
+- DISC-001-01f (Account Deletion) — the erasure transaction and the erasure guard that the ordered step of FR-13 joins.
 - PRD 05 (Groups & Expense Splitting) — movements shared through groups (FR-10).
 - PRD 08 (Recurring Payments & Reminders) — future-dated payments (FR-09).
 
@@ -165,3 +185,12 @@ maps every original ID to its new one.
   history half of AC-07, NFR-01 and NFR-02 against the real table. DISC-001-02b deferrals: AC-05
   (renamed category shown on existing movements), AC-06 (archived category kept on movements) and
   AC-10 end to end.
+- 2026-10-02: DEFINE of this ticket (human decisions already on record folded into the requirements):
+  FR-04 now carries "when no rate has ever been stored, the form requires a manual rate" with AC-20 and
+  AC-21; the ordered erasure step is FR-13 with AC-22 and AC-23; the ON DELETE RESTRICT keys of FR-12
+  stay. FR-14 and AC-24 (movements count in the Available and Net worth totals) are not in the original
+  text: they follow from FEAT-003 and the real AccountMovements adapter, and are listed here as added
+  while defining.
+- 2026-10-02: STILL OPEN with the human: which timestamp drives the rate age of FR-11 and AC-11 (the
+  provider's update time or the time of our refresh). The requirement is kept as written until it is
+  decided.

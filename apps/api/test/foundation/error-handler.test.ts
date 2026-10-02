@@ -46,6 +46,12 @@ function buildApp(env: Env, lines: string[] = []) {
   router.get('/archived', () => {
     throw new AppError('ACCOUNT_ARCHIVED');
   });
+  router.get('/fields', () => {
+    throw new AppError('VALIDATION_FAILED', 'detail', ['body.someField']);
+  });
+  router.get('/no-fields', () => {
+    throw new AppError('VALIDATION_FAILED');
+  });
   const logger = createLogger({
     level: 'info',
     destination: { write: (line: string) => lines.push(line) },
@@ -127,6 +133,21 @@ describe('error handler', () => {
 
     expect(response.status).toBe(409);
     expect(response.body).toEqual({ code: 'ACCOUNT_ARCHIVED' });
+  });
+
+  it('emits fields for any AppError that carries them', async () => {
+    const response = await request(buildApp(testEnv())).get('/fields');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ code: 'VALIDATION_FAILED', fields: ['body.someField'] });
+    expect(response.text).not.toContain('detail');
+  });
+
+  it('omits fields for an AppError without them', async () => {
+    const response = await request(buildApp(testEnv())).get('/no-fields');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ code: 'VALIDATION_FAILED' });
   });
 
   it('answers unknown routes with 404 NOT_FOUND', async () => {

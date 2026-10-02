@@ -5,6 +5,7 @@ import {
   listAccountsQuerySchema,
   listAccountsResponseSchema,
   renameAccountRequestSchema,
+  setIncludeInAvailableRequestSchema,
 } from '@pesly/shared';
 import { Router } from 'express';
 import type { RouterFactory } from '../../../app';
@@ -28,6 +29,7 @@ import { GetAccount } from '../../application/get-account';
 import { ListAccounts } from '../../application/list-accounts';
 import { RenameAccount } from '../../application/rename-account';
 import { SetAccountArchived } from '../../application/set-account-archived';
+import { SetIncludeInAvailable } from '../../application/set-include-in-available';
 import { DrizzleAccountRepository } from '../db/drizzle-account-repository';
 import { NoMovementsAdapter } from '../movements/no-movements-adapter';
 import { presentAccount, presentAccountList } from './account-presenter';
@@ -63,6 +65,7 @@ export function createAccountRoutes({
   const listAccounts = new ListAccounts({ accounts, movements });
   const renameAccount = new RenameAccount({ accounts, movements });
   const setArchived = new SetAccountArchived({ accounts, movements });
+  const setIncludeInAvailable = new SetIncludeInAvailable({ accounts, movements });
   const deleteAccount = new DeleteAccount({ accounts, movements });
 
   // Audit lines carry ids only: never the name or any amount.
@@ -90,6 +93,9 @@ export function createAccountRoutes({
             type: body.type,
             currency: body.currency,
             openingBalance: BigInt(body.openingBalance),
+            ...(body.includeInAvailable === undefined
+              ? {}
+              : { includeInAvailable: body.includeInAvailable }),
           });
           audit('account created', requestId, auth, created.id);
           res.status(201).json(presentAccount(created));
@@ -131,6 +137,36 @@ export function createAccountRoutes({
         async ({ params, body }, { res, auth }) => {
           const scope = await scopeOf(policy, auth, 'write');
           res.json(presentAccount(await renameAccount.execute(scope, params.id, body.name)));
+        },
+      ),
+    );
+
+    router.put(
+      '/accounts/:id/include-in-available',
+      validate(
+        {
+          params: accountIdParamsSchema,
+          body: setIncludeInAvailableRequestSchema,
+          response: accountResponseSchema,
+        },
+        async ({ params, body }, { res, auth, requestId }) => {
+          const scope = await scopeOf(policy, auth, 'write');
+          const account = await setIncludeInAvailable.execute(
+            scope,
+            params.id,
+            body.includeInAvailable,
+          );
+          // The boolean is the only setting value logged; never the name or an amount.
+          logger.info(
+            {
+              requestId,
+              userId: auth?.userId,
+              accountId: account.id,
+              includeInAvailable: body.includeInAvailable,
+            },
+            'account include-in-available changed',
+          );
+          res.json(presentAccount(account));
         },
       ),
     );

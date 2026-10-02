@@ -68,14 +68,12 @@ interface MappedError {
 }
 
 function mapError(error: unknown): MappedError {
-  if (error instanceof HttpError) {
+  if (error instanceof AppError) {
+    const status = error instanceof HttpError ? error.status : STATUS_BY_CODE[error.code];
     const body: ErrorResponse = error.fields
       ? { code: error.code, fields: [...error.fields] }
       : { code: error.code };
-    return { status: error.status, body };
-  }
-  if (error instanceof AppError) {
-    return { status: STATUS_BY_CODE[error.code], body: { code: error.code } };
+    return { status, body };
   }
   if (isBodyParserError(error)) {
     // Oversized (413), malformed (400) and unsupported-encoding (415) bodies.

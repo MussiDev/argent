@@ -6,8 +6,8 @@
 | PRD | docs/ddw/prd/prd-FEAT-004.md |
 | Tier | FEATURE |
 | Date | 2026-10-03 |
-| Spec loops | 2 |
-| Loops since last human decision | 2 |
+| Spec loops | 3 |
+| Loops since last human decision | 0 |
 
 ## Summary
 
@@ -17,11 +17,21 @@ and Block 2 builds the app shell. Wave 2 runs in parallel: Blocks 3 to 7 restyle
 by group and build the real home, each consuming only `components/ui/` and tokens, each owning its
 own files and its own message namespace. Wave 3 is Block 8: cross-cutting scans, a mobile-viewport
 e2e spec and the final regression run. No backend, schema or API contract changes: the home reuses
-`listAccounts` and `listMovements` from the existing API client. No new runtime dependency: the
+`listAccounts`, `listMovements`, `listCategories` and `getProfile` from the existing API client. No
+new runtime dependency: the
 theme provider is hand-written, the typeface is loaded with `next/font`, and everything else uses
 the packages already installed.
 
 Design decisions taken here (the PRD leaves them open):
+
+- Home data requests (decision of the user, 2026-10-03, taken in CODE when Block 7 showed that two
+  requests are not enough): the home issues six requests in one `Promise.all` after the session
+  check: `listAccounts` for active and for archived accounts (the API filter is binary, so an
+  account that was archived is only found with `archived: true`, and without it a recent movement
+  on it would be shown in the wrong currency), `listCategories` for active and for archived
+  categories (movements carry only a `categoryId`), `listMovements({ limit: 5 })` and `getProfile`
+  (the user's time zone). Each list request has a fixed limit and nothing polls. The spec and the
+  threat model were amended to match instead of recording a deviation.
 
 - Typeface: Inter through `next/font/google` (downloaded at build, self-hosted, so `font-src 'self'`
   holds), `display: 'swap'`, exposed as `--font-sans`. Chosen over `next/font/local` because it
@@ -89,7 +99,7 @@ Design decisions taken here (the PRD leaves them open):
 | NFR-03 | Strategy: `next/font` emits size-adjusted fallbacks, the pre-paint script prevents a theme flash, the shell draws its final frame while the session check runs, and skeletons occupy the final container; Block 8 records `layout-shift` entries in Playwright on the home, sign-in and movements pages and asserts a total at or below 0.1. |
 | NFR-04 | Strategy: the theme provider is hand-written and the typeface comes from `next/font`; the VERIFY phase checks that `git diff main -- apps/web/package.json` shows no change to `dependencies`, a one-off check for this ticket rather than a permanent test. |
 | NFR-05 | Strategy: Block 8 adds a scan test over `apps/web/src/features` and `apps/web/src/app` that fails on hex, `rgb(`, `hsl(` or `oklch(` literals and on arbitrary-value Tailwind classes, with one allowlist entry for the Google brand logo in `google-sign-in-button.tsx`; Block 6 converts the `ring-[3px]` in `category-pickers.tsx`. |
-| NFR-06 | Strategy: the shell frame with a skeleton renders on first paint, so the skeleton appears within 100 ms; the data path is the session check followed by the accounts and movements requests started in the same tick with `Promise.all` and `limit: 5` on movements, which is two sequential round trips with no further waterfall; a test asserts both data requests start before either resolves. |
+| NFR-06 | Strategy: the shell frame with a skeleton renders on first paint, so the skeleton appears within 100 ms; the data path is the session check followed by the six home data requests (accounts active and archived, categories active and archived, movements, profile) started in the same tick with `Promise.all` and `limit: 5` on movements, which is two sequential round trips with no further waterfall because the six run in parallel and the slowest one bounds the wait; a test asserts all six data requests start before any resolves. |
 | NFR-07 | Strategy: every block ships its own Vitest tests (the `design-system` page and the theme script count toward coverage, so they are tested), and `pnpm test:coverage` runs as the closing gate of Block 8 against the 80% floor. |
 
 ## Dependencies between blocks
@@ -125,8 +135,9 @@ Design decisions taken here (the PRD leaves them open):
   focus ring, same exported APIs; `alert.tsx` gains `success`, `warning` and `info` variants.
 - `apps/web/src/components/ui/badge.tsx`, `skeleton.tsx`, `empty-state.tsx`, `page-header.tsx`,
   `list-row.tsx`, `amount.tsx`, `error-state.tsx` (new) — `amount` wraps `formatMoney` from
-  `apps/web/src/lib/format-amount.ts` and adds the tabular-numeral class plus a sign or icon for
-  income and expense; `error-state` is the shared failure view with a retry button.
+  `@pesly/shared`, the formatter the accounts and movements screens already use, so a figure reads
+  the same everywhere (the investments screens keep `apps/web/src/lib/format-amount.ts`), and adds
+  the tabular-numeral class plus a sign or icon for income and expense; `error-state` is the shared failure view with a retry button.
 - `apps/web/src/features/auth/components/form-alert.tsx`, `auth-field.tsx` (modified) — restyle
   only, API frozen.
 - `apps/web/src/app/[locale]/design-system/page.tsx` (new) — reference page; calls `notFound()`
@@ -438,8 +449,8 @@ both themes at 360 px and 1280 px.
 
 **Files**
 - `apps/web/src/app/[locale]/(app)/page.tsx` (modified) — renders the home container.
-- `apps/web/src/features/home/containers/home-container.tsx` (new) — fetches accounts and the five
-  latest movements.
+- `apps/web/src/features/home/containers/home-container.tsx` (new) — fetches accounts (active and
+  archived), categories (active and archived), the five latest movements and the profile.
 - `apps/web/src/features/home/components/home-screen.tsx`, `balance-summary.tsx`,
   `recent-movements.tsx`, `quick-actions.tsx` (new) — presentational, no data fetching.
 - `apps/web/messages/en.json`, `apps/web/messages/es.json` (modified) — `home.*` namespace only.
@@ -449,19 +460,29 @@ both themes at 360 px and 1280 px.
 - `apps/web/test/home-container.test.tsx`, `home-components.test.tsx` (new).
 
 **Logic**
-The container calls `listAccounts` and `listMovements({ limit: 5 })` in the same tick, then renders
-the balance per currency from `availableTotals` of the accounts response (no client-side summing),
-the five latest movements (the API already orders them newest first) and quick actions to add a
-movement and an account. It reuses `formatAmount` from `features/accounts/format-amount.ts`, the
-`amount` component, and `categoryLabel` from `features/categories/category-display.ts`. A user with
-no accounts sees an empty state with an action to create the first account. The home is a client
-container because all financial data goes through the Express API.
+The container calls, in the same tick, `listAccounts` for active accounts and for archived
+accounts, `listCategories` for active and for archived categories, `listMovements({ limit: 5 })`
+and `getProfile`, then renders the balance per currency from `availableTotals` of the active
+accounts response (no client-side summing), the five latest movements (the API already orders them
+newest first) and quick actions to add a movement and an account. Account names and currencies come
+from the first 100 accounts of each list and category names from the first 100 of each list, so a
+movement on an account beyond those limits is a known limit. Dates are shown in the user's time
+zone from the profile. It reuses the `amount` component and `categoryLabel` from
+`features/categories/category-display.ts`. A user with no accounts sees an empty state with an
+action to create the first account. The home is a client container because all financial data goes
+through the Express API.
 
 **Error handling**
-- The accounts or movements request fails: the home shows the shared error state with a retry
-  action and renders no balance.
+- The active accounts or movements request fails: the home shows the shared error state with a
+  retry action and renders no balance.
 - The session is unauthenticated: the container redirects to `/sign-in`, as the other containers
   do.
+- A categories request fails: the rows show an unknown-category placeholder and the home still
+  renders, because a category name is not needed to read a balance.
+- The profile request fails: dates use the browser's time zone, and UTC if that zone is invalid.
+- The archived accounts request fails, or a movement is on an account outside the loaded lists: the
+  row shows an unknown-account label and its figure without a currency symbol, never a wrong
+  currency.
 
 **Required tests**
 - [ ] A loaded home shows the balance per currency and the five most recent movements — validates
@@ -469,8 +490,16 @@ container because all financial data goes through the Express API.
 - [ ] A user with no accounts sees an empty state with a create-account action — validates AC-19.
 - [ ] A failed accounts or movements request shows the error state, retry works and no stale
       balance is shown — validates AC-20.
-- [ ] While loading the home shows a skeleton from its first render, and both requests start before
-      either resolves — validates AC-21 and NFR-06.
+- [ ] While loading the home shows a skeleton from its first render, and all six data requests
+      start before any resolves — validates AC-21 and NFR-06.
+- [ ] A movement on an archived account shows that account's real currency — validates AC-18 for
+      archived accounts.
+- [ ] Sad path: a failed categories request leaves the rows with the unknown-category placeholder
+      and no error screen.
+- [ ] Sad path: a failed profile request renders dates in the browser's time zone, and in UTC when
+      that zone is invalid.
+- [ ] Sad path: a movement on an unknown account shows the unknown-account label and its figure
+      without a currency symbol.
 - [ ] An unauthenticated response redirects to `/sign-in` — sad path for the unauthenticated
       session.
 - [ ] The retry button is disabled while a request is in flight, so repeated clicks send one

@@ -23,8 +23,9 @@
   browser runs only when the CSP nonce matches.
 - Browser `localStorage` → page script: the stored `pesly-theme` value is read back and is
   controllable by anything running on the origin.
-- Browser → Express API at `API_ORIGIN`: the home container calls `listAccounts` and
-  `listMovements` with session cookies, carrying financial data.
+- Browser → Express API at `API_ORIGIN`: the home container calls `listAccounts` (active and
+  archived), `listCategories` (active and archived), `listMovements` and `getProfile` with session
+  cookies, carrying financial data and the user's time zone.
 - Production runtime → development-only route: `/design-system` must not be reachable once
   `NODE_ENV` is `production`.
 - Build environment → third-party font host: `next/font/google` downloads Inter at build time.
@@ -100,15 +101,17 @@
 ### `apps/web/src/features/home/containers/home-container.tsx`
 - **Spoofing:** the container uses the injected API client with `credentials: 'include'`; on an
   `UNAUTHENTICATED` result it redirects to `/sign-in` and renders nothing.
-- **Tampering:** responses are parsed with `listAccountsResponseSchema` and
-  `listMovementsResponseSchema` from `packages/shared`, so a malformed payload is rejected instead
-  of rendered.
+- **Tampering:** responses are parsed with `listAccountsResponseSchema`,
+  `listMovementsResponseSchema` and the categories and profile schemas from `packages/shared`, so a
+  malformed payload is rejected instead of rendered, and a malformed amount string renders a
+  placeholder instead of crashing the screen.
 - **Repudiation:** the home only reads; mutations stay in screens whose API calls the API audits.
 - **Information Disclosure:** balances and movements are fetched client-side from the API only,
   held in React state and never written to storage; on error no stale balance is shown, and the
   Server Component `page.tsx` touches no financial data (R-04).
-- **Denial of Service:** the home issues two requests per load with `limit: 5` and no polling, and
-  the retry button is disabled while a request is in flight (R-08).
+- **Denial of Service:** the home issues six requests per load, all in one parallel batch, each
+  with a fixed limit (100 for the account and category lists, 5 for movements) and no polling, and
+  the retry button is disabled while a request is in flight, so one click sends one batch (R-08).
 - **Elevation of Privilege:** the API scopes accounts and movements to the owner and answers 404
   for anything else; the container cannot request another user's data by construction (R-09).
 
@@ -141,7 +144,7 @@
 | R-05 | A missing `x-nonce` makes the CSP block the theme script | D | L | L | the layout reads the nonce from `x-nonce`, then from the request CSP header; with neither it emits no inline script, falls back to the system theme and still renders, and `locale-layout.test.tsx` plus a proxy test cover the header path |
 | R-06 | The NFR-05 allowlist widens and hides hardcoded colors | T | L | L | the allowlist is a single file, and a planted-literal test must fail the scan |
 | R-07 | The build-time font download from Google is compromised or unavailable | T | L | L | `next/font` self-hosts the files and serves them from the app's own origin under `font-src 'self'`; AC-03 asserts no runtime third-party font request; the font file is data, not executable |
-| R-08 | Repeated retry clicks multiply API requests | D | M | L | the retry button is disabled while a request is in flight and the home never polls |
+| R-08 | Repeated retry clicks multiply API requests, and the home sends six requests per load | D | M | L | the retry button is disabled while a request is in flight, the six requests go out as one parallel batch with fixed limits, and the home never polls |
 | R-09 | The shell is mistaken for an authorization layer | E | L | H | every protected screen still calls the API, which scopes queries to the owner and answers 404 for foreign data; no new client-side permission logic is added |
 
 ## Supply chain
@@ -152,7 +155,7 @@ by the AC-03 test and served from the app's own origin (R-07). The theme provide
 instead of adding a package.
 
 ## Availability
-The home adds two API requests per load and the shell adds none; neither polls, and retries are
-single-flight (R-08). A blocked `localStorage` or a missing nonce degrades the theme only and never
+The home adds six API requests per load in one parallel batch and the shell adds none; neither
+polls, and retries are single-flight (R-08). A blocked `localStorage` or a missing nonce degrades the theme only and never
 the page (R-05). The reference page is excluded from production, so its extra render cost is not an
 availability vector.

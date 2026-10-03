@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Link } from '@/i18n/navigation';
 import type { ApiErrorKey } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
-import { SECONDARY_ITEMS } from '../nav-items';
+import { MORE_LIST_ITEMS } from '../nav-items';
 import { SignOutAlert } from './sign-out-alert';
 import { SignOutButton } from './sign-out-button';
 
@@ -27,7 +27,7 @@ export function MoreMenu({ signingOut, signOutError, onSignOut }: MoreMenuProps)
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-6 p-4">
       <PageHeader title={t('more.title')} description={t('more.description')} />
       <ul className="divide-y rounded-lg border bg-card px-3">
-        {SECONDARY_ITEMS.map((item) => {
+        {MORE_LIST_ITEMS.map((item) => {
           const Icon = item.icon;
           return (
             <li key={item.href}>

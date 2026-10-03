@@ -54,6 +54,21 @@ describe('BottomNav (AC-12)', () => {
     expect(nav.classList.contains('hidden')).toBe(false);
   });
 
+  it('has four destinations around the add action, in this order, and no Investments', () => {
+    const { container } = renderApp(<BottomNav />, { locale: 'en' });
+
+    const names = within(navOf(container, 'bottom-nav'))
+      .getAllByRole('link')
+      .map((link) => link.getAttribute('aria-label') ?? link.textContent);
+    expect(names).toEqual([
+      en.app.nav.home,
+      en.app.nav.accounts,
+      en.app.nav.addMovement,
+      en.app.nav.movements,
+      en.app.nav.more,
+    ]);
+  });
+
   it('lists the primary destinations and More, in the current locale', () => {
     const { container } = renderApp(<BottomNav />, { locale: 'en' });
 
@@ -65,9 +80,7 @@ describe('BottomNav (AC-12)', () => {
     expect(nav.getByRole('link', { name: en.app.nav.movements }).getAttribute('href')).toBe(
       '/en/movements',
     );
-    expect(nav.getByRole('link', { name: en.app.nav.investments }).getAttribute('href')).toBe(
-      '/en/investments',
-    );
+    expect(nav.queryByRole('link', { name: en.app.nav.investments })).toBeNull();
     expect(nav.getByRole('link', { name: en.app.nav.more }).getAttribute('href')).toBe('/en/more');
   });
 
@@ -105,8 +118,13 @@ describe('BottomNav (AC-12)', () => {
 
     const links = within(navOf(container, 'bottom-nav')).getAllByRole('link');
     const labelled = links.filter((link) => link.getAttribute('aria-label') === null);
-    expect(labelled).toHaveLength(5);
+    expect(labelled).toHaveLength(4);
+    // Four equal slots and the add button must leave "Movimientos" room at 360px: no side padding.
+    expect(navOf(container, 'bottom-nav').querySelector('ul')?.className).not.toMatch(
+      /\b(px|gap)-/,
+    );
     for (const link of labelled) {
+      expect(link.className).not.toMatch(/\bpx-/);
       const label = link.querySelector('span');
       expect(label?.classList.contains('truncate'), link.textContent).toBe(true);
       expect(label?.classList.contains('min-w-0')).toBe(true);
@@ -158,6 +176,23 @@ describe('SideNav (AC-13)', () => {
     );
   });
 
+  it('keeps Investments as a direct link, as the bottom bar has no room for it', () => {
+    const { container } = renderSide({ locale: 'en' });
+
+    const link = within(navOf(container, 'side-nav')).getByRole('link', {
+      name: en.app.nav.investments,
+    });
+    expect(link.getAttribute('href')).toBe('/en/investments');
+  });
+
+  it('fits the theme toggle in the sidebar with the compact variant', () => {
+    const { container } = renderSide();
+
+    const group = navOf(container, 'side-nav').querySelector('fieldset > div');
+    expect(group?.classList.contains('w-full')).toBe(true);
+    expect(group?.classList.contains('inline-flex')).toBe(false);
+  });
+
   it('has the theme toggle and a sign-out button that signs out', async () => {
     const { container, onSignOut } = renderSide();
 
@@ -192,7 +227,8 @@ describe('current destination (AC-14)', () => {
     ['/accounts', '/es/accounts', '/es/accounts'],
     ['/accounts/new', '/es/accounts', '/es/accounts'],
     ['/movements', '/es/movements', '/es/movements'],
-    ['/investments', '/es/investments', '/es/investments'],
+    ['/investments', '/es/more', '/es/investments'],
+    ['/investments/abc', '/es/more', '/es/investments'],
     ['/more', '/es/more', undefined],
     ['/categories', '/es/more', '/es/categories'],
     ['/settings/profile', '/es/more', '/es/settings/profile'],
@@ -264,9 +300,22 @@ describe('MoreMenu (FR-07)', () => {
     return { ...result, onSignOut };
   }
 
+  it('lists investments first, then categories, profile and security', () => {
+    renderMore();
+
+    const main = within(screen.getByRole('main'));
+    expect(main.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '/en/investments',
+      '/en/categories',
+      '/en/settings/profile',
+      '/en/settings/security',
+    ]);
+  });
+
   it('lists categories, profile, security, the theme toggle and sign out', async () => {
     const { onSignOut } = renderMore();
 
+    expect(screen.getByRole('link', { name: en.app.nav.investments })).toBeDefined();
     expect(screen.getByRole('heading', { name: en.app.more.title })).toBeDefined();
     expect(screen.getByRole('link', { name: en.app.nav.categories }).getAttribute('href')).toBe(
       '/en/categories',

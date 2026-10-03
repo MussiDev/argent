@@ -8,7 +8,6 @@ import {
   ACCOUNTS_ITEM,
   ADD_MOVEMENT_HREF,
   HOME_ITEM,
-  INVESTMENTS_ITEM,
   isActiveInBottomNav,
   MORE_ITEM,
   MOVEMENTS_ITEM,
@@ -22,7 +21,7 @@ export interface BottomNavProps {
 
 // The add action sits between the two halves so it stays centered and reachable by thumb.
 const BEFORE_ADD: readonly NavItem[] = [HOME_ITEM, ACCOUNTS_ITEM];
-const AFTER_ADD: readonly NavItem[] = [MOVEMENTS_ITEM, INVESTMENTS_ITEM, MORE_ITEM];
+const AFTER_ADD: readonly NavItem[] = [MOVEMENTS_ITEM, MORE_ITEM];
 
 /** The bottom bar below `md`; the side navigation takes over from `md`. */
 export function BottomNav({ currentPath }: BottomNavProps) {
@@ -37,7 +36,7 @@ export function BottomNav({ currentPath }: BottomNavProps) {
           href={item.href}
           aria-current={active ? 'page' : undefined}
           className={cn(
-            'flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 py-1.5 text-caption font-medium text-muted-foreground transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            'flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-md py-1.5 text-caption font-medium text-muted-foreground transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
             active && 'text-primary',
           )}
         >
@@ -54,9 +53,9 @@ export function BottomNav({ currentPath }: BottomNavProps) {
       aria-label={t('label')}
       className="sticky bottom-0 z-40 border-t bg-background pb-safe md:hidden"
     >
-      <ul className="mx-auto flex max-w-md items-center gap-1 px-2 pt-1">
+      <ul className="mx-auto flex max-w-md items-center pt-1">
         {BEFORE_ADD.map(destination)}
-        <li className="flex shrink-0 justify-center px-1">
+        <li className="flex shrink-0 justify-center">
           <Link
             href={ADD_MOVEMENT_HREF}
             aria-label={t('addMovement')}

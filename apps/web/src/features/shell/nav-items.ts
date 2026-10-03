@@ -57,15 +57,18 @@ export const SECONDARY_ITEMS: readonly NavItem[] = [
   { href: '/settings/security', labelKey: 'security', icon: ShieldCheck },
 ];
 
+/** What the More page lists: Investments has no room in the bottom bar, then the secondary ones. */
+export const MORE_LIST_ITEMS: readonly NavItem[] = [INVESTMENTS_ITEM, ...SECONDARY_ITEMS];
+
 export const ADD_MOVEMENT_HREF = '/movements/new';
 
 /**
- * The bottom bar has no room for the secondary destinations, so on small screens "More" stands
- * for them: it is current on its own page and on every page it lists.
+ * The bottom bar has no room for the destinations the More page lists, so on small screens "More"
+ * stands for them: it is current on its own page and on every page it lists.
  */
 export function isActiveInBottomNav(item: NavItem, currentPath: string | undefined): boolean {
   if (item.href !== MORE_ITEM.href) return isActivePath(item.href, currentPath);
-  return [MORE_ITEM, ...SECONDARY_ITEMS].some((entry) => isActivePath(entry.href, currentPath));
+  return [MORE_ITEM, ...MORE_LIST_ITEMS].some((entry) => isActivePath(entry.href, currentPath));
 }
 
 /** A destination is current on its own path and on the pages below it, never on a mere prefix. */

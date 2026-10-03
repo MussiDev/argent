@@ -61,7 +61,7 @@ export function SideNav({ currentPath, signingOut, onSignOut }: SideNavProps) {
       <ul className="grid gap-1">{PRIMARY_ITEMS.map(destination)}</ul>
       <ul className="grid gap-1 border-t pt-4">{SECONDARY_ITEMS.map(destination)}</ul>
       <div className="mt-auto grid gap-2">
-        <ThemeToggle />
+        <ThemeToggle size="compact" />
         <SignOutButton pending={signingOut} onSignOut={onSignOut} />
       </div>
     </nav>

@@ -327,6 +327,7 @@
     "list": {
       "newMovement": "New movement",
       "empty": "You have no movements yet.",
+      "emptyTitle": "Create your first account",
       "showMore": "Show more",
       "rate": "Rate: {rate} ARS per USD",
       "unknownAccount": "Unknown account",
@@ -358,6 +359,7 @@
     },
     "form": {
       "submit": "Save movement",
+      "emptyTitle": "Record your first movement",
       "pending": "Saving…",
       "back": "Back to movements"
     },

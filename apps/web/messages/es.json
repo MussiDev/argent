@@ -518,11 +518,13 @@
     },
     "disable": {
       "title": "Desactiva la verificación en dos pasos",
+    "subtitle": "Protege tu cuenta con un segundo paso al iniciar sesión.",
       "description": "Ingresa un código de tu app de autenticación o un código de recuperación sin usar.",
       "code": "Código",
       "submit": "Desactivar",
       "pending": "Desactivando…",
       "cancel": "Cancelar"
+      "status": "Estado",
     }
   },
   "profile": {
@@ -563,6 +565,7 @@
       "ARS": "Peso argentino (ARS)",
       "USD": "Dólar estadounidense (USD)"
     },
+    "subtitle": "Tus datos y cómo funciona Pesly para ti.",
     "deleteAccount": {
       "title": "Eliminar cuenta",
       "description": "Elimina de forma permanente tu cuenta y todos sus datos.",
@@ -616,6 +619,7 @@
       "noHoldings": "Esta cartera todavía no tiene posiciones.",
       "addHolding": "Agregar posición",
       "addHoldingFor": "Agregar posición a {name}",
+    "subtitle": "Quita tu cuenta y todo lo que contiene de forma definitiva.",
       "delete": "Eliminar cartera",
       "deleteFor": "Eliminar cartera {name}"
     },

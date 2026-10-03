@@ -518,11 +518,13 @@
     },
     "disable": {
       "title": "Turn off two-step verification",
+    "subtitle": "Protect your account with a second step when you sign in.",
       "description": "Enter a code from your authenticator app or an unused recovery code.",
       "code": "Code",
       "submit": "Turn off",
       "pending": "Turning off…",
       "cancel": "Cancel"
+      "status": "Status",
     }
   },
   "profile": {
@@ -563,6 +565,7 @@
       "ARS": "Argentine peso (ARS)",
       "USD": "US dollar (USD)"
     },
+    "subtitle": "Your details and how Pesly works for you.",
     "deleteAccount": {
       "title": "Delete account",
       "description": "Permanently remove your account and all its data.",
@@ -616,6 +619,7 @@
       "noHoldings": "This portfolio has no holdings yet.",
       "addHolding": "Add holding",
       "addHoldingFor": "Add holding to {name}",
+    "subtitle": "Remove your account and everything in it for good.",
       "delete": "Delete portfolio",
       "deleteFor": "Delete portfolio {name}"
     },

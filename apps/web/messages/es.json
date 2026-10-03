@@ -5,7 +5,39 @@
   },
   "home": {
     "title": "Pesly",
-    "tagline": "Tus cuentas, gastos y ahorros en pesos y dólares, en un solo lugar."
+    "tagline": "Tus cuentas, gastos y ahorros en pesos y dólares, en un solo lugar.",
+    "balance": {
+      "title": "Tu saldo",
+      "available": "Disponible",
+      "netWorth": "Patrimonio neto",
+      "currencies": {
+        "ARS": "Pesos argentinos (ARS)",
+        "USD": "Dólares estadounidenses (USD)"
+      }
+    },
+    "recent": {
+      "title": "Últimos movimientos",
+      "seeAll": "Ver todos los movimientos",
+      "income": "Ingreso",
+      "expense": "Gasto",
+      "unknownAccount": "Cuenta desconocida",
+      "unknownCategory": "Categoría desconocida",
+      "empty": {
+        "title": "Todavía no hay movimientos",
+        "description": "Registra tu primer gasto o ingreso y aparecerá aquí.",
+        "action": "Agregar un movimiento"
+      }
+    },
+    "quickActions": {
+      "title": "Acciones rápidas",
+      "addMovement": "Agregar movimiento",
+      "addAccount": "Agregar cuenta"
+    },
+    "empty": {
+      "title": "Crea tu primera cuenta",
+      "description": "Agrega una cuenta en pesos o dólares para ver aquí tu saldo y tus últimos movimientos.",
+      "action": "Crear cuenta"
+    }
   },
   "app": {
     "loading": "Cargando…",
@@ -295,6 +327,7 @@
       "activeTitle": "Cuentas activas",
       "archivedTitle": "Cuentas archivadas",
       "newAccount": "Nueva cuenta",
+      "emptyTitle": "Crea tu primera cuenta",
       "empty": "Todavía no tienes cuentas. Crea una para empezar.",
       "emptyArchived": "No tienes cuentas archivadas.",
       "showArchived": "Ver cuentas archivadas",
@@ -326,8 +359,8 @@
     "title": "Movimientos",
     "list": {
       "newMovement": "Nuevo movimiento",
+      "emptyTitle": "Registra tu primer movimiento",
       "empty": "Todavía no tienes movimientos.",
-      "emptyTitle": "Crea tu primera cuenta",
       "showMore": "Ver más",
       "rate": "Cotización: {rate} ARS por USD",
       "unknownAccount": "Cuenta desconocida",
@@ -359,7 +392,6 @@
     },
     "form": {
       "submit": "Guardar movimiento",
-      "emptyTitle": "Registra tu primer movimiento",
       "pending": "Guardando…",
       "back": "Volver a movimientos"
     },
@@ -416,6 +448,8 @@
       "archivedTitle": "Categorías archivadas",
       "empty": "Todavía no tienes categorías.",
       "emptyArchived": "No tienes categorías archivadas.",
+      "emptyAction": "Crear una categoría",
+      "emptyArchivedAction": "Mostrar categorías activas",
       "emptySection": "No hay categorías en esta sección.",
       "showArchived": "Mostrar categorías archivadas",
       "subcategories": "Subcategorías de {name}"
@@ -448,8 +482,6 @@
       "heart-pulse": "Pulso",
       "clapperboard": "Claqueta",
       "shopping-bag": "Bolsa de compras",
-      "emptyAction": "Crear una categoría",
-      "emptyArchivedAction": "Mostrar categorías activas",
       "graduation-cap": "Birrete",
       "receipt": "Recibo",
       "ellipsis": "Puntos suspensivos",
@@ -486,11 +518,13 @@
   },
   "security": {
     "title": "Seguridad",
+    "subtitle": "Protege tu cuenta con un segundo paso al iniciar sesión.",
     "enabledNotice": "Activaste la verificación en dos pasos. Cerramos tus otras sesiones.",
     "disabledNotice": "Desactivaste la verificación en dos pasos. Cerramos tus otras sesiones.",
     "twoFactor": {
       "title": "Verificación en dos pasos",
       "description": "Además de tu contraseña o de Google, te pediremos un código de tu app de autenticación al iniciar sesión.",
+      "status": "Estado",
       "on": "Activada",
       "off": "Desactivada",
       "recoveryCodesRemaining": "{count, plural, =0 {No te quedan códigos de recuperación.} one {Te queda # código de recuperación.} other {Te quedan # códigos de recuperación.}}",
@@ -522,17 +556,16 @@
     },
     "disable": {
       "title": "Desactiva la verificación en dos pasos",
-    "subtitle": "Protege tu cuenta con un segundo paso al iniciar sesión.",
       "description": "Ingresa un código de tu app de autenticación o un código de recuperación sin usar.",
       "code": "Código",
       "submit": "Desactivar",
       "pending": "Desactivando…",
       "cancel": "Cancelar"
-      "status": "Estado",
     }
   },
   "profile": {
     "title": "Perfil",
+    "subtitle": "Tus datos y cómo funciona Pesly para ti.",
     "saved": "Guardado.",
     "account": {
       "title": "Tu perfil",
@@ -569,7 +602,6 @@
       "ARS": "Peso argentino (ARS)",
       "USD": "Dólar estadounidense (USD)"
     },
-    "subtitle": "Tus datos y cómo funciona Pesly para ti.",
     "deleteAccount": {
       "title": "Eliminar cuenta",
       "description": "Elimina de forma permanente tu cuenta y todos sus datos.",
@@ -587,6 +619,7 @@
   },
   "deleteUser": {
     "title": "Eliminar cuenta",
+    "subtitle": "Quita tu cuenta y todo lo que contiene de forma definitiva.",
     "warningTitle": "Esto no se puede deshacer",
     "description": "Al eliminar tu cuenta se borra ella y todo lo que contiene.",
     "warning": "Vamos a borrar de forma permanente tu cuenta, tus cuentas y todos tus movimientos. No hay forma de recuperarlos.",

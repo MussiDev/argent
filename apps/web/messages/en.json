@@ -448,6 +448,8 @@
       "heart-pulse": "Heartbeat",
       "clapperboard": "Clapperboard",
       "shopping-bag": "Shopping bag",
+      "emptyAction": "Create a category",
+      "emptyArchivedAction": "Show active categories",
       "graduation-cap": "Graduation cap",
       "receipt": "Receipt",
       "ellipsis": "Ellipsis",
@@ -621,7 +623,6 @@
       "noHoldings": "This portfolio has no holdings yet.",
       "addHolding": "Add holding",
       "addHoldingFor": "Add holding to {name}",
-    "subtitle": "Remove your account and everything in it for good.",
       "delete": "Delete portfolio",
       "deleteFor": "Delete portfolio {name}"
     },

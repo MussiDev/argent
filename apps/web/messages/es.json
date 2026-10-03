@@ -448,6 +448,8 @@
       "heart-pulse": "Pulso",
       "clapperboard": "Claqueta",
       "shopping-bag": "Bolsa de compras",
+      "emptyAction": "Crear una categoría",
+      "emptyArchivedAction": "Mostrar categorías activas",
       "graduation-cap": "Birrete",
       "receipt": "Recibo",
       "ellipsis": "Puntos suspensivos",
@@ -621,7 +623,6 @@
       "noHoldings": "Esta cartera todavía no tiene posiciones.",
       "addHolding": "Agregar posición",
       "addHoldingFor": "Agregar posición a {name}",
-    "subtitle": "Quita tu cuenta y todo lo que contiene de forma definitiva.",
       "delete": "Eliminar cartera",
       "deleteFor": "Eliminar cartera {name}"
     },

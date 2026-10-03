@@ -95,13 +95,14 @@ export function AccountRow(props: AccountRowProps) {
   const tErrors = useTranslations('errors');
   const locale: Locale = useLocale() === 'en' ? 'en' : 'es';
   const settingId = useId();
+  const nameId = useId();
   // The setting exists only for active accounts that hold money (cards are debt, FR-04/FR-06).
   const hasSetting = !account.archived && account.type !== 'credit_card';
 
   return (
     <li aria-label={account.name} className="grid gap-2 py-2 text-card-foreground">
       <ListRow
-        title={account.name}
+        title={<span id={nameId}>{account.name}</span>}
         description={t(`types.${account.type}`)}
         trailing={
           <div className="flex flex-col items-end gap-1">
@@ -122,17 +123,19 @@ export function AccountRow(props: AccountRowProps) {
             checked={account.includeInAvailable}
             // Not `disabled`: that would drop keyboard focus while the request runs.
             aria-disabled={pending}
+            // One name from two existing elements, so the visible label text stays the catalog string.
+            aria-labelledby={`${settingId}-label ${nameId}`}
             onChange={(event) => {
               if (pending) return;
               props.onToggleAvailable(account.id, event.currentTarget.checked);
             }}
           />
           <Label
+            id={`${settingId}-label`}
             htmlFor={settingId}
             className="min-h-11 flex-1 cursor-pointer items-center text-small text-muted-foreground"
           >
             {t('fields.includeInAvailable')}
-            <span className="sr-only"> {account.name}</span>
           </Label>
         </div>
       ) : null}

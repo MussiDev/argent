@@ -767,8 +767,7 @@ describe('AccountList include in available setting', () => {
       const excluded = screen.getByRole<HTMLInputElement>('checkbox', { name: `${label} Ahorro` });
       expect(included.checked).toBe(true);
       expect(excluded.checked).toBe(false);
-      // The single accessible name comes from the label: visible text plus the sr-only account name.
-      expect(included.labels?.[0]?.textContent).toBe(`${label} Caja`);
+      expect(included.labels?.[0]?.textContent).toBe(label);
       cleanup();
     }
     expect(es.accounts.fields.includeInAvailable).not.toBe(en.accounts.fields.includeInAvailable);

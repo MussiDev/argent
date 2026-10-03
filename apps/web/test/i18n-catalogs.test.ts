@@ -139,6 +139,42 @@ describe('investments catalog (DISC-001-07a)', () => {
   });
 });
 
+describe('app shell catalog (FEAT-004)', () => {
+  it.each(LOCALES)(
+    'has every navigation label, the More page copy and the brand in %s',
+    (locale) => {
+      const catalog = loadCatalog(locale);
+
+      for (const key of [
+        'label',
+        'home',
+        'accounts',
+        'movements',
+        'investments',
+        'more',
+        'categories',
+        'profile',
+        'security',
+        'addMovement',
+      ]) {
+        expect(readString(catalog, `app.nav.${key}`), `app.nav.${key}`).toBeTruthy();
+      }
+      expect(readString(catalog, 'app.more.title')).toBeTruthy();
+      expect(readString(catalog, 'app.more.description')).toBeTruthy();
+      expect(readString(catalog, 'app.brand')).toBe('Pesly');
+      expect(readString(catalog, 'app.skipToContent')).toBeTruthy();
+    },
+  );
+
+  it.each(LOCALES)('names the add-movement action apart from the list link in %s', (locale) => {
+    const catalog = loadCatalog(locale);
+
+    expect(readString(catalog, 'app.nav.addMovement')).not.toBe(
+      readString(catalog, 'movements.list.newMovement'),
+    );
+  });
+});
+
 describe('product name in the web catalogs (FEAT-002)', () => {
   it.each(LOCALES)('titles the app "Pesly" in %s', (locale) => {
     const catalog = loadCatalog(locale);

@@ -10,13 +10,23 @@
   "app": {
     "loading": "Cargando…",
     "retry": "Reintentar",
+    "brand": "Pesly",
+    "skipToContent": "Saltar al contenido",
     "nav": {
+      "label": "Navegación principal",
       "home": "Inicio",
+      "accounts": "Cuentas",
       "security": "Seguridad",
       "profile": "Perfil",
       "categories": "Categorías",
       "movements": "Movimientos",
-      "investments": "Inversiones"
+      "investments": "Inversiones",
+      "more": "Más",
+      "addMovement": "Agregar movimiento"
+    },
+    "more": {
+      "title": "Más",
+      "description": "Categorías, perfil, seguridad y apariencia."
     }
   },
   "auth": {

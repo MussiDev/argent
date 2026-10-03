@@ -217,3 +217,8 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Keeps fixed bottom bars clear of the home indicator on notched devices. */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

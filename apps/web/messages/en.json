@@ -101,6 +101,108 @@
       "backToSignIn": "Back to sign in"
     }
   },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "ui": {
+    "loading": "Loading…",
+    "retry": "Try again",
+    "empty": {
+      "title": "Nothing here yet",
+      "description": "When there is something to show, it will appear here.",
+      "action": "Get started"
+    },
+    "error": {
+      "title": "Something went wrong",
+      "description": "We could not load this content. Check your connection and try again."
+    },
+    "designSystem": {
+      "title": "Design system",
+      "description": "Tokens and components of the Pesly interface, shown in the light and dark themes.",
+      "previews": {
+        "light": "Light theme",
+        "dark": "Dark theme"
+      },
+      "sections": {
+        "colors": "Colors",
+        "typography": "Typography",
+        "shape": "Radius, elevation and spacing",
+        "motion": "Motion",
+        "buttons": "Buttons",
+        "controls": "Form controls",
+        "alerts": "Alerts",
+        "badges": "Badges",
+        "amounts": "Amounts",
+        "states": "Loading, empty and error states",
+        "rows": "Lists"
+      },
+      "type": {
+        "display": "Display",
+        "title": "Title",
+        "heading": "Heading",
+        "body": "Body",
+        "small": "Small",
+        "caption": "Caption",
+        "sample": "Pesos and dollars, in one place"
+      },
+      "variants": {
+        "default": "Default",
+        "secondary": "Secondary",
+        "outline": "Outline",
+        "ghost": "Ghost",
+        "link": "Link",
+        "destructive": "Destructive",
+        "success": "Success",
+        "warning": "Warning",
+        "info": "Information"
+      },
+      "sizes": {
+        "small": "Small",
+        "large": "Large",
+        "icon": "Icon button"
+      },
+      "states": {
+        "disabled": "Disabled",
+        "invalid": "Invalid"
+      },
+      "controls": {
+        "text": "Text field",
+        "placeholder": "Type here",
+        "select": "Select",
+        "optionOne": "First option",
+        "optionTwo": "Second option",
+        "checkbox": "Checkbox option",
+        "hint": "Helper text goes here.",
+        "error": "This field has an error."
+      },
+      "alerts": {
+        "title": "Heads up",
+        "description": "A short message with some context."
+      },
+      "amounts": {
+        "income": "Income",
+        "expense": "Expense",
+        "balance": "Balance"
+      },
+      "motion": {
+        "description": "Transitions share one duration and one easing curve, and stop when the system asks for reduced motion.",
+        "sample": "Hover or focus me"
+      },
+      "shape": {
+        "radius": "Radius",
+        "elevation": "Elevation",
+        "spacing": "Spacing"
+      },
+      "rows": {
+        "title": "Salary",
+        "description": "Main account",
+        "trailing": "Detail"
+      }
+    }
+  },
   "errors": {
     "invalidCredentials": "Invalid email or password",
     "passwordTooShort": "The password must be at least 10 characters long.",
